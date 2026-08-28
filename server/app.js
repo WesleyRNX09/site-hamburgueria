@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
-import { basename, extname, isAbsolute, relative, resolve } from 'node:path';
+import { extname, isAbsolute, relative, resolve } from 'node:path';
 
 import {
   alternarStatusAdicional,
@@ -351,13 +351,21 @@ async function criarSessao(
   return { token, expiraEm: expiraEm.toISOString() };
 }
 
-async function processarImagemNova(imagem, pastaUploads) {
+async function processarImagemNova(imagem, pastaUploads, idEstabelecimento, prefixo = 'produto') {
   if (!String(imagem ?? '').startsWith('data:')) return null;
-  return salvarImagemDataUrl(imagem, pastaUploads);
+  return salvarImagemDataUrl(imagem, pastaUploads, idEstabelecimento, prefixo);
 }
 
-async function processarImagemAtualizada(imagem, imagemAnterior, pastaUploads, prefixo = 'produto') {
-  if (String(imagem ?? '').startsWith('data:')) return salvarImagemDataUrl(imagem, pastaUploads, prefixo);
+async function processarImagemAtualizada(
+  imagem,
+  imagemAnterior,
+  pastaUploads,
+  idEstabelecimento,
+  prefixo = 'produto'
+) {
+  if (String(imagem ?? '').startsWith('data:')) {
+    return salvarImagemDataUrl(imagem, pastaUploads, idEstabelecimento, prefixo);
+  }
   if (imagem === null || imagem === '') return null;
   return imagemAnterior ?? null;
 }
@@ -766,11 +774,11 @@ async function rotaAdmin({
     const dados = await lerJson(requisicao);
     let imagemUrl = null;
     try {
-      imagemUrl = await processarImagemNova(dados.imagem, pastaUploads);
+      imagemUrl = await processarImagemNova(dados.imagem, pastaUploads, idEstabelecimento);
       const produto = await criarProduto(banco, idEstabelecimento, dados, imagemUrl);
       responderJson(resposta, 201, { produto });
     } catch (erro) {
-      if (imagemUrl) await removerImagemLocal(imagemUrl, pastaUploads);
+      if (imagemUrl) await removerImagemLocal(imagemUrl, pastaUploads, idEstabelecimento);
       tratarErroDados(erro);
     }
     return true;
@@ -799,13 +807,20 @@ async function rotaAdmin({
     let imagemUrl;
     let novaImagem = null;
     try {
-      imagemUrl = await processarImagemAtualizada(dados.imagem, anterior.imagem, pastaUploads);
+      imagemUrl = await processarImagemAtualizada(
+        dados.imagem,
+        anterior.imagem,
+        pastaUploads,
+        idEstabelecimento
+      );
       if (imagemUrl !== anterior.imagem) novaImagem = imagemUrl;
       const produto = await atualizarProduto(banco, idEstabelecimento, id, dados, imagemUrl);
-      if (anterior.imagem && anterior.imagem !== imagemUrl) await removerImagemLocal(anterior.imagem, pastaUploads);
+      if (anterior.imagem && anterior.imagem !== imagemUrl) {
+        await removerImagemLocal(anterior.imagem, pastaUploads, idEstabelecimento);
+      }
       responderJson(resposta, 200, { produto });
     } catch (erro) {
-      if (novaImagem) await removerImagemLocal(novaImagem, pastaUploads);
+      if (novaImagem) await removerImagemLocal(novaImagem, pastaUploads, idEstabelecimento);
       tratarErroDados(erro);
     }
     return true;
@@ -816,7 +831,7 @@ async function rotaAdmin({
     const produto = await buscarProduto(banco, idEstabelecimento, id);
     if (!produto) throw new ErroHttp(404, 'Produto não encontrado.');
     await excluirProduto(banco, idEstabelecimento, id);
-    await removerImagemLocal(produto.imagem, pastaUploads);
+    await removerImagemLocal(produto.imagem, pastaUploads, idEstabelecimento);
     responderJson(resposta, 200, { sucesso: true });
     return true;
   }
@@ -978,9 +993,21 @@ async function rotaAdmin({
     let novaLogo = null;
     let novoBanner = null;
     try {
-      logo = await processarImagemAtualizada(dados.logo, anterior.logo, pastaUploads, 'logo');
+      logo = await processarImagemAtualizada(
+        dados.logo,
+        anterior.logo,
+        pastaUploads,
+        idEstabelecimento,
+        'logo'
+      );
       if (logo !== anterior.logo) novaLogo = logo;
-      banner = await processarImagemAtualizada(dados.banner, anterior.banner, pastaUploads, 'banner');
+      banner = await processarImagemAtualizada(
+        dados.banner,
+        anterior.banner,
+        pastaUploads,
+        idEstabelecimento,
+        'banner'
+      );
       if (banner !== anterior.banner) novoBanner = banner;
       const configuracao = await salvarConfiguracao(
         banco,
@@ -990,16 +1017,16 @@ async function rotaAdmin({
       );
       await Promise.allSettled([
         anterior.logo && anterior.logo !== logo
-          ? removerImagemLocal(anterior.logo, pastaUploads)
+          ? removerImagemLocal(anterior.logo, pastaUploads, idEstabelecimento)
           : Promise.resolve(),
         anterior.banner && anterior.banner !== banner
-          ? removerImagemLocal(anterior.banner, pastaUploads)
+          ? removerImagemLocal(anterior.banner, pastaUploads, idEstabelecimento)
           : Promise.resolve()
       ]);
       responderJson(resposta, 200, { configuracao });
     } catch (erro) {
-      if (novaLogo) await removerImagemLocal(novaLogo, pastaUploads);
-      if (novoBanner) await removerImagemLocal(novoBanner, pastaUploads);
+      if (novaLogo) await removerImagemLocal(novaLogo, pastaUploads, idEstabelecimento);
+      if (novoBanner) await removerImagemLocal(novoBanner, pastaUploads, idEstabelecimento);
       tratarErroDados(erro);
     }
     return true;
@@ -1190,6 +1217,85 @@ async function enviarArquivo(resposta, caminhoArquivo, cacheControl) {
   }
 }
 
+async function imagemLegadaPertenceAoEstabelecimento(banco, idEstabelecimento, imagemUrl) {
+  const [linhas] = await banco.execute(`
+    SELECT 1 AS permitido
+    FROM configuracoes_estabelecimento ce
+    WHERE ce.id_estabelecimento = ?
+      AND (ce.logo_url = ? OR ce.banner_url = ?)
+    UNION ALL
+    SELECT 1 AS permitido
+    FROM produtos p
+    WHERE p.id_estabelecimento = ? AND p.imagem_url = ?
+    UNION ALL
+    SELECT 1 AS permitido
+    FROM promocoes pr
+    WHERE pr.id_estabelecimento = ? AND pr.imagem_url = ?
+    UNION ALL
+    SELECT 1 AS permitido
+    FROM configuracoes c
+    WHERE c.id_estabelecimento = ? AND c.logo_url = ?
+    LIMIT 1
+  `, [
+    idEstabelecimento,
+    imagemUrl,
+    imagemUrl,
+    idEstabelecimento,
+    imagemUrl,
+    idEstabelecimento,
+    imagemUrl,
+    idEstabelecimento,
+    imagemUrl
+  ]);
+  return Boolean(linhas[0]);
+}
+
+async function servirUploadIsolado({
+  banco,
+  requisicao,
+  resposta,
+  caminho,
+  pastaUploads,
+  dominioPrincipal,
+  tenantDesenvolvimento
+}) {
+  const estabelecimento = await resolverEstabelecimento(banco, requisicao, {
+    dominioPrincipal,
+    tenantDesenvolvimento
+  });
+  requisicao.estabelecimento = estabelecimento;
+
+  const isolado = caminho.match(
+    /^\/uploads\/estabelecimentos\/([1-9]\d*)\/((?:produto|logo|banner)-[a-f0-9-]+\.(?:jpg|png|webp))$/
+  );
+  if (isolado) {
+    if (Number(isolado[1]) !== estabelecimento.id) {
+      throw new ErroHttp(404, 'Arquivo não encontrado.');
+    }
+    return enviarArquivo(
+      resposta,
+      resolve(pastaUploads, 'estabelecimentos', isolado[1], isolado[2]),
+      'public, max-age=31536000, immutable'
+    );
+  }
+
+  const legado = caminho.match(
+    /^\/uploads\/((?:produto|logo|banner)-[a-f0-9-]+\.(?:jpg|png|webp))$/
+  );
+  if (!legado || !await imagemLegadaPertenceAoEstabelecimento(
+    banco,
+    estabelecimento.id,
+    caminho
+  )) {
+    throw new ErroHttp(404, 'Arquivo não encontrado.');
+  }
+  return enviarArquivo(
+    resposta,
+    resolve(pastaUploads, legado[1]),
+    'public, max-age=31536000, immutable'
+  );
+}
+
 function escaparHtml(valor) {
   return String(valor ?? '')
     .replaceAll('&', '&amp;')
@@ -1265,9 +1371,15 @@ async function servirFrontend({
 }) {
   if (!['GET', 'HEAD'].includes(requisicao.method)) return false;
   if (caminho.startsWith('/uploads/')) {
-    const nomeArquivo = basename(caminho);
-    if (caminho !== `/uploads/${nomeArquivo}`) return false;
-    return enviarArquivo(resposta, resolve(pastaUploads, nomeArquivo), 'public, max-age=31536000, immutable');
+    return servirUploadIsolado({
+      banco,
+      requisicao,
+      resposta,
+      caminho,
+      pastaUploads,
+      dominioPrincipal,
+      tenantDesenvolvimento
+    });
   }
   if (!pastaDist) return false;
   if (caminho === '/superadmin' || caminho.startsWith('/superadmin/')) {

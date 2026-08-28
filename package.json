@@ -17,7 +17,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node --env-file-if-exists=.env server/index.js",
-    "test": "node --env-file-if-exists=.env --test server/api.test.js src/utils/theme.test.js"
+    "test": "node --env-file-if-exists=.env --test server/api.test.js server/multitenant-security.test.js src/utils/theme.test.js",
+    "test:security": "node --env-file-if-exists=.env --test server/multitenant-security.test.js"
   },
   "engines": {
     "node": ">=22.13.0"

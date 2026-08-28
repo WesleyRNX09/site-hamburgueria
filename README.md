@@ -205,7 +205,15 @@ dos estabelecimentos em auditoria própria.
 
 Defina `NODE_ENV=production` e todas as variáveis `DB_HOST`, `DB_USER`, `DB_PASSWORD` e `DB_NAME`. Provisione a estrutura e execute migrations antes de iniciar a API; o startup nunca altera o schema. `ADMIN_PASSWORD` deve ter ao menos 12 caracteres quando usado para criar ou recuperar a conta inicial. Use uma conta MySQL com acesso somente ao banco já provisionado da aplicação. Antes de abrir pedidos, cadastre o cardápio e preencha **Configurações** com identidade, contatos, horário, áreas atendidas, taxas, mínimo e pagamentos reais. O Pix só aparece com chave, beneficiário e cidade; o QR Code BR Code é montado a partir desses dados, do total recalculado e do identificador real do pedido. Não há confirmação bancária automática: um administrador autenticado precisa confirmar o recebimento. Cartão e dinheiro também entram na receita somente após confirmação.
 
-Fotos e logo ficam no caminho configurado em `UPLOADS_PATH` (padrão local `server/uploads`). Em hospedagem, esse caminho precisa ser um volume persistente e deve ter cópia própria. O sitemap usa `PUBLIC_SITE_URL`/`VITE_PUBLIC_URL`; nenhum domínio é inventado quando elas não estão definidas. Consulte [implantação](docs/DEPLOY.md) e o [guia do banco](database/README.md).
+Fotos, logos e banners ficam no caminho configurado em `UPLOADS_PATH` (padrão
+local `server/uploads`), separados em
+`estabelecimentos/{id_estabelecimento}/`. A rota pública valida o tenant do
+domínio antes de entregar o arquivo e mantém compatibilidade protegida com os
+uploads antigos. Em hospedagem, o caminho precisa ser um volume persistente e
+compartilhado entre as instâncias; `/uploads/` deve passar pelo backend, nunca
+por um alias público do proxy. O sitemap usa `PUBLIC_SITE_URL`/`VITE_PUBLIC_URL`;
+nenhum domínio é inventado quando elas não estão definidas. Consulte
+[implantação](docs/DEPLOY.md) e o [guia do banco](database/README.md).
 
 Alterações de estrutura são aplicadas somente pelo comando explícito `npm run db:migrate`. Mantenha um backup validado antes de cada migration e nunca use o instalador de banco novo sobre dados existentes.
 

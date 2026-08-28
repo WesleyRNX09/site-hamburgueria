@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
@@ -63,17 +63,78 @@ test('mantém o checksum das migrations estável entre Windows e Linux', () => {
   );
 });
 
-test('armazena e remove banner validado sem aceitar prefixos arbitrários', async () => {
+test('isola imagens por estabelecimento e não remove arquivos de outro tenant', async () => {
   const pasta = await mkdtemp(join(tmpdir(), 'hamburgueria-banner-'));
   const pngMinimo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
   try {
-    const url = await salvarImagemDataUrl(pngMinimo, pasta, 'banner');
-    assert.match(url, /^\/uploads\/banner-[a-f0-9-]+\.png$/);
+    const url = await salvarImagemDataUrl(pngMinimo, pasta, 11, 'banner');
+    assert.match(url, /^\/uploads\/estabelecimentos\/11\/banner-[a-f0-9-]+\.png$/);
     await stat(join(pasta, url.slice('/uploads/'.length)));
-    await removerImagemLocal(url, pasta);
+    assert.equal(await removerImagemLocal(url, pasta, 22), false);
+    await stat(join(pasta, url.slice('/uploads/'.length)));
+    assert.equal(await removerImagemLocal(url, pasta, 11), true);
     await assert.rejects(stat(join(pasta, url.slice('/uploads/'.length))), { code: 'ENOENT' });
-    await assert.rejects(salvarImagemDataUrl(pngMinimo, pasta, 'script'), /tipo da imagem/);
+    await assert.rejects(salvarImagemDataUrl(pngMinimo, pasta, 11, 'script'), /tipo da imagem/);
+    await assert.rejects(salvarImagemDataUrl(pngMinimo, pasta, '../12', 'banner'), /estabelecimento/);
   } finally {
+    await rm(pasta, { recursive: true, force: true });
+  }
+});
+
+test('serve uploads somente no host do estabelecimento proprietário', async () => {
+  const pasta = await mkdtemp(join(tmpdir(), 'hamburgueria-uploads-tenants-'));
+  const pngMinimo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+  const urlA = await salvarImagemDataUrl(pngMinimo, pasta, 11, 'logo');
+  const urlB = await salvarImagemDataUrl(pngMinimo, pasta, 22, 'produto');
+  const nomeLegado = `logo-${randomUUID()}.png`;
+  const urlLegada = `/uploads/${nomeLegado}`;
+  await writeFile(join(pasta, nomeLegado), Buffer.from('89504e470d0a1a0a', 'hex'));
+  const estabelecimentos = new Map([
+    ['loja-a', { id_estabelecimento: 11, nome_fantasia: 'Loja A', slug: 'loja-a' }],
+    ['loja-b', { id_estabelecimento: 22, nome_fantasia: 'Loja B', slug: 'loja-b' }]
+  ]);
+  const banco = {
+    async execute(sql, parametros) {
+      if (sql.includes('FROM estabelecimentos AS e')) {
+        const estabelecimento = estabelecimentos.get(parametros[0]);
+        return [[estabelecimento && {
+          ...estabelecimento,
+          dominio_personalizado: null,
+          status: 'ativo',
+          plano: 'basico',
+          status_assinatura: 'ativa',
+          vencimento_assinatura_em: null
+        }].filter(Boolean)];
+      }
+      if (sql.includes('FROM configuracoes_estabelecimento ce') && sql.includes('UNION ALL')) {
+        const permitido = Number(parametros[0]) === 11 && parametros[1] === urlLegada;
+        return [[permitido ? { permitido: 1 } : null].filter(Boolean)];
+      }
+      throw new Error(`Consulta inesperada no teste: ${sql}`);
+    }
+  };
+  const servidorA = criarServidor({ banco, pastaUploads: pasta, tenantDesenvolvimento: 'loja-a' });
+  const servidorB = criarServidor({ banco, pastaUploads: pasta, tenantDesenvolvimento: 'loja-b' });
+
+  try {
+    await Promise.all([aguardarServidor(servidorA, 0), aguardarServidor(servidorB, 0)]);
+    const baseA = `http://127.0.0.1:${servidorA.address().port}`;
+    const baseB = `http://127.0.0.1:${servidorB.address().port}`;
+    const [propriaA, cruzadaA, propriaB, legadaA, legadaB] = await Promise.all([
+      fetch(`${baseA}${urlA}`),
+      fetch(`${baseB}${urlA}`),
+      fetch(`${baseB}${urlB}`),
+      fetch(`${baseA}${urlLegada}`),
+      fetch(`${baseB}${urlLegada}`)
+    ]);
+    assert.equal(propriaA.status, 200);
+    assert.equal(propriaA.headers.get('content-type'), 'image/png');
+    assert.equal(cruzadaA.status, 404);
+    assert.equal(propriaB.status, 200);
+    assert.equal(legadaA.status, 200);
+    assert.equal(legadaB.status, 404);
+  } finally {
+    await Promise.all([fecharServidor(servidorA), fecharServidor(servidorB)]);
     await rm(pasta, { recursive: true, force: true });
   }
 });
@@ -892,10 +953,12 @@ test('não expõe detalhes internos quando o banco falha', async () => {
   }
 });
 
-const executarIntegracao = process.env.RUN_MYSQL_TESTS === '1' || Boolean(process.env.DB_PASSWORD);
+const executarIntegracao = process.env.RUN_MYSQL_TESTS === '1';
 
 if (!executarIntegracao) {
-  test('integração MySQL', { skip: 'Defina DB_PASSWORD para executar os testes de integração MySQL.' }, () => {});
+  test('integração MySQL', {
+    skip: 'Defina RUN_MYSQL_TESTS=1 para autorizar explicitamente os testes em um banco descartável.'
+  }, () => {});
 } else {
   let banco;
   let servidor;
@@ -1410,7 +1473,7 @@ if (!executarIntegracao) {
     assert.ok(dados.corpo.auditoria.some((item) => item.acao === 'administrador.criado'));
   });
 
-  test('persiste catálogo e imagem compartilhada', async () => {
+  test('persiste catálogo e imagens no diretório isolado do tenant', async () => {
     const login = await chamar('/api/admin/login', {
       metodo: 'POST',
       dados: { usuario: 'admin@teste.local', senha: 'senha-segura' }
@@ -1433,8 +1496,11 @@ if (!executarIntegracao) {
       logo: `data:image/webp;base64,${webpMinimo}`
     });
     assert.equal(configuracaoComLogo.status, 200);
-    assert.match(configuracaoComLogo.corpo.configuracao.logo, /^\/uploads\/logo-/);
-    assert.ok((await stat(join(pastaUploads, configuracaoComLogo.corpo.configuracao.logo.split('/').at(-1)))).size > 0);
+    assert.match(configuracaoComLogo.corpo.configuracao.logo, /^\/uploads\/estabelecimentos\/\d+\/logo-/);
+    assert.ok((await stat(join(
+      pastaUploads,
+      ...configuracaoComLogo.corpo.configuracao.logo.slice('/uploads/'.length).split('/')
+    ))).size > 0);
 
     const produto = await chamar('/api/admin/produtos', {
       metodo: 'POST',
@@ -1453,8 +1519,17 @@ if (!executarIntegracao) {
     assert.equal(produto.status, 201);
     assert.deepEqual(produto.corpo.produto.adicionaisIds, [extra.corpo.adicional.id]);
 
-    const imagemNoDisco = join(pastaUploads, produto.corpo.produto.imagem.split('/').at(-1));
+    const imagemNoDisco = join(
+      pastaUploads,
+      ...produto.corpo.produto.imagem.slice('/uploads/'.length).split('/')
+    );
     assert.ok((await stat(imagemNoDisco)).size > 0);
+    const [imagemNoTenantCorreto, imagemEmOutroTenant] = await Promise.all([
+      fetch(`${urlBase}${produto.corpo.produto.imagem}`),
+      fetch(`${urlBaseTenantB}${produto.corpo.produto.imagem}`)
+    ]);
+    assert.equal(imagemNoTenantCorreto.status, 200);
+    assert.equal(imagemEmOutroTenant.status, 404);
   });
 
   test('autentica garçom e abre comanda vinculada automaticamente', async () => {
