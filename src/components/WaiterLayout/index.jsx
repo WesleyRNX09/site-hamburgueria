@@ -2,6 +2,7 @@ import { LogOut, ReceiptText, Store, UtensilsCrossed } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
 import { useApp } from '../../context/appContext';
+import LogoEstabelecimento from '../LogoEstabelecimento';
 import styles from './index.module.css';
 
 function WaiterLayout({ titulo, subtitulo, children }) {
@@ -17,7 +18,7 @@ function WaiterLayout({ titulo, subtitulo, children }) {
     <div className={styles.pagina}>
       <header className={styles.header}>
         <button type="button" className={styles.logo} onClick={() => navigate('/garcom/mesas')}>
-          <span><UtensilsCrossed size={22} /></span>
+          <span><LogoEstabelecimento configuracao={configuracao} alternativa={<UtensilsCrossed size={22} />} /></span>
           <div><strong>{configuracao.nomeLoja || 'Atendimento'}</strong><small>GARÇOM</small></div>
         </button>
         <nav aria-label="Navegação do atendimento">

@@ -1,11 +1,12 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { createHash, randomInt, randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import mysql from 'mysql2/promise';
 
 import { criarHashSenha } from './security.js';
+import { checksumMigration } from './db/migration-utils.js';
 import {
   adicionaisSeed,
   categoriasSeed,
@@ -60,7 +61,7 @@ async function registrarBaselineMigracoes(banco) {
 
   for (const arquivo of arquivos) {
     const conteudo = await readFile(resolve(pastaMigracoes, arquivo), 'utf8');
-    const checksum = createHash('sha256').update(conteudo).digest('hex');
+    const checksum = checksumMigration(conteudo);
     await banco.execute(
       'INSERT INTO schema_migrations (versao, checksum) VALUES (?, ?)',
       [arquivo, checksum]

@@ -9,15 +9,15 @@
 
   overflow-x: hidden;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   background:
     radial-gradient(
       circle at 75% 30%,
-      rgba(255, 193, 7, 0.035),
+      rgb(from var(--cor-principal) r g b / 0.035),
       transparent 30%
     ),
-    #111111;
+    var(--cor-fundo);
 }
 
 /* =========================
@@ -35,7 +35,7 @@
   display: flex;
   align-items: center;
 
-  /* Um pouco mais escura que #111111 */
+  /* Um pouco mais escura que var(--cor-fundo) */
   background-color: rgba(13, 13, 13, 0.88);
 
   border-bottom: 1px solid
@@ -77,7 +77,7 @@
 
 
 .logo {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 2.8rem;
   font-weight: 700;
@@ -103,7 +103,7 @@
 
 
 .menu a {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.35rem;
   font-weight: 500;
@@ -117,7 +117,7 @@
 
 
 .menu a:hover {
-  color: #ffffff;
+  color: var(--cor-texto);
 
   transform: translateY(-2px);
 }
@@ -129,7 +129,7 @@
 
   padding: 0 1.5rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-family: inherit;
   font-size: 1.15rem;
@@ -137,7 +137,7 @@
 
   background-color: transparent;
 
-  border: 2px solid #ffc107;
+  border: 2px solid var(--cor-principal);
   border-radius: 2rem;
 
   cursor: pointer;
@@ -150,9 +150,9 @@
 
 
 .botaoVoltar:hover {
-  color: #111111;
+  color: var(--cor-fundo);
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
   transform: translateY(-2px);
 }
@@ -198,12 +198,12 @@
   display: grid;
   place-items: center;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   background-color:
-    rgba(255, 193, 7, 0.06);
+    rgb(from var(--cor-principal) r g b / 0.06);
 
-  border: 1.5px solid #ffc107;
+  border: 1.5px solid var(--cor-principal);
   border-radius: 1rem;
 }
 
@@ -217,7 +217,7 @@
 .cabecalhoPagina h1 {
   margin: 0;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 3.7rem;
   font-weight: 800;
@@ -227,7 +227,7 @@
 
 
 .cabecalhoPagina h1 span {
-  color: #ffc107;
+  color: var(--cor-principal);
 }
 
 
@@ -293,8 +293,8 @@
   background:
     linear-gradient(
       145deg,
-      #1c1c1c,
-      #171717
+      var(--cor-card-elevado),
+      var(--cor-card)
     );
 
   border: 1px solid
@@ -322,7 +322,7 @@
   width: 2rem;
   height: 2rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 }
 
 .iconeCard svg {
@@ -334,7 +334,7 @@
 .tituloCard h2 {
   margin: 0;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.9rem;
   font-weight: 800;
@@ -392,7 +392,7 @@
 
 
 .campo label {
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.2rem;
   font-weight: 700;
@@ -414,13 +414,13 @@
 
   padding: 0 1.2rem;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-family: inherit;
   font-size: 1.15rem;
   font-weight: 500;
 
-  background-color: #141414;
+  background-color: var(--cor-card-profundo);
 
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 0.7rem;
@@ -442,11 +442,11 @@
 
 .campo input:focus,
 .campo select:focus {
-  border-color: #ffc107;
+  border-color: var(--cor-principal);
 
   box-shadow:
     0 0 0 3px
-    rgba(255, 193, 7, 0.07);
+    rgb(from var(--cor-principal) r g b / 0.07);
 }
 
 
@@ -478,13 +478,13 @@
 
   gap: 0.8rem;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   text-align: left;
 
   font-family: inherit;
 
-  background-color: #171717;
+  background-color: var(--cor-card);
 
   border: 1px solid
     rgba(255, 255, 255, 0.12);
@@ -502,20 +502,20 @@
 
 .opcaoPagamento:hover {
   border-color:
-    rgba(255, 193, 7, 0.6);
+    rgb(from var(--cor-principal) r g b / 0.6);
 
   transform: translateY(-2px);
 }
 
 
 .pagamentoAtivo {
-  background-color: rgba(255, 193, 7, 0.14);
+  background-color: rgb(from var(--cor-principal) r g b / 0.14);
 
-  border: 2px solid #ffc107;
+  border: 2px solid var(--cor-principal);
 
   box-shadow:
-    inset 0 0 30px rgba(255, 193, 7, 0.08),
-    0 0 15px rgba(255, 193, 7, 0.08);
+    inset 0 0 30px rgb(from var(--cor-principal) r g b / 0.08),
+    0 0 15px rgb(from var(--cor-principal) r g b / 0.08);
 }
 
 
@@ -549,23 +549,23 @@
 }
 
 .pagamentoAtivo .radioPagamento {
-  border-color: #ffc107;
+  border-color: var(--cor-principal);
 
   background:
     radial-gradient(
       circle at center,
-      #ffc107 0,
-      #ffc107 5px,
+      var(--cor-principal) 0,
+      var(--cor-principal) 5px,
       transparent 5.5px
     );
 
   box-shadow:
-    0 0 0 2px rgba(255, 193, 7, 0.08),
-    0 0 7px rgba(255, 193, 7, 0.2);
+    0 0 0 2px rgb(from var(--cor-principal) r g b / 0.08),
+    0 0 7px rgb(from var(--cor-principal) r g b / 0.2);
 }
 
 .pagamentoAtivo strong {
-  color: #ffffff;
+  color: var(--cor-texto);
 }
 
 .pagamentoAtivo
@@ -576,7 +576,7 @@
 .iconePagamento {
   min-width: 2.3rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 2rem;
   font-weight: 800;
@@ -586,7 +586,7 @@
 .opcaoPagamento strong {
   display: block;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.25rem;
   font-weight: 800;
@@ -611,8 +611,8 @@
   margin-top: 1.2rem;
   padding: 1.2rem;
   color: #d8d8d8;
-  background: rgba(255, 193, 7, 0.08);
-  border: 1px solid rgba(255, 193, 7, 0.35);
+  background: rgb(from var(--cor-principal) r g b / 0.08);
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.35);
   border-radius: 0.8rem;
 }
 
@@ -626,11 +626,11 @@
 .botaoCopiarPix {
   width: fit-content;
   min-height: 3.8rem;
-  border: 1px solid #ffc107;
+  border: 1px solid var(--cor-principal);
   border-radius: 0.7rem;
-  background: #ffc107;
+  background: var(--cor-principal);
   padding: 0 1.2rem;
-  color: #111;
+  color: var(--cor-sobre-principal);
   font: inherit;
   font-size: 1.15rem;
   font-weight: 800;
@@ -639,7 +639,7 @@
 
 .dadosPix code {
   overflow-wrap: anywhere;
-  color: #ffc107;
+  color: var(--cor-principal);
   font-family: inherit;
   font-weight: 700;
 }
@@ -648,16 +648,16 @@
   display: grid;
   gap: 0.8rem;
   margin-top: 1rem;
-  border: 1px solid rgba(255, 193, 7, 0.25);
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.25);
   border-radius: 0.8rem;
-  background: rgba(255, 193, 7, 0.03);
+  background: rgb(from var(--cor-principal) r g b / 0.03);
   padding: 1rem 1.2rem;
   color: #ddd;
   font-size: 1.15rem;
 }
 
 .dadosTroco label { display: flex; align-items: center; gap: 0.65rem; cursor: pointer; }
-.dadosTroco input[type='radio'] { width: auto; height: auto; flex: 0 0 auto; margin: 0; accent-color: #ffc107; }
+.dadosTroco input[type='radio'] { width: auto; height: auto; flex: 0 0 auto; margin: 0; accent-color: var(--cor-principal); }
 .dadosTroco input[type='number'] {
   min-height: 3.5rem;
   border: 1px solid #444;
@@ -665,7 +665,7 @@
   outline: none;
   background: #111;
   padding: 0 0.9rem;
-  color: #fff;
+  color: var(--cor-texto);
   font: inherit;
 }
 
@@ -683,12 +683,12 @@
   background:
     linear-gradient(
       145deg,
-      #1d1d1d,
-      #141414
+      var(--cor-card-elevado),
+      var(--cor-card-profundo)
     );
 
   border: 1.5px solid
-    rgba(255, 193, 7, 0.65);
+    rgb(from var(--cor-principal) r g b / 0.65);
 
   border-radius: 1.3rem;
 
@@ -712,7 +712,7 @@
   width: 1.8rem;
   height: 1.8rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 }
 
 
@@ -725,7 +725,7 @@
 .tituloResumo h2 {
   margin: 0;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 2rem;
   font-weight: 800;
@@ -775,7 +775,7 @@
 .infoResumoItem h3 {
   margin: 0;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.5rem;
   font-weight: 800;
@@ -804,7 +804,7 @@
 
   align-items: center;
 
-  border: 1.5px solid #ffc107;
+  border: 1.5px solid var(--cor-principal);
 
   border-radius: 2rem;
 
@@ -820,7 +820,7 @@
   display: grid;
   place-items: center;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-family: inherit;
   font-size: 1.3rem;
@@ -835,9 +835,9 @@
 
 
 .quantidadeResumo button:hover {
-  color: #111111;
+  color: var(--cor-fundo);
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 }
 
 
@@ -845,7 +845,7 @@
   display: grid;
   place-items: center;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1rem;
   font-weight: 700;
@@ -861,7 +861,7 @@
 }
 
 .ladoDireitoItem > strong {
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.35rem;
   font-weight: 800;
@@ -884,7 +884,7 @@
 
   color: #bdbdbd;
 
-  background-color: #191919;
+  background-color: var(--cor-card-elevado);
 
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 50%;
@@ -906,10 +906,10 @@
 }
 
 .removerItem:hover {
-  color: #111111;
+  color: var(--cor-fundo);
 
-  background-color: #ffc107;
-  border-color: #ffc107;
+  background-color: var(--cor-principal);
+  border-color: var(--cor-principal);
 
   transform: scale(1.08);
 }
@@ -947,7 +947,7 @@
 }
 
 .valoresPedido strong {
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.2rem;
   font-weight: 700;
@@ -971,14 +971,14 @@
 
 
 .totalPedido span {
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.6rem;
   font-weight: 800;
 }
 
 .totalPedido strong {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 2.7rem;
   font-weight: 800;
@@ -1002,10 +1002,10 @@
   gap: 1rem;
 
   background-color:
-    rgba(255, 193, 7, 0.025);
+    rgb(from var(--cor-principal) r g b / 0.025);
 
   border: 1px solid
-    rgba(255, 193, 7, 0.3);
+    rgb(from var(--cor-principal) r g b / 0.3);
 
   border-radius: 0.8rem;
 }
@@ -1030,7 +1030,7 @@
 
   margin-top: 0.15rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.6rem;
   font-weight: 800;
@@ -1056,13 +1056,13 @@
 
   margin-top: 1.2rem;
 
-  color: #111111;
+  color: var(--cor-fundo);
 
   font-family: inherit;
   font-size: 1.5rem;
   font-weight: 800;
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
   border: none;
   border-radius: 0.7rem;
@@ -1073,13 +1073,13 @@
 
 
 .botaoFinalizar:hover {
-  background-color: #ffd54f;
+  background-color: var(--cor-principal-clara);
 
   transform: translateY(-2px);
 
   box-shadow:
     0 8px 20px
-    rgba(255, 193, 7, 0.15);
+    rgb(from var(--cor-principal) r g b / 0.15);
 }
 
 
@@ -1099,7 +1099,7 @@
 
 
 .seguranca span {
-  color: #ffc107;
+  color: var(--cor-principal);
 }
 
 
@@ -1120,11 +1120,11 @@
   background:
     linear-gradient(
       145deg,
-      #181818,
-      #141414
+      var(--cor-card),
+      var(--cor-card-profundo)
     );
 
-  border: 1px solid rgba(255, 193, 7, 0.18);
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.18);
   border-radius: 1rem;
 }
 
@@ -1145,7 +1145,7 @@
 
 
 .iconeBeneficio {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 2.4rem;
 }
@@ -1153,7 +1153,7 @@
 .beneficios strong {
   display: block;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.3rem;
   font-weight: 800;
@@ -1303,7 +1303,7 @@
 .resumoVazio button {
   border: 0;
   background: transparent;
-  color: #ffc107;
+  color: var(--cor-principal);
   font: inherit;
   font-weight: 800;
   cursor: pointer;
@@ -1327,13 +1327,13 @@
 .mensagemAviso {
   display: grid;
   gap: 5px;
-  border: 1px solid rgba(255, 193, 7, 0.4);
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.4);
   border-radius: 9px;
   margin-top: 12px;
-  background: rgba(255, 193, 7, 0.08);
+  background: rgb(from var(--cor-principal) r g b / 0.08);
   padding: 10px 12px;
   color: #ddd;
   font-size: 12px;
 }
 
-.mensagemAviso strong { color: #ffc107; }
+.mensagemAviso strong { color: var(--cor-principal); }

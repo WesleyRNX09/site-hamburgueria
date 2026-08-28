@@ -37,7 +37,7 @@ function TermosUso() {
 
         <section>
           <h2>4. Correções, cancelamentos e atendimento</h2>
-          <p>Após o envio, alterações e cancelamentos dependem do estágio de preparo e das regras legais aplicáveis. O cliente deve entrar em contato imediatamente pelos canais configurados. A loja pode recusar ou cancelar pedidos com dados inconsistentes, indisponibilidade, risco de fraude ou endereço fora da área atendida, comunicando o cliente quando possível.</p>
+          <p>{configuracao.politicaCancelamento || 'Após o envio, alterações e cancelamentos dependem do estágio de preparo e das regras legais aplicáveis. O cliente deve entrar em contato imediatamente pelos canais configurados. A loja pode recusar ou cancelar pedidos com dados inconsistentes, indisponibilidade, risco de fraude ou endereço fora da área atendida, comunicando o cliente quando possível.'}</p>
         </section>
 
         <section>
@@ -47,7 +47,7 @@ function TermosUso() {
 
         <section className={styles.alertaLegal}>
           <h2>Revisão necessária antes da venda</h2>
-          <p>Este documento é um modelo e não substitui orientação jurídica. O proprietário deve adequar políticas de cancelamento, atendimento, tributos, responsabilidade, foro e normas locais antes de disponibilizar o sistema ao público.</p>
+          <p>{configuracao.informacoesLegais || 'Este documento é um modelo e não substitui orientação jurídica. O proprietário deve adequar políticas de cancelamento, atendimento, tributos, responsabilidade, foro e normas locais antes de disponibilizar o sistema ao público.'}</p>
         </section>
       </article>
     </main>

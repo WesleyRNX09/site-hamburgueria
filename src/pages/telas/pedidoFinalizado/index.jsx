@@ -1,4 +1,6 @@
 import { Link, Navigate } from 'react-router-dom';
+
+import LogoEstabelecimento from '../../../components/LogoEstabelecimento';
 import { useState } from 'react';
 
 import { useApp } from '../../../context/appContext';
@@ -84,9 +86,10 @@ function PedidoFinalizado() {
             to="/"
             className={styles.logo}
           >
-            {configuracao.logo
-              ? <img src={configuracao.logo} alt={configuracao.nomeLoja || 'Logo da loja'} decoding="async" />
-              : (configuracao.nomeLoja || 'Cardápio online')}
+            <LogoEstabelecimento
+              configuracao={configuracao}
+              alternativa={configuracao.nomeLoja || 'Cardápio online'}
+            />
           </Link>
 
 

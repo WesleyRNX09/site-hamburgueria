@@ -1,10 +1,10 @@
-import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { config } from '../config.js';
 import { abrirBanco, fecharBanco } from '../database.js';
+import { checksumMigration, checksumsCompativeisMigration } from './migration-utils.js';
 
 const pastaProjeto = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const pastaMigracoes = resolve(pastaProjeto, 'database/migrations');
@@ -15,10 +15,6 @@ function separarInstrucoesSql(conteudo) {
     .split(/;\s*(?:\r?\n|$)/)
     .map((instrucao) => instrucao.trim())
     .filter(Boolean);
-}
-
-function checksum(conteudo) {
-  return createHash('sha256').update(conteudo).digest('hex');
 }
 
 let banco;
@@ -45,10 +41,18 @@ try {
 
   for (const arquivo of arquivos) {
     const conteudo = await readFile(resolve(pastaMigracoes, arquivo), 'utf8');
-    const hash = checksum(conteudo);
+    const hash = checksumMigration(conteudo);
     if (aplicadas.has(arquivo)) {
-      if (aplicadas.get(arquivo) !== hash) {
+      const hashRegistrado = aplicadas.get(arquivo);
+      if (!checksumsCompativeisMigration(conteudo).has(hashRegistrado)) {
         throw new Error(`A migration já aplicada ${arquivo} foi modificada.`);
+      }
+      if (hashRegistrado !== hash) {
+        await banco.execute(
+          'UPDATE schema_migrations SET checksum = ? WHERE versao = ? AND checksum = ?',
+          [hash, arquivo, hashRegistrado]
+        );
+        console.log(`Checksum normalizado: ${arquivo}`);
       }
       continue;
     }

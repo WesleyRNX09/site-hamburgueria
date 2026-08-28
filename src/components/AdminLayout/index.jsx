@@ -19,6 +19,7 @@ import {
 import { NavLink, useNavigate } from 'react-router-dom';
 
 import { useApp } from '../../context/appContext';
+import LogoEstabelecimento from '../LogoEstabelecimento';
 import styles from './index.module.css';
 
 const itensMenu = [
@@ -107,7 +108,9 @@ function AdminLayout({ titulo, subtitulo, acao, children }) {
         className={`${styles.sidebar} ${menuAberto ? styles.sidebarAberta : ''}`}
       >
         <div className={styles.logoArea}>
-          <div className={styles.marcaIcone}><UtensilsCrossed size={24} /></div>
+          <div className={styles.marcaIcone}>
+            <LogoEstabelecimento configuracao={configuracao} alternativa={<UtensilsCrossed size={24} />} />
+          </div>
           <div>
             <strong>{configuracao.nomeLoja || 'Administração'}</strong>
             <span>ADMIN</span>

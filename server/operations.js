@@ -161,6 +161,13 @@ function normalizarCor(valor, padrao) {
   return /^#[0-9A-Fa-f]{6}$/.test(cor) ? cor.toUpperCase() : padrao;
 }
 
+function validarCorConfiguracao(valor, padrao) {
+  const cor = texto(valor, 7);
+  if (!cor) return padrao;
+  if (!/^#[0-9A-Fa-f]{6}$/.test(cor)) throw erroDominio('Informe cores válidas no formato hexadecimal.');
+  return cor.toUpperCase();
+}
+
 function normalizarFonte(valor) {
   return FONTES_PERMITIDAS.get(texto(valor, 80).toLowerCase()) ?? 'Poppins';
 }
@@ -395,7 +402,7 @@ export async function buscarConfiguracaoPublica(banco, idEstabelecimento) {
   return selecionarConfiguracaoPublica(await buscarConfiguracao(banco, idEstabelecimento));
 }
 
-export async function salvarConfiguracao(banco, idEstabelecimento, dados) {
+export async function salvarConfiguracao(banco, idEstabelecimento, dados, administradorId = null) {
   const nomeLoja = texto(dados.nomeLoja, 160);
   const telefone = texto(dados.telefone, 40);
   const email = texto(dados.email, 160);
@@ -405,14 +412,29 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados) {
   const pixBeneficiario = texto(dados.pixBeneficiario, 160);
   const pixCidade = texto(dados.pixCidade, 60);
   const logo = texto(dados.logo, 500);
+  const banner = texto(dados.banner, 500);
+  const corPrincipal = validarCorConfiguracao(dados.corPrincipal, CORES_PADRAO.corPrincipal);
+  const corSecundaria = validarCorConfiguracao(dados.corSecundaria, CORES_PADRAO.corSecundaria);
+  const corFundo = validarCorConfiguracao(dados.corFundo, CORES_PADRAO.corFundo);
+  const corCard = validarCorConfiguracao(dados.corCard, CORES_PADRAO.corCard);
+  const corTexto = validarCorConfiguracao(dados.corTexto, CORES_PADRAO.corTexto);
+  const fonteInformada = texto(dados.fonte, 80);
+  const fonte = fonteInformada ? FONTES_PERMITIDAS.get(fonteInformada.toLowerCase()) : 'Poppins';
   const whatsapp = texto(dados.whatsapp, 40);
   const horarioFuncionamento = texto(dados.horarioFuncionamento, 2000);
   const instagramUrl = validarUrlOpcional(dados.instagramUrl, 'o Instagram');
   const facebookUrl = validarUrlOpcional(dados.facebookUrl, 'o Facebook');
+  const politicaCancelamento = texto(dados.politicaCancelamento, 2000);
+  const informacoesLegais = texto(dados.informacoesLegais, 2000);
   const taxaEntregaCentavos = precoParaCentavos(dados.taxaEntrega);
   const pedidoMinimoCentavos = precoParaCentavos(dados.pedidoMinimo);
-  const aceitaCartao = dados.aceitaCartao !== false;
-  const aceitaDinheiro = dados.aceitaDinheiro !== false;
+  const aceitaCartao = dados.aceitaCartao === true;
+  const aceitaDinheiro = dados.aceitaDinheiro === true;
+  const formasPagamento = [
+    pixChave ? 'Pix' : null,
+    aceitaCartao ? 'Cartão' : null,
+    aceitaDinheiro ? 'Dinheiro' : null
+  ].filter(Boolean);
   const areasRecebidas = Array.isArray(dados.areasEntrega) ? dados.areasEntrega : [];
   const bairros = new Set();
   const areasEntrega = areasRecebidas.map((area) => {
@@ -431,6 +453,7 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados) {
     throw erroDominio('Preencha todos os dados da lanchonete.');
   }
   if (!/^\S+@\S+\.\S+$/.test(email)) throw erroDominio('Informe um e-mail válido para a loja.');
+  if (!fonte) throw erroDominio('Selecione uma fonte permitida.');
   if (pixChave && (!pixBeneficiario || !pixCidade)) {
     throw erroDominio('Informe o beneficiário e a cidade da chave Pix ou deixe a configuração Pix vazia.');
   }
@@ -455,19 +478,30 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados) {
     INSERT INTO configuracoes_estabelecimento
       (id_estabelecimento, telefone, email, endereco, taxa_entrega_centavos,
        tempo_entrega, pedido_minimo_centavos, loja_aberta, pix_chave, pix_beneficiario, pix_cidade,
-       logo_url, whatsapp, horario_funcionamento, instagram_url, facebook_url,
-       entrega_ativa, retirada_ativa, aceita_cartao, aceita_dinheiro, areas_entrega_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       logo_url, banner_url, cor_principal, cor_secundaria, cor_fundo, cor_card, cor_texto, fonte,
+       whatsapp, horario_funcionamento, instagram_url, facebook_url, entrega_ativa, retirada_ativa,
+       atendimento_garcom_ativo, aceita_cartao, aceita_dinheiro, areas_entrega_json,
+       formas_pagamento_json, politica_cancelamento, informacoes_legais)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       telefone = VALUES(telefone), email = VALUES(email), endereco = VALUES(endereco),
       taxa_entrega_centavos = VALUES(taxa_entrega_centavos),
       tempo_entrega = VALUES(tempo_entrega), pedido_minimo_centavos = VALUES(pedido_minimo_centavos),
       loja_aberta = VALUES(loja_aberta), pix_chave = VALUES(pix_chave),
-      pix_beneficiario = VALUES(pix_beneficiario), pix_cidade = VALUES(pix_cidade), logo_url = VALUES(logo_url),
+      pix_beneficiario = VALUES(pix_beneficiario), pix_cidade = VALUES(pix_cidade),
+      logo_url = VALUES(logo_url), banner_url = VALUES(banner_url),
+      cor_principal = VALUES(cor_principal), cor_secundaria = VALUES(cor_secundaria),
+      cor_fundo = VALUES(cor_fundo), cor_card = VALUES(cor_card), cor_texto = VALUES(cor_texto),
+      fonte = VALUES(fonte),
       whatsapp = VALUES(whatsapp), horario_funcionamento = VALUES(horario_funcionamento),
       instagram_url = VALUES(instagram_url), facebook_url = VALUES(facebook_url),
-      entrega_ativa = VALUES(entrega_ativa), retirada_ativa = VALUES(retirada_ativa), aceita_cartao = VALUES(aceita_cartao),
-      aceita_dinheiro = VALUES(aceita_dinheiro), areas_entrega_json = VALUES(areas_entrega_json)
+      entrega_ativa = VALUES(entrega_ativa), retirada_ativa = VALUES(retirada_ativa),
+      atendimento_garcom_ativo = VALUES(atendimento_garcom_ativo),
+      aceita_cartao = VALUES(aceita_cartao), aceita_dinheiro = VALUES(aceita_dinheiro),
+      areas_entrega_json = VALUES(areas_entrega_json),
+      formas_pagamento_json = VALUES(formas_pagamento_json),
+      politica_cancelamento = VALUES(politica_cancelamento),
+      informacoes_legais = VALUES(informacoes_legais)
   `, [
     idEstabelecimento,
     telefone,
@@ -476,21 +510,41 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados) {
     taxaEntregaCentavos,
     tempoEntrega,
     pedidoMinimoCentavos,
-    dados.lojaAberta === false ? 0 : 1,
+    dados.lojaAberta === true ? 1 : 0,
     pixChave || null,
     pixChave ? pixBeneficiario : null,
     pixChave ? (pixCidade || null) : null,
     logo || null,
+    banner || null,
+    corPrincipal,
+    corSecundaria,
+    corFundo,
+    corCard,
+    corTexto,
+    fonte,
     whatsapp || null,
     horarioFuncionamento,
     instagramUrl || null,
     facebookUrl || null,
-    dados.entregaAtiva === false ? 0 : 1,
-    dados.retiradaAtiva === false ? 0 : 1,
+    dados.entregaAtiva === true ? 1 : 0,
+    dados.retiradaAtiva === true ? 1 : 0,
+    dados.atendimentoGarcomAtivo === true ? 1 : 0,
     aceitaCartao ? 1 : 0,
     aceitaDinheiro ? 1 : 0,
-    areasEntrega.length ? JSON.stringify(areasEntrega) : null
+    areasEntrega.length ? JSON.stringify(areasEntrega) : null,
+    JSON.stringify(formasPagamento),
+    politicaCancelamento || null,
+    informacoesLegais || null
   ]);
+    await registrarAuditoria(
+      conexao,
+      idEstabelecimento,
+      administradorId,
+      'configuracao.atualizada',
+      'configuracao',
+      idEstabelecimento,
+      { identidadeVisual: true, operacao: true, informacoesPublicas: true }
+    );
   });
   return buscarConfiguracao(banco, idEstabelecimento);
 }

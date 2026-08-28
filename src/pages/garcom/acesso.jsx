@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { useApp } from '../../context/appContext';
+import LogoEstabelecimento from '../../components/LogoEstabelecimento';
 import styles from './garcom.module.css';
 
 function AcessoGarcom() {
   const { token } = useParams();
-  const { entrarGarcom } = useApp();
+  const { entrarGarcom, configuracao } = useApp();
   const navigate = useNavigate();
   const [pin, setPin] = useState('');
   const [erro, setErro] = useState('');
@@ -29,6 +30,9 @@ function AcessoGarcom() {
   return (
     <main className={styles.acessoPagina}>
       <section className={styles.acessoCard}>
+        <div className={styles.marcaAcesso}>
+          <LogoEstabelecimento configuracao={configuracao} alternativa={configuracao.nomeLoja || 'Atendimento'} />
+        </div>
         <div className={styles.iconeAcesso}>{token ? <ShieldCheck size={30} /> : <QrCode size={30} />}</div>
         <h1>Acesso do garçom</h1>
         <p>{token ? 'Digite seu PIN pessoal para entrar no atendimento.' : 'Escaneie seu QR Code individual para acessar o atendimento.'}</p>

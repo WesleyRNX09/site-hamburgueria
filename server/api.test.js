@@ -10,10 +10,13 @@ import mysql from 'mysql2/promise';
 import { criarLimitadorTentativas, criarServidor, personalizarIndexHtml } from './app.js';
 import { listarCatalogo, precoParaCentavos } from './catalog.js';
 import { fecharBanco, prepararBanco } from './database.js';
+import { checksumMigration, checksumsCompativeisMigration } from './db/migration-utils.js';
+import { removerImagemLocal, salvarImagemDataUrl } from './imageStore.js';
 import {
   buscarConfiguracaoPublica,
   buscarItensValidados,
-  calcularTotaisPedido
+  calcularTotaisPedido,
+  salvarConfiguracao
 } from './operations.js';
 import { aguardarServidor, fecharServidor } from './runtime.js';
 import { criarJwt, verificarJwt } from './security.js';
@@ -40,6 +43,35 @@ test('injeta metadados reais da loja no HTML de produção sem permitir markup',
   assert.match(html, /Loja &lt;Segura&gt; \| Cardápio e pedidos/);
   assert.match(html, /https:\/\/pedidos\.teste\.local\/uploads\/logo\.webp/);
   assert.equal(html.includes('<Segura>'), false);
+});
+
+test('mantém o checksum das migrations estável entre Windows e Linux', () => {
+  const conteudoLf = '-- migration\nSELECT 1;\n';
+  const conteudoCrlf = conteudoLf.replaceAll('\n', '\r\n');
+  const hashEstavel = checksumMigration(conteudoLf);
+  assert.equal(checksumMigration(conteudoCrlf), hashEstavel);
+  assert.equal(checksumsCompativeisMigration(conteudoLf).has(hashEstavel), true);
+  assert.equal(
+    checksumsCompativeisMigration(conteudoLf).has(
+      'c80b7f806b2e8aa9aacd72ee09f922b2854eb66323e92cff7b0bfe111cdc0e29'
+    ),
+    false
+  );
+});
+
+test('armazena e remove banner validado sem aceitar prefixos arbitrários', async () => {
+  const pasta = await mkdtemp(join(tmpdir(), 'hamburgueria-banner-'));
+  const pngMinimo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+  try {
+    const url = await salvarImagemDataUrl(pngMinimo, pasta, 'banner');
+    assert.match(url, /^\/uploads\/banner-[a-f0-9-]+\.png$/);
+    await stat(join(pasta, url.slice('/uploads/'.length)));
+    await removerImagemLocal(url, pasta);
+    await assert.rejects(stat(join(pasta, url.slice('/uploads/'.length))), { code: 'ENOENT' });
+    await assert.rejects(salvarImagemDataUrl(pngMinimo, pasta, 'script'), /tipo da imagem/);
+  } finally {
+    await rm(pasta, { recursive: true, force: true });
+  }
 });
 
 test('identifica o estabelecimento somente pelo host da requisição', () => {
@@ -301,6 +333,130 @@ test('publica somente configurações seguras do tenant resolvido pelo domínio'
   const configuracaoDireta = await buscarConfiguracaoPublica(banco, 11);
   assert.equal(configuracaoDireta.nomeLoja, 'Loja A');
   assert.equal('segredo_interno' in configuracaoDireta, false);
+});
+
+test('salva toda a configuração somente no tenant autenticado e valida o tema', async () => {
+  const comandos = [];
+  let conexoesAbertas = 0;
+  const conexao = {
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    release() {},
+    async execute(sql, parametros) {
+      comandos.push({ sql, parametros });
+      return [{ affectedRows: 1 }];
+    }
+  };
+  const linhaSalva = {
+    nome_loja: 'Loja A renovada',
+    slug: 'loja-a',
+    logo_url: '/uploads/logo-segura.webp',
+    banner_url: '/uploads/banner-seguro.webp',
+    cor_principal: '#E95420',
+    cor_secundaria: '#120B0B',
+    cor_fundo: '#1C1010',
+    cor_card: '#2A1717',
+    cor_texto: '#FFF7F3',
+    fonte: 'Georgia',
+    telefone: '(11) 4000-0000',
+    whatsapp: '(11) 98888-0000',
+    email: 'contato@loja-a.local',
+    endereco: 'Rua A, 10',
+    horario_funcionamento: 'Todos os dias, das 18h às 23h',
+    instagram_url: 'https://instagram.com/loja-a',
+    facebook_url: null,
+    loja_aberta: 1,
+    pedido_minimo_centavos: 2500,
+    taxa_entrega_centavos: 700,
+    tempo_entrega: '30–45 min',
+    pix_chave: null,
+    pix_beneficiario: null,
+    pix_cidade: null,
+    entrega_ativa: 1,
+    retirada_ativa: 1,
+    atendimento_garcom_ativo: 1,
+    aceita_cartao: 1,
+    aceita_dinheiro: 1,
+    areas_entrega_json: JSON.stringify([{ bairro: 'Centro', taxaCentavos: 500 }]),
+    formas_pagamento_json: JSON.stringify(['Cartão', 'Dinheiro']),
+    politica_cancelamento: 'Cancelamento antes do preparo.',
+    informacoes_legais: 'Informações legais da Loja A.'
+  };
+  const banco = {
+    async getConnection() {
+      conexoesAbertas += 1;
+      return conexao;
+    },
+    async execute(sql, parametros) {
+      assert.match(sql, /INNER JOIN configuracoes_estabelecimento ce/i);
+      assert.deepEqual(parametros, [11]);
+      return [[linhaSalva]];
+    }
+  };
+  const dados = {
+    nomeLoja: linhaSalva.nome_loja,
+    logo: linhaSalva.logo_url,
+    banner: linhaSalva.banner_url,
+    corPrincipal: linhaSalva.cor_principal,
+    corSecundaria: linhaSalva.cor_secundaria,
+    corFundo: linhaSalva.cor_fundo,
+    corCard: linhaSalva.cor_card,
+    corTexto: linhaSalva.cor_texto,
+    fonte: linhaSalva.fonte,
+    telefone: linhaSalva.telefone,
+    whatsapp: linhaSalva.whatsapp,
+    email: linhaSalva.email,
+    endereco: linhaSalva.endereco,
+    horarioFuncionamento: linhaSalva.horario_funcionamento,
+    instagramUrl: linhaSalva.instagram_url,
+    facebookUrl: '',
+    lojaAberta: true,
+    pedidoMinimo: 25,
+    taxaEntrega: 7,
+    tempoEntrega: linhaSalva.tempo_entrega,
+    pixChave: '',
+    pixBeneficiario: '',
+    pixCidade: '',
+    entregaAtiva: true,
+    retiradaAtiva: true,
+    atendimentoGarcomAtivo: true,
+    aceitaCartao: true,
+    aceitaDinheiro: true,
+    areasEntrega: [{ bairro: 'Centro', taxa: 5 }],
+    formasPagamento: ['forma arbitrária'],
+    politicaCancelamento: linhaSalva.politica_cancelamento,
+    informacoesLegais: linhaSalva.informacoes_legais,
+    idEstabelecimento: 22
+  };
+
+  const configuracao = await salvarConfiguracao(banco, 11, dados, 7);
+  assert.equal(configuracao.nomeLoja, 'Loja A renovada');
+  assert.equal(configuracao.atendimentoGarcomAtivo, true);
+  assert.deepEqual(configuracao.formasPagamento, ['Cartão', 'Dinheiro']);
+
+  const gravacao = comandos.find(({ sql }) => sql.includes('INSERT INTO configuracoes_estabelecimento'));
+  assert.ok(gravacao);
+  assert.equal(/SELECT\s+\*/i.test(gravacao.sql), false);
+  assert.equal(gravacao.parametros[0], 11);
+  assert.equal(gravacao.parametros.includes(22), false);
+  assert.equal(gravacao.parametros[12], '/uploads/banner-seguro.webp');
+  assert.deepEqual(JSON.parse(gravacao.parametros[29]), ['Cartão', 'Dinheiro']);
+  assert.equal(gravacao.parametros[30], 'Cancelamento antes do preparo.');
+  assert.equal(gravacao.parametros[31], 'Informações legais da Loja A.');
+
+  const auditoria = comandos.find(({ sql }) => sql.includes('INSERT INTO auditoria_admin'));
+  assert.deepEqual(auditoria.parametros.slice(0, 5), [11, 7, 'configuracao.atualizada', 'configuracao', '11']);
+
+  await assert.rejects(
+    salvarConfiguracao(banco, 11, { ...dados, corPrincipal: 'vermelho' }, 7),
+    /cores válidas/
+  );
+  await assert.rejects(
+    salvarConfiguracao(banco, 11, { ...dados, fonte: 'Comic Sans' }, 7),
+    /fonte permitida/
+  );
+  assert.equal(conexoesAbertas, 1);
 });
 
 test('assina JWT com perfil e tenant e rejeita adulteração ou expiração', () => {

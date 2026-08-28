@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useApp } from '../../../context/appContext';
+import LogoEstabelecimento from '../../../components/LogoEstabelecimento';
 import styles from './index.module.css';
 
 function LoginAdmin() {
@@ -61,7 +62,10 @@ function LoginAdmin() {
                         className={styles.logo}
                         onClick={() => navigate('/')}
                     >
-                        {configuracao.nomeLoja || 'Administração'}
+                        <LogoEstabelecimento
+                            configuracao={configuracao}
+                            alternativa={configuracao.nomeLoja || 'Administração'}
+                        />
                     </div>
 
                     <button

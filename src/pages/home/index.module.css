@@ -1,7 +1,7 @@
 .pagina {
   width: 100%;
   min-height: 100vh;
-  background-color: #111111;
+  background-color: var(--cor-fundo);
 }
 
 #inicio,
@@ -58,7 +58,7 @@
 }
 
 .logo {
-  color: #ffc107;
+  color: var(--cor-principal);
   font-size: 2.8rem; /* antes: 2rem */
   font-weight: 600;
   text-decoration: none;
@@ -122,7 +122,7 @@
 .menu a {
   position: relative;
 
-  color: #ffc107;
+  color: var(--cor-principal);
   font-size: 1.5rem;
   font-weight: 500;
   text-decoration: none;
@@ -133,7 +133,7 @@
 }
 
 .menu a:hover {
-  color: white;
+  color: var(--cor-texto);
   transform: translateY(-2px);
 }
 
@@ -151,7 +151,7 @@
   width: 55%;
   height: 0.2rem;
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
   border-radius: 2rem;
 
   transform: translateX(-50%);
@@ -201,12 +201,12 @@
   justify-content: center;
   gap: 0.8rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
   font-size: 1.5rem;
   font-weight: 500;
   text-decoration: none;
 
-  border: 2px solid #ffc107;
+  border: 2px solid var(--cor-principal);
   border-radius: 2.5rem;
 
   transition:
@@ -216,8 +216,8 @@
 }
 
 .botaoCarrinho:hover {
-  color: #111111;
-  background-color: #ffc107;
+  color: var(--cor-fundo);
+  background-color: var(--cor-principal);
   transform: translateY(-2px);
 }
 
@@ -274,7 +274,7 @@
   background: linear-gradient(
     to bottom,
     transparent,
-    #111111
+    var(--cor-fundo)
   );
 
   pointer-events: none;
@@ -310,7 +310,7 @@
   display: block;
   margin-bottom: 0.7rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
   font-size: 1.25rem;
   font-weight: 800;
 }
@@ -335,7 +335,7 @@
 }
 
 .tituloAmarelo {
-  color: #ffc107;
+  color: var(--cor-principal);
 }
 
 .descricaoBanner {
@@ -380,25 +380,25 @@
 }
 
 .botaoPrincipal {
-  color: #111111;
-  background-color: #ffc107;
-  border: 2px solid #ffc107;
+  color: var(--cor-fundo);
+  background-color: var(--cor-principal);
+  border: 2px solid var(--cor-principal);
 }
 
 .botaoPrincipal:hover {
-  background-color: #ffd54f;
+  background-color: var(--cor-principal-clara);
   transform: translateY(-3px);
 }
 
 .botaoSecundario {
-  color: #ffc107;
+  color: var(--cor-principal);
   background-color: rgba(0, 0, 0, 0.25);
-  border: 2px solid #ffc107;
+  border: 2px solid var(--cor-principal);
 }
 
 .botaoSecundario:hover {
-  color: #111111;
-  background-color: #ffc107;
+  color: var(--cor-fundo);
+  background-color: var(--cor-principal);
   transform: translateY(-3px);
 }
 
@@ -426,7 +426,7 @@
 }
 
 .topoPromocoes span {
-  color: #ffc107;
+  color: var(--cor-principal);
   font-size: 1.1rem;
   font-weight: 800;
   letter-spacing: 0.05rem;
@@ -435,7 +435,7 @@
 .topoPromocoes h3 {
   margin: 0.3rem 0 0;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
   font-size: 2.8rem;
   font-weight: 800;
 }
@@ -443,7 +443,7 @@
 .verTodasPromocoes {
   margin-bottom: 0.25rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.25rem;
   font-weight: 700;
@@ -456,7 +456,7 @@
 }
 
 .verTodasPromocoes:hover {
-  color: #ffffff;
+  color: var(--cor-texto);
   transform: translateX(4px);
 }
 
@@ -507,11 +507,11 @@
 
   background: linear-gradient(
     135deg,
-    #202020,
-    #151515
+    var(--cor-card-elevado),
+    var(--cor-card-profundo)
   );
 
-  border: 1px solid rgba(255, 193, 7, 0.45);
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.45);
   border-radius: 1.4rem;
 
   overflow: hidden;
@@ -527,11 +527,11 @@
 .cardPromocao:hover {
   transform: translateY(-5px);
 
-  border-color: #ffc107;
+  border-color: var(--cor-principal);
 
   box-shadow:
     0 18px 40px rgba(0, 0, 0, 0.4),
-    0 0 25px rgba(255, 193, 7, 0.08);
+    0 0 25px rgb(from var(--cor-principal) r g b / 0.08);
 }
 
 .indicadoresPromocao {
@@ -568,7 +568,7 @@
 .indicadorAtivo {
   width: 2.2rem;
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
   border-radius: 2rem;
 }
@@ -607,12 +607,12 @@
 
   padding: 0.45rem 0.9rem;
 
-  color: #111111;
+  color: var(--cor-fundo);
 
   font-size: 0.8rem;
   font-weight: 800;
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
   border-radius: 2rem;
 }
@@ -629,7 +629,7 @@
 }
 
 .tipoPromocao {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1rem;
   font-weight: 800;
@@ -640,7 +640,7 @@
 .conteudoPromocao h4 {
   margin: 0.4rem 0 0.7rem;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 2.2rem;
   font-weight: 800;
@@ -677,7 +677,7 @@
 }
 
 .precoPromocao strong {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 2rem;
   font-weight: 800;
@@ -694,13 +694,13 @@
   margin-top: 0.8rem;
   padding: 0.7rem 1.6rem;
 
-  color: #111111;
+  color: var(--cor-fundo);
 
   font-family: inherit;
   font-size: 1.2rem;
   font-weight: 800;
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
   border: none;
   border-radius: 2rem;
@@ -714,11 +714,11 @@
 }
 
 .conteudoPromocao button:hover {
-  background-color: #ffd54f;
+  background-color: var(--cor-principal-clara);
 
   transform: translateY(-2px);
 
-  box-shadow: 0 7px 18px rgba(255, 193, 7, 0.18);
+  box-shadow: 0 7px 18px rgb(from var(--cor-principal) r g b / 0.18);
 }
 
 /* =========================
@@ -742,11 +742,11 @@
   display: grid;
   place-items: center;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
-  background-color: #181818;
+  background-color: var(--cor-card);
 
-  border: 2px solid #ffc107;
+  border: 2px solid var(--cor-principal);
   border-radius: 50%;
 
   cursor: pointer;
@@ -768,15 +768,15 @@
 
 
 .setaPromocao:hover {
-  color: #111111;
+  color: var(--cor-fundo);
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
   transform: scale(1.08);
 
   box-shadow:
     0 6px 18px
-    rgba(255, 193, 7, 0.18);
+    rgb(from var(--cor-principal) r g b / 0.18);
 }
 /* =========================
    CARDÁPIO
@@ -788,7 +788,7 @@
   padding: 6rem 22rem 8rem;
   margin: 0 auto;
 
-  color: #ffffff;
+  color: var(--cor-texto);
   text-align: center;
   scroll-margin-top: 7rem;
 }
@@ -804,7 +804,7 @@
 .cardapio h2 {
   margin: 0;
 
-  color: #ffc107;
+  color: var(--cor-principal);
   font-size: 3.5rem;
   font-weight: 800;
 }
@@ -844,13 +844,13 @@
   height: 4.4rem;
   width: 20rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
   font-family: inherit;
   font-size: 1.5rem;
   font-weight: 700;
 
   background-color: transparent;
-  border: 2px solid #ffc107;
+  border: 2px solid var(--cor-principal);
   border-radius: 2rem;
 
   cursor: pointer;
@@ -863,19 +863,19 @@
 }
 
 .botaoCategoria:hover {
-  color: #111111;
-  background-color: #ffc107;
+  color: var(--cor-fundo);
+  background-color: var(--cor-principal);
 
   transform: translateY(-3px);
 
-  box-shadow: 0 8px 20px rgba(255, 193, 7, 0.18);
+  box-shadow: 0 8px 20px rgb(from var(--cor-principal) r g b / 0.18);
 }
 
 .categoriaAtiva {
-  color: #111111;
-  background-color: #ffc107;
+  color: var(--cor-fundo);
+  background-color: var(--cor-principal);
 
-  box-shadow: 0 8px 20px rgba(255, 193, 7, 0.16);
+  box-shadow: 0 8px 20px rgb(from var(--cor-principal) r g b / 0.16);
 }
 
 
@@ -905,11 +905,11 @@
 
   background: linear-gradient(
     135deg,
-    #202020 0%,
-    #171717 100%
+    var(--cor-card-elevado) 0%,
+    var(--cor-card) 100%
   );
 
-  border: 1px solid rgba(255, 193, 7, 0.65);
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.65);
   border-radius: 1.2rem;
 
   overflow: hidden;
@@ -927,11 +927,11 @@
 .cardProduto:hover {
   transform: translateY(-6px);
 
-  border-color: #ffc107;
+  border-color: var(--cor-principal);
 
   box-shadow:
     0 18px 45px rgba(0, 0, 0, 0.45),
-    0 0 25px rgba(255, 193, 7, 0.1);
+    0 0 25px rgb(from var(--cor-principal) r g b / 0.1);
 }
 
 /* Imagem */
@@ -998,12 +998,12 @@
   justify-content: center;
   gap: 0.25rem;
 
-  color: #111111;
+  color: var(--cor-fundo);
   font-size: 1rem;
   font-weight: 800;
   text-transform: uppercase;
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
   border-radius: 2rem;
 
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
@@ -1079,13 +1079,13 @@
   justify-content: center;
   gap: 0.45rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
   font-family: inherit;
   font-size: 1.7rem;
   font-weight: 700;
 
   background-color: transparent;
-  border: 2px solid #ffc107;
+  border: 2px solid var(--cor-principal);
   border-radius: 6rem;
 
   cursor: pointer;
@@ -1103,12 +1103,12 @@
 }
 
 .botaoAdicionar:hover {
-  color: #111111;
-  background-color: #ffc107;
+  color: var(--cor-fundo);
+  background-color: var(--cor-principal);
 
   transform: translateY(-2px);
 
-  box-shadow: 0 7px 18px rgba(255, 193, 7, 0.18);
+  box-shadow: 0 7px 18px rgb(from var(--cor-principal) r g b / 0.18);
 }
 
 /* =========================
@@ -1143,15 +1143,15 @@
 
   padding: 2rem;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   background: linear-gradient(
     145deg,
-    #1d1d1d,
-    #111111
+    var(--cor-card-elevado),
+    var(--cor-fundo)
   );
 
-  border: 1px solid rgba(255, 193, 7, 0.5);
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.5);
   border-radius: 1.5rem;
 
   box-shadow:
@@ -1200,7 +1200,7 @@
 /* PERSONALIZE SEU PEDIDO */
 
 .resumoProdutoModal > div > span {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.05rem;
   font-weight: 800;
@@ -1214,7 +1214,7 @@
 .resumoProdutoModal h2 {
   margin: 0.25rem 0 0.4rem;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 2.5rem;
   font-weight: 800;
@@ -1244,7 +1244,7 @@
 
   margin-top: 0.7rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 2.1rem;
   font-weight: 800;
@@ -1269,11 +1269,11 @@
 
   flex-shrink: 0;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   background-color: transparent;
 
-  border: 1.5px solid rgba(255, 193, 7, 0.6);
+  border: 1.5px solid rgb(from var(--cor-principal) r g b / 0.6);
   border-radius: 50%;
 
   cursor: pointer;
@@ -1294,9 +1294,9 @@
 
 
 .fecharModalProduto:hover {
-  color: #111111;
+  color: var(--cor-fundo);
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
   transform: rotate(90deg);
 }
@@ -1326,7 +1326,7 @@
 
 .tituloSecaoModal > div > span,
 .tituloObservacao > div > span {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1rem;
   font-weight: 800;
@@ -1341,7 +1341,7 @@
 .tituloObservacao h3 {
   margin: 0.25rem 0 0;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.9rem;
   font-weight: 800;
@@ -1385,9 +1385,9 @@
 
   text-align: left;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
-  background-color: #191919;
+  background-color: var(--cor-card-elevado);
 
   border: 1px solid
     rgba(255, 255, 255, 0.1);
@@ -1406,7 +1406,7 @@
 
 .cardAdicional:hover {
   border-color:
-    rgba(255, 193, 7, 0.7);
+    rgb(from var(--cor-principal) r g b / 0.7);
 
   transform: translateY(-2px);
 
@@ -1419,9 +1419,9 @@
 
 .adicionalSelecionado {
   background-color:
-    rgba(255, 193, 7, 0.08);
+    rgb(from var(--cor-principal) r g b / 0.08);
 
-  border-color: #ffc107;
+  border-color: var(--cor-principal);
 }
 
 
@@ -1436,7 +1436,7 @@
   display: grid;
   place-items: center;
 
-  color: #111111;
+  color: var(--cor-fundo);
 
   font-size: 1rem;
   font-weight: 900;
@@ -1451,8 +1451,8 @@
 
 
 .adicionalSelecionado .checkboxAdicional {
-  background-color: #ffc107;
-  border-color: #ffc107;
+  background-color: var(--cor-principal);
+  border-color: var(--cor-principal);
 }
 
 
@@ -1461,7 +1461,7 @@
 .cardAdicional strong {
   display: block;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.2rem;
   font-weight: 700;
@@ -1476,7 +1476,7 @@
 
   margin-top: 0.25rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.05rem;
   font-weight: 700;
@@ -1527,14 +1527,14 @@
 
   resize: vertical;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-family: inherit;
   font-size: 1.2rem;
   font-weight: 500;
   line-height: 1.5;
 
-  background-color: #181818;
+  background-color: var(--cor-card);
 
   border: 1px solid
     rgba(255, 255, 255, 0.12);
@@ -1557,11 +1557,11 @@
 
 
 .secaoObservacao textarea:focus {
-  border-color: #ffc107;
+  border-color: var(--cor-principal);
 
   box-shadow:
     0 0 0 3px
-    rgba(255, 193, 7, 0.08);
+    rgb(from var(--cor-principal) r g b / 0.08);
 }
 
 
@@ -1598,7 +1598,7 @@
   grid-template-columns: 3.2rem 1fr 3.2rem;
   align-items: center;
 
-  border: 2px solid #ffc107;
+  border: 2px solid var(--cor-principal);
   border-radius: 2rem;
 
   overflow: hidden;
@@ -1618,7 +1618,7 @@
   display: grid;
   place-items: center;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   background: transparent;
   border: none;
@@ -1667,7 +1667,7 @@
   padding: 0;
   margin: 0;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.4rem;
   font-weight: 800;
@@ -1680,8 +1680,8 @@
 /* Hover */
 
 .quantidadeModal button:hover {
-  color: #111111;
-  background-color: #ffc107;
+  color: var(--cor-fundo);
+  background-color: var(--cor-principal);
 }
 
 /* =========================
@@ -1707,7 +1707,7 @@
 /* Preço total */
 
 .totalModal strong {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 2.3rem;
   font-weight: 800;
@@ -1725,14 +1725,14 @@
 
   padding: 0 2rem;
 
-  color: #111111;
+  color: var(--cor-fundo);
 
   font-family: inherit;
 
   font-size: 1.3rem;
   font-weight: 800;
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
   border: none;
   border-radius: 2.3rem;
@@ -1747,13 +1747,13 @@
 
 
 .confirmarProduto:hover {
-  background-color: #ffd54f;
+  background-color: var(--cor-principal-clara);
 
   transform: translateY(-2px);
 
   box-shadow:
     0 8px 20px
-    rgba(255, 193, 7, 0.18);
+    rgb(from var(--cor-principal) r g b / 0.18);
 }
 
 /* =========================
@@ -1780,11 +1780,11 @@
   align-items: center;
   justify-content: center;
 
-  color: #111111;
+  color: var(--cor-fundo);
   font-size: 0.8rem;
   font-weight: 800;
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
   border-radius: 50%;
 }
 
@@ -1829,17 +1829,17 @@
   display: none;
   flex-direction: column;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   background:
     linear-gradient(
       145deg,
-      #1b1b1b,
-      #111111
+      var(--cor-card-elevado),
+      var(--cor-fundo)
     );
 
   border-left: 1px solid
-    rgba(255, 193, 7, 0.3);
+    rgb(from var(--cor-principal) r g b / 0.3);
 
   box-shadow:
     -15px 0 50px rgba(0, 0, 0, 0.5);
@@ -1865,7 +1865,7 @@
 }
 
 .subtituloCarrinho {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.1rem;
   font-weight: 800;
@@ -1876,7 +1876,7 @@
 .topoCarrinho h2 {
   margin: 0.3rem 0 0;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
   font-size: 2.8rem;
   font-weight: 800;
   line-height: 1;
@@ -1897,7 +1897,7 @@
 
   flex-shrink: 0;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-family: inherit;
   font-size: 2rem;
@@ -1906,7 +1906,7 @@
 
   background-color: transparent;
 
-  border: 2px solid rgba(255, 193, 7, 0.6);
+  border: 2px solid rgb(from var(--cor-principal) r g b / 0.6);
   border-radius: 50%;
 
   box-sizing: border-box;
@@ -1920,8 +1920,8 @@
 }
 
 .fecharCarrinho:hover {
-  color: #111111;
-  background-color: #ffc107;
+  color: var(--cor-fundo);
+  background-color: var(--cor-principal);
 
   transform: rotate(90deg);
 }
@@ -1954,9 +1954,9 @@
   grid-template-columns: 140px minmax(0, 1fr);
   gap: 1.4rem;
 
-  background-color: #1b1b1b;
+  background-color: var(--cor-card-elevado);
 
-  border: 1px solid rgba(255, 193, 7, 0.45);
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.45);
   border-radius: 1.2rem;
 }
 
@@ -1985,7 +1985,7 @@
 .nomeRemover h3 {
   margin: 0;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.8rem;
   font-weight: 800;
@@ -2007,11 +2007,11 @@
 
   flex-shrink: 0;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
-  background-color: rgba(255, 193, 7, 0.08);
+  background-color: rgb(from var(--cor-principal) r g b / 0.08);
 
-  border: 1.5px solid rgba(255, 193, 7, 0.65);
+  border: 1.5px solid rgb(from var(--cor-principal) r g b / 0.65);
   border-radius: 50%;
 
   cursor: pointer;
@@ -2030,8 +2030,8 @@
 }
 
 .botaoRemover:hover {
-  color: #111111;
-  background-color: #ffc107;
+  color: var(--cor-fundo);
+  background-color: var(--cor-principal);
 
   transform: rotate(90deg);
 }
@@ -2061,7 +2061,7 @@
 .infoItemCarrinho .precoItemCarrinho {
   margin-top: 0.6rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 2.1rem;
   font-weight: 800;
@@ -2079,7 +2079,7 @@
   grid-template-columns: 3rem 1fr 3rem;
   align-items: center;
 
-  border: 2px solid #ffc107;
+  border: 2px solid var(--cor-principal);
   border-radius: 2rem;
 
   overflow: hidden;
@@ -2095,7 +2095,7 @@
   padding: 0;
   margin: 0;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   background: transparent;
   border: none;
@@ -2131,7 +2131,7 @@
   display: grid;
   place-items: center;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.2rem;
   font-weight: 700;
@@ -2143,8 +2143,8 @@
 
 
 .controleQuantidade button:hover {
-  color: #111111;
-  background-color: #ffc107;
+  color: var(--cor-fundo);
+  background-color: var(--cor-principal);
 }
 /* Carrinho vazio */
 
@@ -2172,7 +2172,7 @@
 .carrinhoVazio h3 {
   margin: 0;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.7rem;
   font-weight: 800;
@@ -2196,13 +2196,13 @@
 
   padding: 0.8rem 2rem;
 
-  color: #111111;
+  color: var(--cor-fundo);
 
   font-family: inherit;
   font-size: 1.1rem;
   font-weight: 700;
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
   border: none;
   border-radius: 2rem;
@@ -2215,7 +2215,7 @@
 }
 
 .carrinhoVazio button:hover {
-  background-color: #ffd54f;
+  background-color: var(--cor-principal-clara);
   transform: translateY(-2px);
 }
 
@@ -2252,14 +2252,14 @@
 
   gap: 0.4rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.05rem;
   font-weight: 600;
 }
 
 .adicionaisCarrinho span strong {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.05rem;
   font-weight: 800;
@@ -2276,19 +2276,19 @@
 
 .avisosCarrinho {
   grid-column: 1 / -1;
-  border: 1px solid rgba(255, 193, 7, 0.45);
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.45);
   border-radius: 10px;
-  background: rgba(255, 193, 7, 0.08);
+  background: rgb(from var(--cor-principal) r g b / 0.08);
   margin-bottom: 10px;
   padding: 12px;
   color: #ddd;
 }
 
-.avisosCarrinho strong { display: block; margin-bottom: 5px; color: #ffc107; font-size: 13px; }
+.avisosCarrinho strong { display: block; margin-bottom: 5px; color: var(--cor-principal); font-size: 13px; }
 .avisosCarrinho p { margin: 3px 0; font-size: 12px; line-height: 1.45; }
 
 .observacaoCarrinho strong {
-  color: #ffc107;
+  color: var(--cor-principal);
   font-weight: 800;
 }
 
@@ -2301,14 +2301,14 @@
 .precoItemCarrinho {
   margin-top: 0.6rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.4rem;
   font-weight: 800;
 }
 
 .totalCarrinho strong {
-  color: #ffc107;
+  color: var(--cor-principal);
   font-size: 2.2rem;
   font-weight: 800;
 }
@@ -2317,13 +2317,13 @@
   width: 100%;
   height: 4.5rem;
 
-  color: #111111;
+  color: var(--cor-fundo);
 
   font-family: inherit;
   font-size: 1.4rem;
   font-weight: 800;
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
   border: none;
   border-radius: 2.5rem;
@@ -2336,7 +2336,7 @@
 }
 
 .finalizarPedido:hover {
-  background-color: #ffd54f;
+  background-color: var(--cor-principal-clara);
   transform: translateY(-2px);
 }
 
@@ -2378,7 +2378,7 @@
 }
 
 .continuarComprando:hover {
-  color: #ffc107;
+  color: var(--cor-principal);
 }
 
 /* =========================
@@ -2390,17 +2390,17 @@
 
   padding: 7rem 3rem 2rem;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   background:
     linear-gradient(
       180deg,
-      #111111 0%,
-      #0c0c0c 100%
+      var(--cor-fundo) 0%,
+      color-mix(in srgb, var(--cor-secundaria) 85%, black) 100%
     );
 
   border-top: 1px solid
-    rgba(255, 193, 7, 0.12);
+    rgb(from var(--cor-principal) r g b / 0.12);
 
   scroll-margin-top: 7rem;
 }
@@ -2438,7 +2438,7 @@
 
   margin-bottom: 2rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 3rem;
   font-weight: 800;
@@ -2450,7 +2450,7 @@
 .apresentacaoLoja h2 {
   margin: 0;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 2.5rem;
   font-weight: 800;
@@ -2460,7 +2460,7 @@
 
 
 .apresentacaoLoja h2 span {
-  color: #ffc107;
+  color: var(--cor-principal);
 }
 
 
@@ -2490,7 +2490,7 @@
 
   margin-bottom: 1rem;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.05rem;
   font-weight: 700;
@@ -2511,12 +2511,12 @@
   display: grid;
   place-items: center;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
-  background-color: #181818;
+  background-color: var(--cor-card);
 
   border: 1px solid
-    rgba(255, 193, 7, 0.35);
+    rgb(from var(--cor-principal) r g b / 0.35);
 
   border-radius: 50%;
 
@@ -2529,10 +2529,10 @@
 
 
 .iconesSociais a:hover {
-  color: #111111;
+  color: var(--cor-fundo);
 
-  background-color: #ffc107;
-  border-color: #ffc107;
+  background-color: var(--cor-principal);
+  border-color: var(--cor-principal);
 
   transform: translateY(-3px);
 }
@@ -2561,7 +2561,7 @@
 
   margin: 0 0 1.8rem;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.5rem;
   font-weight: 800;
@@ -2579,7 +2579,7 @@
   width: 2.5rem;
   height: 0.2rem;
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
   border-radius: 2rem;
 }
@@ -2614,7 +2614,7 @@
 
 
 .colunaSobre > button:not(.botaoWhatsapp):hover {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   transform: translateX(5px);
 }
@@ -2676,15 +2676,15 @@
   margin-top: 0.8rem;
   padding: 0.7rem 1.4rem;
 
-  color: #111111;
+  color: var(--cor-fundo);
 
   font-family: inherit;
   font-size: 1rem;
   font-weight: 800;
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
-  border: 2px solid #ffc107;
+  border: 2px solid var(--cor-principal);
   border-radius: 2rem;
   text-decoration: none;
 
@@ -2698,12 +2698,12 @@
 
 
 .botaoWhatsapp:hover {
-  background-color: #ffd54f;
+  background-color: var(--cor-principal-clara);
 
   transform: translateY(-3px);
 
   box-shadow:
-    0 8px 22px rgba(255, 193, 7, 0.14);
+    0 8px 22px rgb(from var(--cor-principal) r g b / 0.14);
 }
 
 
@@ -2745,6 +2745,20 @@
   gap: 0.8rem;
 }
 
+.rodapeFinal > .direitosRodape {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.informacoesLegais {
+  max-width: 75rem;
+  color: #888888;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
 
 .rodapeFinal a {
   color: #888888;
@@ -2758,7 +2772,7 @@
 
 
 .rodapeFinal a:hover {
-  color: #ffc107;
+  color: var(--cor-principal);
 }
 
 
@@ -3161,7 +3175,7 @@
 
   .indicadoresPromocao button.indicadorAtivo::before {
     width: 2.2rem;
-    background: #ffc107;
+    background: var(--cor-principal);
   }
 
   .listaPromocoes {

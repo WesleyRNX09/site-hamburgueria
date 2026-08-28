@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { configuracaoInicial } from '../data/initialData';
+import { aplicarTema, normalizarConfiguracaoPublica } from '../utils/theme';
 import {
   acompanharPedidoApi,
   adicionarItemComandaApi,
@@ -126,7 +127,7 @@ export function AppProvider({ children }) {
   const [comandas, setComandas] = useState([]);
   const [administradores, setAdministradores] = useState([]);
   const [auditoria, setAuditoria] = useState([]);
-  const [configuracao, setConfiguracaoEstado] = useState(configuracaoInicial);
+  const [configuracao, setConfiguracaoEstado] = useState(() => normalizarConfiguracaoPublica(configuracaoInicial));
   const [carrinho, setCarrinho] = useState(() => {
     const salvo = lerLocal(CHAVES.carrinho, []);
     return Array.isArray(salvo) ? salvo : [];
@@ -150,6 +151,7 @@ export function AppProvider({ children }) {
   const audioLiberadoRef = useRef(false);
 
   useEffect(() => localStorage.setItem(CHAVES.carrinho, JSON.stringify(carrinho)), [carrinho]);
+  useLayoutEffect(() => aplicarTema(document.documentElement, configuracao), [configuracao]);
   useEffect(() => {
     const nome = configuracao.nomeLoja?.trim();
     const titulo = nome ? `${nome} | Cardápio e pedidos` : 'Cardápio e pedidos online';
@@ -239,7 +241,7 @@ export function AppProvider({ children }) {
     if (dados.comandas) setComandas(dados.comandas);
     if (dados.administradores) setAdministradores(dados.administradores);
     if (dados.auditoria) setAuditoria(dados.auditoria);
-    if (dados.configuracao) setConfiguracaoEstado(dados.configuracao);
+    if (dados.configuracao) setConfiguracaoEstado(normalizarConfiguracaoPublica(dados.configuracao));
   }, [tocarSomNovoPedido]);
 
   const recarregarPublico = useCallback(async () => {
@@ -691,8 +693,9 @@ export function AppProvider({ children }) {
 
   async function setConfiguracao(dados) {
     const { configuracao: salva } = await salvarConfiguracaoApi(dados);
-    setConfiguracaoEstado(salva);
-    return salva;
+    const normalizada = normalizarConfiguracaoPublica(salva);
+    setConfiguracaoEstado(normalizada);
+    return normalizada;
   }
 
   const valor = {

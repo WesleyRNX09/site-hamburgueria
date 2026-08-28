@@ -1,8 +1,18 @@
 @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap");
 
 :root {
+  --cor-principal: #FFC107;
+  --cor-secundaria: #0A0A0A;
+  --cor-fundo: #111111;
+  --cor-card: #181818;
+  --cor-texto: #FFFFFF;
+  --cor-sobre-principal: #0A0A0A;
+  --fonte-principal: "Poppins", Arial, sans-serif;
+  --cor-principal-clara: color-mix(in srgb, var(--cor-principal) 72%, white);
+  --cor-card-profundo: color-mix(in srgb, var(--cor-card) 75%, var(--cor-fundo));
+  --cor-card-elevado: color-mix(in srgb, var(--cor-card) 92%, var(--cor-texto));
   color-scheme: dark;
-  font-family: "Poppins", Arial, sans-serif;
+  font-family: var(--fonte-principal);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -22,8 +32,8 @@ body,
 
 body {
   min-width: 0;
-  background: #0d0d0d;
-  color: #e0e0e0;
+  background: var(--cor-secundaria);
+  color: var(--cor-texto);
   font-family: inherit;
   font-size: 1.6rem;
   line-height: 1.5;
@@ -34,7 +44,7 @@ body {
   min-height: 100vh;
   flex-direction: column;
   align-items: center;
-  background: #111111;
+  background: var(--cor-fundo);
 }
 
 *,
@@ -101,7 +111,7 @@ h6 {
 }
 
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
-  outline: 3px solid #ffc107;
+  outline: 3px solid var(--cor-principal);
   outline-offset: 3px;
 }
 
@@ -111,16 +121,16 @@ h6 {
   place-content: center;
   justify-items: center;
   gap: 14px;
-  background: #111111;
-  color: #f5f5f5;
+  background: var(--cor-fundo);
+  color: var(--cor-texto);
   font-family: inherit;
 }
 
 .carregamentoAplicacao span {
   width: 38px;
   height: 38px;
-  border: 3px solid rgba(255, 193, 7, 0.2);
-  border-top-color: #ffc107;
+  border: 3px solid rgb(from var(--cor-principal) r g b / 0.2);
+  border-top-color: var(--cor-principal);
   border-radius: 50%;
   animation: giroCarregamento 0.8s linear infinite;
 }

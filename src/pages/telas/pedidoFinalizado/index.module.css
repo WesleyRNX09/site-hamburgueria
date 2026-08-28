@@ -6,15 +6,15 @@
   width: 100%;
   min-height: 100vh;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   background:
     radial-gradient(
       circle at 75% 20%,
-      rgba(255, 193, 7, 0.035),
+      rgb(from var(--cor-principal) r g b / 0.035),
       transparent 35%
     ),
-    #111111;
+    var(--cor-fundo);
 }
 
 
@@ -33,7 +33,7 @@
   display: flex;
   align-items: center;
 
-  background-color: #0b0b0b;
+  background-color: color-mix(in srgb, var(--cor-secundaria) 85%, black);
 
   box-shadow:
     0 5px 20px rgba(0, 0, 0, 0.35);
@@ -55,7 +55,7 @@
 
 
 .logo {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 2.8rem;
   font-weight: 800;
@@ -73,7 +73,7 @@
 
 
 .menu a {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.35rem;
   font-weight: 600;
@@ -87,7 +87,7 @@
 
 
 .menu a:hover {
-  color: #ffffff;
+  color: var(--cor-texto);
 
   transform: translateY(-2px);
 }
@@ -134,16 +134,16 @@
   display: grid;
   place-items: center;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   background-color:
-    rgba(255, 193, 7, 0.07);
+    rgb(from var(--cor-principal) r g b / 0.07);
 
-  border: 2px solid #ffc107;
+  border: 2px solid var(--cor-principal);
   border-radius: 50%;
 
   box-shadow:
-    0 0 30px rgba(255, 193, 7, 0.12);
+    0 0 30px rgb(from var(--cor-principal) r g b / 0.12);
 }
 
 
@@ -154,7 +154,7 @@
 
 
 .textoConfirmacao > span {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.05rem;
   font-weight: 800;
@@ -166,7 +166,7 @@
 .textoConfirmacao h1 {
   margin: 0.3rem 0 0;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 4rem;
   font-weight: 800;
@@ -176,7 +176,7 @@
 
 
 .textoConfirmacao h1 strong {
-  color: #ffc107;
+  color: var(--cor-principal);
 }
 
 
@@ -211,11 +211,11 @@
   background:
     linear-gradient(
       145deg,
-      #1b1b1b,
-      #151515
+      var(--cor-card-elevado),
+      var(--cor-card-profundo)
     );
 
-  border: 1px solid rgba(255, 193, 7, 0.35);
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.35);
   border-radius: 1.3rem;
 
   box-shadow:
@@ -248,7 +248,7 @@
   width: 3.3rem;
   height: 3.3rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   flex-shrink: 0;
 }
@@ -273,7 +273,7 @@
 
   margin-top: 0.25rem;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.75rem;
   font-weight: 800;
@@ -306,8 +306,8 @@
   margin: -0.7rem 0 2rem;
   padding: 1.4rem 1.6rem;
   color: #d8d8d8;
-  background: rgba(255, 193, 7, 0.08);
-  border: 1px solid rgba(255, 193, 7, 0.35);
+  background: rgb(from var(--cor-principal) r g b / 0.08);
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.35);
   border-radius: 1rem;
 }
 
@@ -319,17 +319,17 @@
 .qrPix {
   padding: 0.65rem;
   line-height: 0;
-  background: #ffffff;
+  background: var(--cor-texto);
   border-radius: 0.8rem;
 }
 
 .dadosPix button {
   width: fit-content;
   padding: 0.8rem 1rem;
-  color: #111111;
+  color: var(--cor-fundo);
   font: inherit;
   font-weight: 800;
-  background: #ffc107;
+  background: var(--cor-principal);
   border: 0;
   border-radius: 0.7rem;
   cursor: pointer;
@@ -344,7 +344,7 @@
 
 .dadosPix code {
   overflow-wrap: anywhere;
-  color: #ffc107;
+  color: var(--cor-principal);
   font-family: inherit;
   font-weight: 800;
 }
@@ -369,12 +369,12 @@
   background:
     linear-gradient(
       145deg,
-      #191919,
-      #141414
+      var(--cor-card-elevado),
+      var(--cor-card-profundo)
     );
 
   border: 1px solid
-    rgba(255, 193, 7, 0.25);
+    rgb(from var(--cor-principal) r g b / 0.25);
 
   border-radius: 1.3rem;
 }
@@ -392,8 +392,8 @@
   background:
     linear-gradient(
       to right,
-      #ffc107 0%,
-      #ffc107 34%,
+      var(--cor-principal) 0%,
+      var(--cor-principal) 34%,
       #444444 34%,
       #444444 100%
     );
@@ -427,7 +427,7 @@
   font-size: 1.6rem;
   font-weight: 800;
 
-  background-color: #171717;
+  background-color: var(--cor-card);
 
   border: 2px solid #555555;
   border-radius: 50%;
@@ -441,22 +441,22 @@
 
 
 .etapaConcluida .circuloStatus {
-  color: #111111;
+  color: var(--cor-fundo);
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
-  border-color: #ffc107;
+  border-color: var(--cor-principal);
 }
 
 
 .etapaAtual .circuloStatus {
-  color: #ffc107;
+  color: var(--cor-principal);
 
-  border-color: #ffc107;
+  border-color: var(--cor-principal);
 
   box-shadow:
     0 0 0 5px
-    rgba(255, 193, 7, 0.08);
+    rgb(from var(--cor-principal) r g b / 0.08);
 }
 
 
@@ -470,7 +470,7 @@
 
 .etapaConcluida strong,
 .etapaAtual strong {
-  color: #ffc107;
+  color: var(--cor-principal);
   font-size: 1.4rem;
 }
 
@@ -509,11 +509,11 @@
   background:
     linear-gradient(
       145deg,
-      #1a1a1a,
-      #141414
+      var(--cor-card-elevado),
+      var(--cor-card-profundo)
     );
 
-  border: 1px solid rgba(255, 193, 7, 0.3);
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.3);
   border-radius: 1.2rem;
 
   box-shadow:
@@ -525,7 +525,7 @@
 .cardResumo h2 {
   margin: 0 0 1.6rem;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 2rem;
   font-weight: 800;
@@ -587,12 +587,12 @@
   display: grid;
   place-items: center;
 
-  color: #111111;
+  color: var(--cor-fundo);
 
   font-size: 1.05rem;
   font-weight: 800;
 
-  background-color: #ffc107;
+  background-color: var(--cor-principal);
 
   border-radius: 2rem;
 }
@@ -601,7 +601,7 @@
 .infoItem h3 {
   margin: 0;
 
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.5rem;
   font-weight: 800;
@@ -625,7 +625,7 @@
 
 
 .precoItem {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.6rem;
   font-weight: 800;
@@ -656,7 +656,7 @@
 }
 
 .linhaResumo strong {
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.25rem;
   font-weight: 800;
@@ -676,7 +676,7 @@
 
 
 .totalResumo span {
-  color: #eeeeee;
+  color: var(--cor-texto);
 
   font-size: 1.5rem;
   font-weight: 800;
@@ -684,7 +684,7 @@
 
 
 .totalResumo strong {
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 2.5rem;
   font-weight: 800;
@@ -707,11 +707,11 @@
   background:
     linear-gradient(
       145deg,
-      #181818,
-      #141414
+      var(--cor-card),
+      var(--cor-card-profundo)
     );
 
-  border: 1px solid rgba(255, 193, 7, 0.2);
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.2);
   border-radius: 1.2rem;
 }
 
@@ -736,7 +736,7 @@
   display: grid;
   place-items: center;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 2.4rem;
   font-weight: 800;
@@ -747,7 +747,7 @@
 .beneficios strong {
   display: block;
 
-  color: #ffc107;
+  color: var(--cor-principal);
 
   font-size: 1.4rem;
   font-weight: 800;

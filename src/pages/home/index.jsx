@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import banner from '../../assets/banner.webp';
+import LogoEstabelecimento from '../../components/LogoEstabelecimento';
 import { useApp } from '../../context/appContext';
 import { usarPlaceholderProduto } from '../../utils/productImage';
 import styles from './index.module.css';
@@ -10,6 +11,7 @@ function Home() {
   const [rolouPagina, setRolouPagina] = useState(false);
   const [categoriaAtiva, setCategoriaAtiva] = useState('Todos');
   const [secaoAtiva, setSecaoAtiva] = useState('inicio');
+  const [bannerComErro, setBannerComErro] = useState('');
 
   const [indicePromocao, setIndicePromocao] = useState(0);
 
@@ -190,13 +192,40 @@ function Home() {
   );
   const pedidoMinimo = Number(configuracao.pedidoMinimo);
   const minimoAtingido = totalCarrinho >= pedidoMinimo;
-  const lojaDisponivel = Boolean(configuracao.lojaAberta && configuracao.entregaAtiva);
-  const podeFinalizar = lojaDisponivel && minimoAtingido;
+  const pedidosOnlineDisponiveis = Boolean(
+    configuracao.lojaAberta && (configuracao.entregaAtiva || configuracao.retiradaAtiva)
+  );
+  const formasAtendimento = [
+    configuracao.entregaAtiva ? 'delivery' : null,
+    configuracao.retiradaAtiva ? 'retirada' : null,
+    configuracao.atendimentoGarcomAtivo ? 'salão' : null
+  ].filter(Boolean);
+  const resumoAtendimento = formasAtendimento.length
+    ? `Atendimento: ${formasAtendimento.join(', ')}`
+    : 'Nenhuma modalidade disponível no momento.';
+  const podeFinalizar = pedidosOnlineDisponiveis && minimoAtingido;
   const nomeExibicao = configuracao.nomeLoja || 'Cardápio online';
   const digitosWhatsapp = String(configuracao.whatsapp ?? '').replace(/\D/g, '');
   const whatsappUrl = digitosWhatsapp.length >= 10
     ? `https://wa.me/${digitosWhatsapp.length <= 11 ? `55${digitosWhatsapp}` : digitosWhatsapp}`
     : '';
+  const bannerConfigurado = configuracao.banner && configuracao.banner !== bannerComErro
+    ? configuracao.banner
+    : banner;
+
+  useEffect(() => {
+    if (!configuracao.banner) return undefined;
+    let ativo = true;
+    const imagem = new Image();
+    imagem.onload = () => {
+      if (ativo) setBannerComErro('');
+    };
+    imagem.onerror = () => {
+      if (ativo) setBannerComErro(configuracao.banner);
+    };
+    imagem.src = configuracao.banner;
+    return () => { ativo = false; };
+  }, [configuracao.banner]);
   
   function irParaSecao(id) {
   const secao = document.getElementById(id);
@@ -468,9 +497,7 @@ function Home() {
       >
         <div className={styles.conteudoHeader}>
           <Link to="/" className={styles.logo}>
-            {configuracao.logo
-              ? <img src={configuracao.logo} alt={configuracao.nomeLoja || 'Logo da loja'} decoding="async" />
-              : nomeExibicao}
+            <LogoEstabelecimento configuracao={configuracao} alternativa={nomeExibicao} />
           </Link>
 
           <nav className={styles.menu} aria-label="Navegação principal">
@@ -600,12 +627,12 @@ function Home() {
       <section
         id="inicio"
         className={styles.banner}
-        style={{ backgroundImage: `url(${banner})` }}
+        style={{ backgroundImage: `url(${JSON.stringify(bannerConfigurado)})` }}
       >
         <div className={styles.conteudoBanner}>
-          <div className={`${styles.statusLoja} ${lojaDisponivel ? styles.statusAberta : styles.statusFechada}`} role="status">
-            <strong>{lojaDisponivel ? 'Aberta para pedidos' : configuracao.lojaAberta ? 'Entrega indisponível' : 'Fechada no momento'}</strong>
-            <span>{lojaDisponivel ? `Entrega estimada: ${configuracao.tempoEntrega}` : 'O cardápio continua disponível para consulta.'}</span>
+          <div className={`${styles.statusLoja} ${pedidosOnlineDisponiveis ? styles.statusAberta : styles.statusFechada}`} role="status">
+            <strong>{pedidosOnlineDisponiveis ? 'Aberta para pedidos' : configuracao.lojaAberta ? 'Pedidos online indisponíveis' : 'Fechada no momento'}</strong>
+            <span>{pedidosOnlineDisponiveis ? `${resumoAtendimento} • Estimativa: ${configuracao.tempoEntrega}` : 'O cardápio continua disponível para consulta.'}</span>
           </div>
           <span className={styles.textoPequeno}>
             🔥 FEITO NA HORA
@@ -927,9 +954,7 @@ function Home() {
               to="/"
               className={styles.logoRodape}
             >
-              {configuracao.logo
-                ? <img src={configuracao.logo} alt={configuracao.nomeLoja || 'Logo da loja'} loading="lazy" decoding="async" />
-                : nomeExibicao}
+              <LogoEstabelecimento configuracao={configuracao} alternativa={nomeExibicao} loading="lazy" />
             </Link>
 
             <h2>
@@ -1099,9 +1124,12 @@ function Home() {
         {/* PARTE INFERIOR */}
 
         <div className={styles.rodapeFinal}>
-          <p>
-            © {new Date().getFullYear()} {nomeExibicao}. Todos os direitos reservados.
-          </p>
+          <div className={styles.direitosRodape}>
+            <p>© {new Date().getFullYear()} {nomeExibicao}. Todos os direitos reservados.</p>
+            {configuracao.informacoesLegais && (
+              <small className={styles.informacoesLegais}>{configuracao.informacoesLegais}</small>
+            )}
+          </div>
 
           <div>
             <Link to="/politica-de-privacidade">
@@ -1597,7 +1625,7 @@ function Home() {
               <small>{minimoAtingido ? 'Pedido mínimo atingido.' : `Faltam R$ ${(pedidoMinimo - totalCarrinho).toFixed(2).replace('.', ',')}.`}</small>
             </div>
 
-            {!lojaDisponivel && <p className={styles.bloqueioCarrinho}>{configuracao.lojaAberta ? 'A entrega está indisponível.' : 'A loja está fechada no momento.'}</p>}
+            {!pedidosOnlineDisponiveis && <p className={styles.bloqueioCarrinho}>{configuracao.lojaAberta ? 'Delivery e retirada estão indisponíveis.' : 'A loja está fechada no momento.'}</p>}
 
             <button
               type="button"
@@ -1605,7 +1633,7 @@ function Home() {
               onClick={() => navigate('/finalizar-pedido')}
               disabled={!podeFinalizar}
             >
-              {podeFinalizar ? 'Finalizar Pedido' : !lojaDisponivel ? 'Pedidos indisponíveis' : 'Complete o pedido mínimo'}
+              {podeFinalizar ? 'Finalizar Pedido' : !pedidosOnlineDisponiveis ? 'Pedidos indisponíveis' : 'Complete o pedido mínimo'}
             </button>
 
             <button

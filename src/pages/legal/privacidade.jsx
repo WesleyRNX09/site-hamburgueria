@@ -44,7 +44,7 @@ function PoliticaPrivacidade() {
 
         <section className={styles.alertaLegal}>
           <h2>Revisão necessária antes da venda</h2>
-          <p>Este texto é um modelo operacional e não substitui orientação jurídica. O proprietário deve revisar base legal, prazos de retenção, fornecedores, canais do titular e obrigações aplicáveis à sua cidade e ao seu negócio antes de publicar o sistema comercialmente.</p>
+          <p>{configuracao.informacoesLegais || 'Este texto é um modelo operacional e não substitui orientação jurídica. O proprietário deve revisar base legal, prazos de retenção, fornecedores, canais do titular e obrigações aplicáveis à sua cidade e ao seu negócio antes de publicar o sistema comercialmente.'}</p>
         </section>
       </article>
     </main>

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+import LogoEstabelecimento from '../../../components/LogoEstabelecimento';
+
 import { useApp } from '../../../context/appContext';
 import { usarPlaceholderProduto } from '../../../utils/productImage';
 import styles from './index.module.css';
@@ -260,9 +262,10 @@ function FinalizarPedidos() {
             to="/"
             className={styles.logo}
           >
-            {configuracao.logo
-              ? <img src={configuracao.logo} alt={configuracao.nomeLoja || 'Logo da loja'} decoding="async" />
-              : (configuracao.nomeLoja || 'Cardápio online')}
+            <LogoEstabelecimento
+              configuracao={configuracao}
+              alternativa={configuracao.nomeLoja || 'Cardápio online'}
+            />
           </Link>
 
           

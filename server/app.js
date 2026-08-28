@@ -799,15 +799,32 @@ async function rotaAdmin({
     const anterior = await buscarConfiguracao(banco, idEstabelecimento);
     const dados = await lerJson(requisicao);
     let logo;
+    let banner;
     let novaLogo = null;
+    let novoBanner = null;
     try {
       logo = await processarImagemAtualizada(dados.logo, anterior.logo, pastaUploads, 'logo');
       if (logo !== anterior.logo) novaLogo = logo;
-      const configuracao = await salvarConfiguracao(banco, idEstabelecimento, { ...dados, logo });
-      if (anterior.logo && anterior.logo !== logo) await removerImagemLocal(anterior.logo, pastaUploads);
+      banner = await processarImagemAtualizada(dados.banner, anterior.banner, pastaUploads, 'banner');
+      if (banner !== anterior.banner) novoBanner = banner;
+      const configuracao = await salvarConfiguracao(
+        banco,
+        idEstabelecimento,
+        { ...dados, logo, banner },
+        administradorAutenticado.id
+      );
+      await Promise.allSettled([
+        anterior.logo && anterior.logo !== logo
+          ? removerImagemLocal(anterior.logo, pastaUploads)
+          : Promise.resolve(),
+        anterior.banner && anterior.banner !== banner
+          ? removerImagemLocal(anterior.banner, pastaUploads)
+          : Promise.resolve()
+      ]);
       responderJson(resposta, 200, { configuracao });
     } catch (erro) {
       if (novaLogo) await removerImagemLocal(novaLogo, pastaUploads);
+      if (novoBanner) await removerImagemLocal(novoBanner, pastaUploads);
       tratarErroDados(erro);
     }
     return true;

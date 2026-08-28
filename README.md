@@ -23,6 +23,18 @@ aplica `id_estabelecimento` em todas as operações de negócio. JWTs assinados
 carregam usuário, perfil, tenant e indicação de superadministrador; o backend
 confirma essas informações contra o domínio e a sessão revogável no MySQL.
 
+O mesmo frontend consome as configurações públicas do estabelecimento e aplica
+logo, banner, fonte e as variáveis CSS `--cor-principal`, `--cor-secundaria`,
+`--cor-fundo`, `--cor-card` e `--cor-texto`. Valores ausentes ou inválidos usam
+o tema escuro e amarelo original como fallback, sem aceitar CSS, HTML ou
+JavaScript configurável vindo do banco.
+
+O administrador autenticado edita esses dados em `/admin/configuracoes`, com
+prévia do tema, upload de logo e banner, contatos, operação, pagamentos, áreas
+de entrega e textos legais. A API ignora identificadores de estabelecimento do
+formulário, usa exclusivamente o tenant confirmado pelo host e pela sessão e
+registra a atualização na auditoria administrativa.
+
 ## Requisitos
 
 - Node.js 22.13 ou superior;
