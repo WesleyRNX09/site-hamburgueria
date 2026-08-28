@@ -50,10 +50,26 @@ registra a atualização na auditoria administrativa.
 
 ## Configuração inicial
 
-1. Copie o modelo de ambiente e preencha somente valores locais:
+O procedimento completo para banco novo, banco existente, SSL, DNS, uploads,
+backup e domínio personalizado está no
+[`docs/INSTALACAO.md`](docs/INSTALACAO.md).
 
-```powershell
-Copy-Item .env.example .env
+1. Crie um arquivo `.env` na raiz do projeto e preencha somente valores do
+ambiente. O modelo seguro completo está no guia de instalação. Exemplo local
+mínimo:
+
+```dotenv
+NODE_ENV=development
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=hamburgueria_app
+DB_PASSWORD=
+DB_NAME=hamburgueria
+DB_SSL=false
+DB_CONNECTION_LIMIT=10
+TENANT_DESENVOLVIMENTO=estabelecimento-padrao
+JWT_SECRET=
+UPLOADS_PATH=C:/dados/hamburgueria/uploads
 ```
 
 2. No MySQL Workbench, crie e selecione um schema vazio e então execute [`database/CRIAR_db.sql`](database/CRIAR_db.sql). O arquivo cria a estrutura atual e os dados mínimos, sem criar/selecionar o banco, sem usuário administrativo e sem conteúdo demonstrativo.
@@ -73,7 +89,6 @@ FLUSH PRIVILEGES;
 ```dotenv
 DB_HOST=127.0.0.1
 DB_PORT=3306
-DB_CREATE_IF_MISSING=1
 DB_USER=hamburgueria_app
 DB_PASSWORD=sua-senha-local-da-aplicacao
 DB_NAME=hamburgueria
@@ -140,7 +155,8 @@ npm run dev       # frontend e backend
 npm run dev:web   # somente frontend
 npm run dev:api   # somente backend
 npm run lint      # análise estática
-npm test          # testes puros e integração MySQL quando DB_PASSWORD estiver definido
+npm test          # testes seguros; integração MySQL fica desativada por padrão
+npm run test:security # isolamento multiempresa e restrições permanentes
 npm run build     # frontend de produção
 npm start         # API, uploads e frontend já compilado
 npm run db:check  # valida a conexão sem alterar a estrutura
@@ -150,7 +166,9 @@ npm run criar-admin-inicial # cria/verifica o primeiro administrador
 npm run criar-superadmin # cria/verifica o superadministrador global
 ```
 
-Os testes de integração exigem configuração própria e usam um banco isolado cujo nome termina em `_testes`. Nunca execute testes de integração com credenciais apontadas para um banco persistente.
+Os testes de integração MySQL só são habilitados explicitamente com
+`RUN_MYSQL_TESTS=1` e usam um banco cujo nome termina em `_testes`. Nunca use
+essa variável com credenciais apontadas para um banco remoto ou persistente.
 
 ## Rotas principais da API
 
@@ -213,7 +231,8 @@ uploads antigos. Em hospedagem, o caminho precisa ser um volume persistente e
 compartilhado entre as instâncias; `/uploads/` deve passar pelo backend, nunca
 por um alias público do proxy. O sitemap usa `PUBLIC_SITE_URL`/`VITE_PUBLIC_URL`;
 nenhum domínio é inventado quando elas não estão definidas. Consulte
-[implantação](docs/DEPLOY.md) e o [guia do banco](database/README.md).
+[instalação final](docs/INSTALACAO.md), [implantação](docs/DEPLOY.md) e o
+[guia do banco](database/README.md).
 
 Alterações de estrutura são aplicadas somente pelo comando explícito `npm run db:migrate`. Mantenha um backup validado antes de cada migration e nunca use o instalador de banco novo sobre dados existentes.
 

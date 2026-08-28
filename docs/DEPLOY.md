@@ -12,14 +12,23 @@
 ## Preparação
 
 1. Provisione o banco e um usuário restrito conforme o README. Não use `root` na aplicação.
-2. Copie `.env.example` para `.env` somente no servidor e preencha os valores reais.
+2. Crie `.env` somente no servidor e preencha o modelo seguro de
+   [`INSTALACAO.md`](INSTALACAO.md). Não copie credenciais para o Git.
 3. Defina `NODE_ENV=production`, `PUBLIC_SITE_URL`, `VITE_PUBLIC_URL` e `CORS_ORIGINS` com a origem HTTPS exata. Para MySQL remoto, use `DB_SSL=true` e configure `DB_SSL_CA`.
 4. Em uma instalação nova, crie/selecione o schema pelo provedor e aplique `database/CRIAR_db.sql`; esse arquivo não cria nem seleciona o banco. Em banco existente, faça backup, revise as migrations e execute `npm run db:migrate`; nunca reaplique o instalador completo.
-5. Defina `ADMIN_PASSWORD` com no mínimo 12 caracteres, execute `npm run criar-admin-inicial` e depois remova a senha do ambiente de execução se ela não for necessária para recuperação operacional.
+5. Defina `SUPERADMIN_PASSWORD` com no mínimo 12 caracteres e execute
+   `npm run criar-superadmin`. Para manter o estabelecimento inicial de
+   compatibilidade, defina também `ADMIN_PASSWORD` e execute
+   `npm run criar-admin-inicial`. Depois, remova as senhas do ambiente de
+   execução se elas não forem necessárias para recuperação operacional.
 6. Defina um caminho absoluto e persistente para `UPLOADS_PATH`, crie a pasta
    e conceda leitura/escrita somente ao usuário do serviço Node.
 7. Execute `npm ci`, os testes adequados em banco isolado, `npm run lint`, `npm run build` e `npm run db:check`.
 8. Inicie com `npm start`; exponha apenas o proxy HTTPS, nunca a porta interna diretamente à internet. O startup valida a conexão, mas não cria nem altera estruturas ou usuários.
+
+O roteiro completo, incluindo DNS curinga, domínio personalizado, SSL MySQL,
+verificação, backup e cadastro do primeiro estabelecimento, está em
+[`INSTALACAO.md`](INSTALACAO.md).
 
 Exemplo conceitual de proxy:
 

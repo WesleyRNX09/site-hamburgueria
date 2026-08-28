@@ -1,11 +1,12 @@
 # Banco de dados
 
-Esta pasta é a fonte versionada da estrutura MySQL. A fundação multiempresa
+Esta pasta é a fonte versionada da estrutura MySQL. O roteiro operacional
+completo está em [`../docs/INSTALACAO.md`](../docs/INSTALACAO.md). A fundação multiempresa
 possui `estabelecimentos`, `configuracoes_estabelecimento` e escopo
 `id_estabelecimento` nas tabelas de negócio. As migrations preservam os dados
-atuais associando-os a um estabelecimento padrão. Até o isolamento por domínio
-ser ativado, o slug `estabelecimento-padrao` mantém a instalação atual
-compatível em desenvolvimento.
+atuais associando-os a um estabelecimento padrão. O slug
+`estabelecimento-padrao` mantém a instalação atual compatível em
+desenvolvimento, enquanto produção resolve cada tenant pelo host validado.
 
 ## Fundação multiempresa
 
