@@ -12,6 +12,7 @@
     "db:migrate": "node --env-file-if-exists=.env server/db/migrate.js",
     "db:prepare": "node --env-file-if-exists=.env server/db/prepare.js",
     "criar-admin-inicial": "node --env-file-if-exists=.env server/db/create-initial-admin.js",
+    "criar-superadmin": "node --env-file-if-exists=.env server/db/create-superadmin.js",
     "seo:generate": "node --env-file-if-exists=.env scripts/generate-seo-files.js",
     "lint": "eslint .",
     "preview": "vite preview",

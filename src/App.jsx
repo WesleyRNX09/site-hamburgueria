@@ -1,6 +1,7 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 
-import { RequireAdmin, RequireGarcom } from './components/RouteGuards';
+import { RequireAdmin, RequireGarcom, RequireSuperadmin } from './components/RouteGuards';
+import { SuperadminProvider } from './context/SuperadminProvider';
 import Home from './pages/home';
 import FinalizarPedidos from './pages/telas/finalizarPedido';
 import PedidoFinalizado from './pages/telas/pedidoFinalizado';
@@ -24,6 +25,16 @@ import MesasGarcom from './pages/garcom/mesas';
 import ComandaGarcom from './pages/garcom/comanda';
 import PoliticaPrivacidade from './pages/legal/privacidade';
 import TermosUso from './pages/legal/termos';
+import LoginSuperadmin from './pages/superadmin/login';
+import EstabelecimentosSuperadmin from './pages/superadmin/estabelecimentos';
+
+function AreaSuperadmin() {
+  return (
+    <SuperadminProvider>
+      <Outlet />
+    </SuperadminProvider>
+  );
+}
 
 function App() {
   return (
@@ -34,6 +45,14 @@ function App() {
       <Route path="/pedidoFinalizado" element={<Navigate to="/pedido-finalizado" replace />} />
       <Route path="/politica-de-privacidade" element={<PoliticaPrivacidade />} />
       <Route path="/termos-de-uso" element={<TermosUso />} />
+
+      <Route element={<AreaSuperadmin />}>
+        <Route path="/superadmin/login" element={<LoginSuperadmin />} />
+        <Route element={<RequireSuperadmin />}>
+          <Route path="/superadmin" element={<Navigate to="/superadmin/estabelecimentos" replace />} />
+          <Route path="/superadmin/estabelecimentos" element={<EstabelecimentosSuperadmin />} />
+        </Route>
+      </Route>
 
       <Route path="/admin/login" element={<LoginAdmin />} />
       <Route element={<RequireAdmin />}>

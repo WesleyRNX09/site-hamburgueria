@@ -1,6 +1,9 @@
 # Sistema da Hamburgueria
 
-Aplicação responsiva com três áreas integradas: cliente, administrador e garçom. O frontend usa React e a API Node.js persiste os dados em um MySQL Server que pode ser administrado pelo MySQL Workbench.
+Aplicação responsiva com quatro áreas integradas: cliente, administrador,
+garçom e superadministrador global. O frontend usa React e a API Node.js
+persiste os dados em um MySQL Server que pode ser administrado pelo MySQL
+Workbench.
 
 ## Recursos conectados ao MySQL
 
@@ -15,6 +18,9 @@ Aplicação responsiva com três áreas integradas: cliente, administrador e gar
 - vínculo automático entre garçom, mesa, comanda e pedido do salão;
 - identidade e operação da lanchonete: nome, logo, contatos, horário, redes sociais, status, delivery, áreas, taxas, mínimo e pagamentos;
 - dados de dashboard e relatórios calculados a partir dos registros compartilhados.
+- painel global protegido para cadastrar, editar, ativar e desativar
+  estabelecimentos, controlar planos/assinaturas e criar o primeiro
+  administrador de cada tenant.
 
 O carrinho permanece no navegador somente até o cliente finalizar a compra. Ao abrir o carrinho e antes do checkout, a API remove itens indisponíveis e atualiza preço, promoção e adicionais. Na criação do pedido, o servidor recalcula tudo novamente, inclusive taxa por bairro e pedido mínimo, e grava pedido, itens e pagamento na mesma transação. Cada tentativa leva uma chave idempotente para que reenvios não criem pedidos duplicados.
 
@@ -79,12 +85,18 @@ JWT_SECRET=gere-um-segredo-aleatorio-com-pelo-menos-32-bytes
 ADMIN_USER=admin
 ADMIN_EMAIL=admin@exemplo.com
 ADMIN_PASSWORD=uma-senha-administrativa-segura
+
+SUPERADMIN_USER=superadmin
+SUPERADMIN_EMAIL=superadmin@exemplo.com
+SUPERADMIN_NAME=Superadministrador
+SUPERADMIN_PASSWORD=outra-senha-global-segura
 ```
 
 5. Crie a conta administrativa e valide a conexão:
 
 ```bash
 npm run criar-admin-inicial
+npm run criar-superadmin
 npm run db:check
 ```
 
@@ -115,6 +127,8 @@ Se o `.env` ou o MySQL ainda não estiverem disponíveis, o frontend continua in
 - Política de privacidade: `/politica-de-privacidade`
 - Termos de uso: `/termos-de-uso`
 - Administrador: `/admin/login`, com as credenciais definidas em `ADMIN_USER` e `ADMIN_PASSWORD`
+- Superadministrador: `/superadmin/login`, com as credenciais definidas em
+  `SUPERADMIN_USER` e `SUPERADMIN_PASSWORD`
 - Garçom: cadastre o funcionário no painel administrativo e abra o QR Code individual por esse painel
 
 Dados demonstrativos ficam desativados por padrão em todos os ambientes: a loja nasce fechada, sem produtos, adicionais, promoções, funcionários ou pedidos fictícios. `SEED_DEMO_DATA=1` só tem efeito no comando explícito `npm run db:prepare` e deve ser usado exclusivamente em ambiente descartável. Os tokens demonstrativos são aleatórios e, sem `DEMO_WAITER_PIN`, o PIN inicial também é aleatório. PINs são armazenados como hash, e tokens de acesso só aparecem em rotas administrativas autenticadas. O QR Code identifica o funcionário, mas a sessão só é criada depois da validação do PIN.
@@ -133,6 +147,7 @@ npm run db:check  # valida a conexão sem alterar a estrutura
 npm run db:migrate # aplica migrations incrementais versionadas
 npm run db:prepare # prepara somente um banco novo e vazio
 npm run criar-admin-inicial # cria/verifica o primeiro administrador
+npm run criar-superadmin # cria/verifica o superadministrador global
 ```
 
 Os testes de integração exigem configuração própria e usam um banco isolado cujo nome termina em `_testes`. Nunca execute testes de integração com credenciais apontadas para um banco persistente.
@@ -173,6 +188,18 @@ contatos, atendimento, pagamentos, entrega e textos legais — e não aceita um
 - `GET|DELETE /api/garcom/sessao`
 - `GET /api/garcom/dados`
 - abertura de comanda, inclusão/remoção de itens, envio à cozinha, solicitação de conta e fechamento em `/api/garcom/comandas/...`
+
+### Superadministrador
+
+- `POST /api/superadmin/login`
+- `GET|DELETE /api/superadmin/sessao`
+- `GET|POST /api/superadmin/estabelecimentos`
+- `GET|PUT /api/superadmin/estabelecimentos/:id`
+
+Essas rotas possuem escopo global e não dependem do domínio de um tenant. Só
+aceitam uma sessão revogável com perfil `superadministrador`. O painel não
+aceita HTML/CSS arbitrário, não grava senha em texto puro e registra alterações
+dos estabelecimentos em auditoria própria.
 
 ## Produção
 

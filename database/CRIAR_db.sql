@@ -87,6 +87,35 @@ CREATE TABLE IF NOT EXISTS configuracoes_estabelecimento (
     CHECK (cor_texto REGEXP '^#[0-9A-Fa-f]{6}$')
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS superadministradores (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  usuario VARCHAR(80) NOT NULL,
+  email VARCHAR(160) NOT NULL,
+  nome VARCHAR(160) NOT NULL,
+  senha_hash VARCHAR(255) NOT NULL,
+  ativo TINYINT(1) NOT NULL DEFAULT 1,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_superadministradores_usuario (usuario),
+  UNIQUE KEY uk_superadministradores_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS sessoes_superadmin (
+  token_hash CHAR(64) PRIMARY KEY,
+  superadministrador_id BIGINT UNSIGNED NOT NULL,
+  expira_em DATETIME(3) NOT NULL,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS auditoria_superadmin (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  superadministrador_id BIGINT UNSIGNED,
+  id_estabelecimento BIGINT UNSIGNED,
+  acao VARCHAR(80) NOT NULL,
+  detalhes_json JSON,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS administradores (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   id_estabelecimento BIGINT UNSIGNED,
@@ -368,6 +397,11 @@ CREATE TABLE IF NOT EXISTS configuracoes (
 CREATE INDEX idx_estabelecimentos_status_assinatura
   ON estabelecimentos (status, status_assinatura, vencimento_assinatura_em);
 CREATE INDEX idx_estabelecimentos_plano ON estabelecimentos (plano);
+CREATE INDEX idx_sessoes_superadmin_usuario ON sessoes_superadmin (superadministrador_id);
+CREATE INDEX idx_sessoes_superadmin_expiracao ON sessoes_superadmin (expira_em);
+CREATE INDEX idx_auditoria_superadmin_usuario ON auditoria_superadmin (superadministrador_id);
+CREATE INDEX idx_auditoria_superadmin_estabelecimento ON auditoria_superadmin (id_estabelecimento);
+CREATE INDEX idx_auditoria_superadmin_criado_em ON auditoria_superadmin (criado_em);
 CREATE INDEX idx_administradores_estabelecimento ON administradores (id_estabelecimento);
 CREATE INDEX idx_sessoes_admin_estabelecimento ON sessoes_admin (id_estabelecimento);
 CREATE INDEX idx_auditoria_admin_estabelecimento ON auditoria_admin (id_estabelecimento);
@@ -407,6 +441,19 @@ ALTER TABLE configuracoes_estabelecimento
   ADD CONSTRAINT fk_configuracoes_estabelecimento
   FOREIGN KEY (id_estabelecimento)
   REFERENCES estabelecimentos(id_estabelecimento) ON DELETE RESTRICT;
+
+ALTER TABLE sessoes_superadmin
+  ADD CONSTRAINT fk_sessoes_superadmin_usuario
+  FOREIGN KEY (superadministrador_id)
+  REFERENCES superadministradores(id) ON DELETE CASCADE;
+
+ALTER TABLE auditoria_superadmin
+  ADD CONSTRAINT fk_auditoria_superadmin_usuario
+    FOREIGN KEY (superadministrador_id)
+    REFERENCES superadministradores(id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_auditoria_superadmin_estabelecimento
+    FOREIGN KEY (id_estabelecimento)
+    REFERENCES estabelecimentos(id_estabelecimento) ON DELETE SET NULL;
 
 ALTER TABLE administradores
   ADD CONSTRAINT fk_administradores_estabelecimento
@@ -565,7 +612,8 @@ INSERT INTO schema_migrations (versao, checksum) VALUES
   ('003_relacionar_dados_estabelecimento.sql', '62f6e86e05a80b98fa1ce6cfa4f0e423893944ec8290810c0abe052f2673e4bc'),
   ('004_adicionar_integridade_estabelecimento.sql', 'c8e52b9245f1ab2866718e979e118249cf0118f809ecf41a76b4c4191f577a46'),
   ('005_preservar_redes_configuracao.sql', '456ca8ceeb39b4693e26e3e8fff02cc113adc9e820f47844aea30b81f2a23c44'),
-  ('006_ajustar_unicidade_por_estabelecimento.sql', '3908bf4e8d0ab04225077d2fb829e27544cd1d0e30f40634b172b821627a4cb4')
+  ('006_ajustar_unicidade_por_estabelecimento.sql', '3908bf4e8d0ab04225077d2fb829e27544cd1d0e30f40634b172b821627a4cb4'),
+  ('007_adicionar_superadministradores.sql', '59cd72293045658157f4dc217736d384791fe5ad6a047681c2539c373221812d')
 ON DUPLICATE KEY UPDATE versao = VALUES(versao);
 
 INSERT INTO estabelecimentos

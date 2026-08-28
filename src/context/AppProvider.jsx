@@ -117,6 +117,8 @@ function normalizarPromocoes(lista, produtos) {
 }
 
 export function AppProvider({ children }) {
+  const areaSuperadmin = window.location.pathname === '/superadmin'
+    || window.location.pathname.startsWith('/superadmin/');
   const [categorias, setCategorias] = useState([]);
   const [produtos, setProdutos] = useState([]);
   const [adicionais, setAdicionais] = useState([]);
@@ -139,7 +141,7 @@ export function AppProvider({ children }) {
   const pedidoAtualValidado = useRef(false);
   const [adminSessao, setAdminSessao] = useState(() => lerSessaoComToken(CHAVES.admin));
   const [garcomSessao, setGarcomSessao] = useState(() => lerSessaoComToken(CHAVES.garcom));
-  const [catalogoCarregando, setCatalogoCarregando] = useState(true);
+  const [catalogoCarregando, setCatalogoCarregando] = useState(() => !areaSuperadmin);
   const [sessaoAdminCarregando, setSessaoAdminCarregando] = useState(() => Boolean(lerSessaoComToken(CHAVES.admin)));
   const [sessaoGarcomCarregando, setSessaoGarcomCarregando] = useState(() => Boolean(lerSessaoComToken(CHAVES.garcom)));
   const [erroApi, setErroApi] = useState('');
@@ -263,6 +265,7 @@ export function AppProvider({ children }) {
   }, [aplicarDados]);
 
   useEffect(() => {
+    if (areaSuperadmin) return undefined;
     let ativo = true;
     buscarDadosPublicos()
       .then((dados) => {
@@ -277,7 +280,7 @@ export function AppProvider({ children }) {
         if (ativo) setCatalogoCarregando(false);
       });
     return () => { ativo = false; };
-  }, [aplicarDados]);
+  }, [aplicarDados, areaSuperadmin]);
 
   useEffect(() => {
     if (!adminSessao?.token) return undefined;

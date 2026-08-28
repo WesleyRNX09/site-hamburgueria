@@ -30,4 +30,6 @@ A pasta `legado/` preserva o histórico anterior e não é executada pelo runner
 - `006_ajustar_unicidade_por_estabelecimento.sql`: permite que tenants distintos
   reutilizem usuários, e-mails, nomes de catálogo, números de mesa e chaves de
   idempotência.
+- `007_adicionar_superadministradores.sql`: cria credenciais, sessões revogáveis
+  e auditoria globais do painel de superadministrador, sem criar senha padrão.
 - `legado/20260824_operacao_comercial.sql`: histórico anterior, fora do runner.

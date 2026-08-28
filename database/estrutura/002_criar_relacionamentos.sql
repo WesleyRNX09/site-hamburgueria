@@ -5,6 +5,19 @@ ALTER TABLE configuracoes_estabelecimento
   FOREIGN KEY (id_estabelecimento)
   REFERENCES estabelecimentos(id_estabelecimento) ON DELETE RESTRICT;
 
+ALTER TABLE sessoes_superadmin
+  ADD CONSTRAINT fk_sessoes_superadmin_usuario
+  FOREIGN KEY (superadministrador_id)
+  REFERENCES superadministradores(id) ON DELETE CASCADE;
+
+ALTER TABLE auditoria_superadmin
+  ADD CONSTRAINT fk_auditoria_superadmin_usuario
+    FOREIGN KEY (superadministrador_id)
+    REFERENCES superadministradores(id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_auditoria_superadmin_estabelecimento
+    FOREIGN KEY (id_estabelecimento)
+    REFERENCES estabelecimentos(id_estabelecimento) ON DELETE SET NULL;
+
 ALTER TABLE administradores
   ADD CONSTRAINT fk_administradores_estabelecimento
   FOREIGN KEY (id_estabelecimento)

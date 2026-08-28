@@ -59,10 +59,18 @@ import {
   verificarJwt,
   verificarSenha
 } from './security.js';
+import {
+  atualizarEstabelecimentoGerencial,
+  buscarEstabelecimentoGerencial,
+  criarEstabelecimentoGerencial,
+  listarEstabelecimentosGerenciais,
+  opcoesSuperadmin
+} from './superadmin.js';
 import { resolverEstabelecimento } from './tenant.js';
 
 const LIMITE_CORPO = 2 * 1024 * 1024;
 const DURACAO_SESSAO_ADMIN_MS = 12 * 60 * 60 * 1000;
+const DURACAO_SESSAO_SUPERADMIN_MS = 8 * 60 * 60 * 1000;
 const DURACAO_SESSAO_GARCOM_MS = 8 * 60 * 60 * 1000;
 const JANELA_TENTATIVAS_LOGIN_MS = 15 * 60 * 1000;
 
@@ -224,6 +232,57 @@ async function obterAdministrador(banco, requisicao, jwtSecret) {
   };
 }
 
+async function obterSuperadministrador(banco, requisicao, jwtSecret) {
+  const token = tokenBearer(requisicao);
+  if (!token) throw new ErroHttp(401, 'Faça login para continuar.');
+  const identidade = verificarJwt(token, jwtSecret);
+  if (!identidade) throw new ErroHttp(401, 'Sua sessão é inválida ou expirou. Entre novamente.');
+  if (identidade.perfil !== 'superadministrador' || !identidade.superadministrador
+      || identidade.idEstabelecimento !== null) {
+    throw new ErroHttp(403, 'Seu perfil não possui permissão para acessar este recurso.');
+  }
+  await banco.execute('DELETE FROM sessoes_superadmin WHERE expira_em <= CURRENT_TIMESTAMP(3)');
+  const [linhas] = await banco.execute(`
+    SELECT sa.id, sa.nome, sa.usuario, sa.email
+    FROM sessoes_superadmin ss
+    INNER JOIN superadministradores sa ON sa.id = ss.superadministrador_id
+    WHERE ss.token_hash = ?
+      AND ss.superadministrador_id = ?
+      AND ss.expira_em > CURRENT_TIMESTAMP(3)
+      AND sa.ativo = 1
+    LIMIT 1
+  `, [criarHashToken(token), identidade.idUsuario]);
+  const superadministrador = linhas[0];
+  if (!superadministrador) throw new ErroHttp(401, 'Sua sessão expirou. Entre novamente.');
+  return {
+    id: Number(superadministrador.id),
+    nome: superadministrador.nome,
+    usuario: superadministrador.usuario,
+    email: superadministrador.email,
+    perfil: 'Superadministrador',
+    idEstabelecimento: null,
+    superadministrador: true
+  };
+}
+
+async function criarSessaoSuperadministrador(banco, jwtSecret, id) {
+  const agoraMs = Date.now();
+  const expiraEm = new Date(agoraMs + DURACAO_SESSAO_SUPERADMIN_MS);
+  const token = criarJwt({
+    idUsuario: id,
+    perfil: 'superadministrador',
+    superadministrador: true,
+    duracaoMs: DURACAO_SESSAO_SUPERADMIN_MS,
+    segredo: jwtSecret,
+    agoraMs
+  });
+  await banco.execute(`
+    INSERT INTO sessoes_superadmin (token_hash, superadministrador_id, expira_em)
+    VALUES (?, ?, ?)
+  `, [criarHashToken(token), id, expiraEm]);
+  return { token, expiraEm: expiraEm.toISOString() };
+}
+
 async function obterGarcom(banco, requisicao, jwtSecret) {
   const { token, identidade } = autenticarJwt(requisicao, jwtSecret, 'garcom');
   const idEstabelecimento = requisicao.estabelecimento.id;
@@ -364,6 +423,122 @@ async function rotaPublica({ banco, requisicao, resposta, caminho, url, limitado
     );
     if (!pedido) throw new ErroHttp(404, 'Pedido não encontrado ou link de acompanhamento inválido.');
     responderJson(resposta, 200, { pedido });
+    return true;
+  }
+
+  return false;
+}
+
+async function rotaSuperadmin({
+  banco,
+  requisicao,
+  resposta,
+  caminho,
+  url,
+  limitadorSuperadmin,
+  jwtSecret
+}) {
+  if (!caminho.startsWith('/api/superadmin/')) return false;
+
+  if (requisicao.method === 'POST' && caminho === '/api/superadmin/login') {
+    const dados = await lerJson(requisicao);
+    const identificador = String(dados.usuario ?? '').trim();
+    const chaves = chavesTentativa(requisicao, 'superadmin', identificador);
+    validarLimiteLogin(limitadorSuperadmin, chaves);
+    const [linhas] = await banco.execute(`
+      SELECT id, nome, usuario, email, senha_hash
+      FROM superadministradores
+      WHERE (LOWER(usuario) = LOWER(?) OR LOWER(email) = LOWER(?))
+        AND ativo = 1
+      LIMIT 1
+    `, [identificador, identificador]);
+    const superadministrador = linhas[0];
+    if (!superadministrador || !verificarSenha(String(dados.senha ?? ''), superadministrador.senha_hash)) {
+      chaves.forEach((chave) => limitadorSuperadmin.registrarFalha(chave));
+      throw new ErroHttp(401, 'Usuário ou senha incorretos.');
+    }
+    chaves.forEach((chave) => limitadorSuperadmin.limpar(chave));
+    const sessao = await criarSessaoSuperadministrador(banco, jwtSecret, Number(superadministrador.id));
+    responderJson(resposta, 200, {
+      token: sessao.token,
+      expiraEm: sessao.expiraEm,
+      superadmin: {
+        id: Number(superadministrador.id),
+        nome: superadministrador.nome,
+        perfil: 'Superadministrador',
+        idEstabelecimento: null,
+        superadministrador: true
+      }
+    });
+    return true;
+  }
+
+  if (requisicao.method === 'GET' && caminho === '/api/superadmin/sessao') {
+    responderJson(resposta, 200, {
+      superadmin: await obterSuperadministrador(banco, requisicao, jwtSecret)
+    });
+    return true;
+  }
+
+  if (requisicao.method === 'DELETE' && caminho === '/api/superadmin/sessao') {
+    const token = tokenBearer(requisicao);
+    if (token) {
+      await obterSuperadministrador(banco, requisicao, jwtSecret);
+      await banco.execute(
+        'DELETE FROM sessoes_superadmin WHERE token_hash = ?',
+        [criarHashToken(token)]
+      );
+    }
+    responderJson(resposta, 200, { sucesso: true });
+    return true;
+  }
+
+  const superadministrador = await obterSuperadministrador(banco, requisicao, jwtSecret);
+  if (requisicao.method === 'GET' && caminho === '/api/superadmin/estabelecimentos') {
+    const estabelecimentos = await listarEstabelecimentosGerenciais(banco, {
+      busca: url.searchParams.get('busca'),
+      status: url.searchParams.get('status'),
+      statusAssinatura: url.searchParams.get('statusAssinatura'),
+      plano: url.searchParams.get('plano')
+    });
+    responderJson(resposta, 200, { estabelecimentos, opcoes: opcoesSuperadmin });
+    return true;
+  }
+
+  if (requisicao.method === 'POST' && caminho === '/api/superadmin/estabelecimentos') {
+    try {
+      const estabelecimento = await criarEstabelecimentoGerencial(
+        banco,
+        await lerJson(requisicao),
+        superadministrador.id
+      );
+      responderJson(resposta, 201, { estabelecimento });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  const estabelecimentoId = caminho.match(/^\/api\/superadmin\/estabelecimentos\/(\d+)$/);
+  if (requisicao.method === 'GET' && estabelecimentoId) {
+    const estabelecimento = await buscarEstabelecimentoGerencial(banco, estabelecimentoId[1]);
+    if (!estabelecimento) throw new ErroHttp(404, 'Estabelecimento não encontrado.');
+    responderJson(resposta, 200, { estabelecimento });
+    return true;
+  }
+  if (requisicao.method === 'PUT' && estabelecimentoId) {
+    try {
+      const estabelecimento = await atualizarEstabelecimentoGerencial(
+        banco,
+        estabelecimentoId[1],
+        await lerJson(requisicao),
+        superadministrador.id
+      );
+      if (!estabelecimento) throw new ErroHttp(404, 'Estabelecimento não encontrado.');
+      responderJson(resposta, 200, { estabelecimento });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
     return true;
   }
 
@@ -969,6 +1144,9 @@ async function rotaApi(parametros) {
     resposta.end();
     return true;
   }
+  if (parametros.caminho.startsWith('/api/superadmin/')) {
+    return rotaSuperadmin(parametros);
+  }
   if (!(requisicao.method === 'GET' && parametros.caminho === '/api/saude')) {
     requisicao.estabelecimento = await resolverEstabelecimento(banco, requisicao, {
       dominioPrincipal,
@@ -1092,6 +1270,9 @@ async function servirFrontend({
     return enviarArquivo(resposta, resolve(pastaUploads, nomeArquivo), 'public, max-age=31536000, immutable');
   }
   if (!pastaDist) return false;
+  if (caminho === '/superadmin' || caminho.startsWith('/superadmin/')) {
+    return enviarArquivo(resposta, resolve(pastaDist, 'index.html'), 'no-cache');
+  }
   const caminhoRelativo = caminho === '/' ? 'index.html' : caminho.replace(/^\//, '');
   const arquivo = resolve(pastaDist, caminhoRelativo);
   const relativoAoDist = relative(resolve(pastaDist), arquivo);
@@ -1132,6 +1313,7 @@ export function criarServidor({
   jwtSecret = criarSegredoJwtTemporario()
 }) {
   const limitadorAdmin = criarLimitadorTentativas({ limite: 10 });
+  const limitadorSuperadmin = criarLimitadorTentativas({ limite: 8 });
   const limitadorGarcom = criarLimitadorTentativas({ limite: 5 });
   const limitadorPedidos = criarLimitadorTentativas({ limite: limitePedidosPorMinuto, janelaMs: 60 * 1000 });
   const origensPermitidas = [...new Set([
@@ -1160,6 +1342,7 @@ export function criarServidor({
           caminho,
           url,
           limitadorAdmin,
+          limitadorSuperadmin,
           limitadorGarcom,
           limitadorPedidos,
           dominioPrincipal,

@@ -19,7 +19,11 @@ import {
   salvarConfiguracao
 } from './operations.js';
 import { aguardarServidor, fecharServidor } from './runtime.js';
-import { criarJwt, verificarJwt } from './security.js';
+import { criarHashSenha, criarJwt, verificarJwt } from './security.js';
+import {
+  criarEstabelecimentoGerencial,
+  listarEstabelecimentosGerenciais
+} from './superadmin.js';
 import {
   extrairHostname,
   identificarEstabelecimentoPeloHost,
@@ -501,6 +505,175 @@ test('JWT de superadministrador é global e explicitamente identificado', () => 
   assert.equal(identidade.perfil, 'superadministrador');
   assert.equal(identidade.idEstabelecimento, null);
   assert.equal(identidade.superadministrador, true);
+});
+
+test('API global autentica e lista estabelecimentos sem resolver tenant pelo host', async () => {
+  const consultas = [];
+  const banco = {
+    async execute(sql, parametros = []) {
+      consultas.push({ sql, parametros });
+      if (sql.includes('FROM superadministradores') && sql.includes('senha_hash')) {
+        return [[{
+          id: 1,
+          nome: 'Super Teste',
+          usuario: 'superteste',
+          email: 'super@teste.local',
+          senha_hash: criarHashSenha('senha-global-segura')
+        }]];
+      }
+      if (sql.includes('INSERT INTO sessoes_superadmin')) return [{ affectedRows: 1 }];
+      if (sql.includes('DELETE FROM sessoes_superadmin')) return [{ affectedRows: 0 }];
+      if (sql.includes('FROM sessoes_superadmin ss')) {
+        return [[{ id: 1, nome: 'Super Teste', usuario: 'superteste', email: 'super@teste.local' }]];
+      }
+      if (sql.includes('FROM estabelecimentos e')) {
+        return [[{
+          id_estabelecimento: 11,
+          nome_fantasia: 'Loja Global',
+          slug: 'loja-global',
+          dominio_personalizado: null,
+          status: 'ativo',
+          plano: 'profissional',
+          status_assinatura: 'ativa',
+          vencimento_assinatura_em: null,
+          criado_em: new Date('2026-08-28T00:00:00.000Z'),
+          atualizado_em: new Date('2026-08-28T00:00:00.000Z'),
+          total_administradores: 1
+        }]];
+      }
+      throw new Error(`Consulta inesperada no teste: ${sql}`);
+    }
+  };
+  const servidor = criarServidor({
+    banco,
+    pastaUploads: tmpdir(),
+    tenantDesenvolvimento: '',
+    jwtSecret: JWT_SECRET_TESTE
+  });
+  await aguardarServidor(servidor, 0);
+  const baseUrl = `http://127.0.0.1:${servidor.address().port}`;
+
+  try {
+    const login = await fetch(`${baseUrl}/api/superadmin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Host: 'host-sem-tenant.teste' },
+      body: JSON.stringify({ usuario: 'superteste', senha: 'senha-global-segura' })
+    });
+    assert.equal(login.status, 200);
+    const { token, superadmin } = await login.json();
+    assert.equal(superadmin.idEstabelecimento, null);
+
+    const listagem = await fetch(`${baseUrl}/api/superadmin/estabelecimentos?plano=profissional`, {
+      headers: { Authorization: `Bearer ${token}`, Host: 'outro-host-sem-tenant.teste' }
+    });
+    assert.equal(listagem.status, 200);
+    const corpo = await listagem.json();
+    assert.equal(corpo.estabelecimentos[0].nomeFantasia, 'Loja Global');
+    assert.equal(corpo.opcoes.planos.includes('profissional'), true);
+    assert.equal(consultas.some(({ sql }) => /FROM estabelecimentos AS e/i.test(sql)), false);
+
+    const tokenAdministrador = criarJwt({
+      idUsuario: 7,
+      perfil: 'administrador',
+      idEstabelecimento: 11,
+      duracaoMs: 60_000,
+      segredo: JWT_SECRET_TESTE
+    });
+    const proibido = await fetch(`${baseUrl}/api/superadmin/estabelecimentos`, {
+      headers: { Authorization: `Bearer ${tokenAdministrador}` }
+    });
+    assert.equal(proibido.status, 403);
+  } finally {
+    await fecharServidor(servidor);
+  }
+});
+
+test('cria estabelecimento e primeiro administrador na mesma transação global', async () => {
+  const comandos = [];
+  const linhaCriada = {
+    id_estabelecimento: 44,
+    nome_fantasia: 'Loja Quarenta e Quatro',
+    slug: 'loja-44',
+    dominio_personalizado: 'loja44.exemplo.com.br',
+    status: 'ativo',
+    plano: 'premium',
+    status_assinatura: 'ativa',
+    vencimento_assinatura_em: new Date('2027-01-10T23:59:59.000Z'),
+    criado_em: new Date('2026-08-28T00:00:00.000Z'),
+    atualizado_em: new Date('2026-08-28T00:00:00.000Z'),
+    logo_url: null,
+    banner_url: null,
+    total_administradores: 1
+  };
+  const conexao = {
+    async beginTransaction() { comandos.push({ sql: 'BEGIN', parametros: [] }); },
+    async commit() { comandos.push({ sql: 'COMMIT', parametros: [] }); },
+    async rollback() { comandos.push({ sql: 'ROLLBACK', parametros: [] }); },
+    release() { comandos.push({ sql: 'RELEASE', parametros: [] }); },
+    async execute(sql, parametros = []) {
+      comandos.push({ sql, parametros });
+      if (sql.includes('INSERT INTO estabelecimentos')) return [{ insertId: 44 }];
+      return [{ affectedRows: 1 }];
+    }
+  };
+  const banco = {
+    async getConnection() { return conexao; },
+    async execute(sql, parametros = []) {
+      comandos.push({ sql, parametros });
+      if (sql.includes('FROM estabelecimentos e')) return [[linhaCriada]];
+      throw new Error(`Consulta inesperada no teste: ${sql}`);
+    }
+  };
+  const criado = await criarEstabelecimentoGerencial(banco, {
+    nomeFantasia: 'Loja Quarenta e Quatro',
+    slug: 'loja-44',
+    dominioPersonalizado: 'loja44.exemplo.com.br',
+    status: 'ativo',
+    plano: 'premium',
+    statusAssinatura: 'ativa',
+    vencimentoAssinatura: '2027-01-10',
+    ...{
+      corPrincipal: '#FFC107', corSecundaria: '#0A0A0A', corFundo: '#111111',
+      corCard: '#181818', corTexto: '#FFFFFF', fonte: 'Poppins'
+    },
+    primeiroAdministrador: {
+      nome: 'Admin Loja 44', usuario: 'admin44', email: 'admin44@teste.local', senha: 'senha-admin-segura'
+    }
+  }, 1);
+  assert.equal(criado.id, 44);
+  const insertAdmin = comandos.find(({ sql }) => sql.includes('INSERT INTO administradores'));
+  assert.equal(insertAdmin.parametros[0], 44);
+  assert.notEqual(insertAdmin.parametros[4], 'senha-admin-segura');
+  assert.equal(comandos.some(({ sql }) => sql.includes('INSERT INTO auditoria_superadmin')), true);
+  assert.equal(comandos.some(({ sql }) => sql === 'COMMIT'), true);
+  assert.equal(comandos.some(({ sql }) => /SELECT\s+\*/i.test(sql)), false);
+
+  await assert.rejects(
+    criarEstabelecimentoGerencial(banco, {
+      nomeFantasia: 'Inválida', slug: '../outra', primeiroAdministrador: {
+        nome: 'Admin', usuario: 'admin', email: 'admin@teste.local', senha: 'senha-admin-segura'
+      }
+    }, 1),
+    /slug/
+  );
+});
+
+test('filtra listagem global somente por valores permitidos e consultas explícitas', async () => {
+  let consulta;
+  const banco = {
+    async execute(sql, parametros) {
+      consulta = { sql, parametros };
+      return [[]];
+    }
+  };
+  await listarEstabelecimentosGerenciais(banco, {
+    busca: 'burger', status: 'ativo', plano: 'premium', statusAssinatura: 'bloqueada'
+  });
+  assert.match(consulta.sql, /e\.status = \?/);
+  assert.match(consulta.sql, /e\.plano = \?/);
+  assert.match(consulta.sql, /e\.status_assinatura = \?/);
+  assert.equal(consulta.parametros.at(-1), 'premium');
+  assert.equal(/SELECT\s+\*/i.test(consulta.sql), false);
 });
 
 test('API bloqueia JWT de perfil ou estabelecimento diferente antes de consultar dados', async () => {

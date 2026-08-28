@@ -20,9 +20,10 @@ contatos, endereço, horários, opções de atendimento e pagamento e textos
 operacionais. Imagens permanecem fora do MySQL; somente URLs e caminhos são
 armazenados.
 
-A separação foi aplicada somente a dados de negócio. `schema_migrations` e
-`metadados` permanecem globais; a própria tabela `estabelecimentos` é o registro
-global dos tenants. As demais 19 tabelas atuais recebem o escopo diretamente,
+A separação foi aplicada somente a dados de negócio. `schema_migrations`,
+`metadados`, `superadministradores`, `sessoes_superadmin` e
+`auditoria_superadmin` permanecem globais; a própria tabela `estabelecimentos`
+é o registro global dos tenants. As demais 19 tabelas atuais recebem o escopo diretamente,
 inclusive itens e sessões, para permitir filtros simples e auditoria sem
 depender apenas de relacionamentos indiretos. A tabela `configuracoes` é mantida
 como compatibilidade temporária, enquanto `configuracoes_estabelecimento` é o
@@ -44,8 +45,9 @@ obrigatório após a verificação de ausência de nulos em todos os ambientes.
 1. Crie um schema vazio pelo painel do provedor ou selecione o schema já fornecido.
 2. Faça login nesse schema e execute `CRIAR_db.sql` completo uma única vez.
 3. Configure a conta restrita da aplicação no `.env`.
-4. Defina uma senha administrativa forte e execute
-   `npm run criar-admin-inicial`.
+4. Defina senhas fortes para o administrador do estabelecimento inicial e para
+   o superadministrador global. Execute `npm run criar-admin-inicial` e
+   `npm run criar-superadmin`.
 5. Valide com `npm run db:check` e, no Workbench, execute
    `verificacoes/001_verificar_instalacao.sql`.
 
@@ -98,7 +100,9 @@ ordem registrada pelo runner:
    modelo definitivo de configuração;
 6. `006_ajustar_unicidade_por_estabelecimento.sql` troca unicidades globais por
    unicidades compostas com o estabelecimento;
-7. `verificacoes/002_verificar_migracao_estabelecimento.sql` deve retornar zero
+7. `007_adicionar_superadministradores.sql` cria as contas globais, sessões
+   revogáveis e auditoria do painel de superadministrador;
+8. `verificacoes/002_verificar_migracao_estabelecimento.sql` deve retornar zero
    para todos os registros sem escopo e relacionamentos divergentes.
 
 Em produção, aplique essas migrations somente com backup validado e junto do
@@ -131,3 +135,24 @@ em uma instalação nova.
   desativada.
 - `SYNC_ADMIN_CREDENTIALS=1` pode atualizar a primeira conta administrativa;
   use-o apenas de forma pontual e volte a `0` após a recuperação controlada.
+- `SYNC_SUPERADMIN_CREDENTIALS=1` faz o mesmo para a conta global e revoga suas
+  sessões existentes; volte a `0` imediatamente depois do uso.
+
+## Painel global e novos estabelecimentos
+
+Depois de aplicar a migration `007`, defina `SUPERADMIN_USER`,
+`SUPERADMIN_EMAIL`, `SUPERADMIN_NAME` e uma `SUPERADMIN_PASSWORD` com pelo
+menos 12 caracteres. Execute `npm run criar-superadmin` uma única vez e acesse
+`/superadmin/login`. A senha é transformada em hash antes de ser gravada e não
+é criada no startup da aplicação.
+
+O cadastro de um estabelecimento pelo painel cria, na mesma transação, o
+tenant, sua configuração visual e o primeiro administrador. Não execute
+`CRIAR_db.sql` novamente para cada cliente. Plano, situação e vencimento da
+assinatura são controles manuais; esta etapa não possui gateway de cobrança.
+
+Para publicar um novo slug como subdomínio, configure um registro DNS curinga
+para `*.seu-dominio` apontando para a mesma implantação e preencha
+`DOMINIO_PRINCIPAL`. Um domínio personalizado também precisa ser apontado no
+DNS para essa implantação antes de ser informado no painel. DNS, certificado
+TLS e configuração do proxy/hospedagem não podem ser realizados pela aplicação.

@@ -6,6 +6,7 @@ import { criarSegredoJwtTemporario } from './security.js';
 const pastaProjeto = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const producao = process.env.NODE_ENV === 'production';
 const senhaAdmin = process.env.ADMIN_PASSWORD || '';
+const senhaSuperadmin = process.env.SUPERADMIN_PASSWORD || '';
 const jwtSecretInformado = process.env.JWT_SECRET || '';
 
 function listaAmbiente(valor) {
@@ -56,5 +57,12 @@ export const config = {
     nome: process.env.ADMIN_NAME || 'Administrador',
     senha: senhaAdmin,
     sincronizarCredenciais: process.env.SYNC_ADMIN_CREDENTIALS === '1'
+  },
+  superadministrador: {
+    usuario: process.env.SUPERADMIN_USER || 'superadmin',
+    email: process.env.SUPERADMIN_EMAIL || 'superadmin@exemplo.com',
+    nome: process.env.SUPERADMIN_NAME || 'Superadministrador',
+    senha: senhaSuperadmin,
+    sincronizarCredenciais: process.env.SYNC_SUPERADMIN_CREDENTIALS === '1'
   }
 };

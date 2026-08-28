@@ -82,6 +82,35 @@ CREATE TABLE IF NOT EXISTS configuracoes_estabelecimento (
     CHECK (cor_texto REGEXP '^#[0-9A-Fa-f]{6}$')
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS superadministradores (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  usuario VARCHAR(80) NOT NULL,
+  email VARCHAR(160) NOT NULL,
+  nome VARCHAR(160) NOT NULL,
+  senha_hash VARCHAR(255) NOT NULL,
+  ativo TINYINT(1) NOT NULL DEFAULT 1,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_superadministradores_usuario (usuario),
+  UNIQUE KEY uk_superadministradores_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS sessoes_superadmin (
+  token_hash CHAR(64) PRIMARY KEY,
+  superadministrador_id BIGINT UNSIGNED NOT NULL,
+  expira_em DATETIME(3) NOT NULL,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS auditoria_superadmin (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  superadministrador_id BIGINT UNSIGNED,
+  id_estabelecimento BIGINT UNSIGNED,
+  acao VARCHAR(80) NOT NULL,
+  detalhes_json JSON,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS administradores (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   id_estabelecimento BIGINT UNSIGNED,

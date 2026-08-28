@@ -1,5 +1,6 @@
 const CHAVE_SESSAO_ADMIN = 'hamburgueria_admin_sessao';
 const CHAVE_SESSAO_GARCOM = 'hamburgueria_garcom_sessao';
+const CHAVE_SESSAO_SUPERADMIN = 'hamburgueria_superadmin_sessao';
 const URL_API = import.meta.env.VITE_API_URL ?? '';
 
 export class ErroApi extends Error {
@@ -22,7 +23,12 @@ async function requisicao(caminho, { metodo = 'GET', dados, autenticacao } = {})
   if (dados !== undefined) cabecalhos['Content-Type'] = 'application/json';
 
   if (autenticacao) {
-    const chave = autenticacao === 'admin' ? CHAVE_SESSAO_ADMIN : CHAVE_SESSAO_GARCOM;
+    const chaves = {
+      admin: CHAVE_SESSAO_ADMIN,
+      garcom: CHAVE_SESSAO_GARCOM,
+      superadmin: CHAVE_SESSAO_SUPERADMIN
+    };
+    const chave = chaves[autenticacao];
     const token = obterToken(chave);
     if (token) cabecalhos.Authorization = `Bearer ${token}`;
   }
@@ -54,6 +60,43 @@ export function buscarCatalogo() {
 
 export function buscarDadosPublicos() {
   return requisicao('/api/publico/inicial');
+}
+
+export function loginSuperadmin(usuario, senha) {
+  return requisicao('/api/superadmin/login', { metodo: 'POST', dados: { usuario, senha } });
+}
+
+export function validarSessaoSuperadmin() {
+  return requisicao('/api/superadmin/sessao', { autenticacao: 'superadmin' });
+}
+
+export function logoutSuperadmin() {
+  return requisicao('/api/superadmin/sessao', { metodo: 'DELETE', autenticacao: 'superadmin' });
+}
+
+export function listarEstabelecimentosSuperadmin(filtros = {}) {
+  const parametros = new URLSearchParams();
+  Object.entries(filtros).forEach(([chave, valor]) => {
+    if (valor) parametros.set(chave, valor);
+  });
+  const consulta = parametros.size ? `?${parametros.toString()}` : '';
+  return requisicao(`/api/superadmin/estabelecimentos${consulta}`, { autenticacao: 'superadmin' });
+}
+
+export function criarEstabelecimentoSuperadmin(dados) {
+  return requisicao('/api/superadmin/estabelecimentos', {
+    metodo: 'POST',
+    dados,
+    autenticacao: 'superadmin'
+  });
+}
+
+export function atualizarEstabelecimentoSuperadmin(id, dados) {
+  return requisicao(`/api/superadmin/estabelecimentos/${id}`, {
+    metodo: 'PUT',
+    dados,
+    autenticacao: 'superadmin'
+  });
 }
 
 export function criarPedidoDeliveryApi(dados, itens) {
