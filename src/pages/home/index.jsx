@@ -644,7 +644,7 @@ function Home() {
             </span>
 
             <span className={styles.tituloAmarelo}>
-              Hambúrguer Ar
+              Hambúrguer Artesanal
             </span>
           </h1>
 
