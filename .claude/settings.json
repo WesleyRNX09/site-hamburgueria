@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git rebase:*)",
+      "Bash(*DROP TABLE*)",
+      "Bash(*drop table*)",
+      "Bash(*DROP DATABASE*)",
+      "Bash(*drop database*)",
+      "Bash(*TRUNCATE*)",
+      "Bash(*truncate*)",
+      "Bash(*deploy*)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Edit(.env)",
+      "Bash(git add .env:*)",
+      "Bash(git add -f .env:*)"
+    ]
+  }
+}
