@@ -3,26 +3,59 @@ import { config } from './config.js';
 import { abrirBanco, fecharBanco } from './database.js';
 import { aguardarServidor, fecharServidor } from './runtime.js';
 
-const banco = await abrirBanco({ mysql: config.mysql });
-const servidor = criarServidor({
-  banco,
-  pastaUploads: config.pastaUploads,
-  pastaDist: config.pastaDist,
-  producao: config.producao,
-  corsOrigins: config.corsOrigins,
-  publicSiteUrl: config.publicSiteUrl,
-  dominioPrincipal: config.dominioPrincipal,
-  tenantDesenvolvimento: config.tenantDesenvolvimento,
-  jwtSecret: config.jwtSecret
-});
+let banco = null;
+let servidor = null;
 
-await aguardarServidor(servidor, config.porta);
-console.log(`Backend da hamburgueria disponível em http://localhost:${config.porta}`);
+async function iniciar() {
+  banco = await abrirBanco({
+    mysql: config.mysql
+  });
 
-async function encerrar() {
-  await fecharServidor(servidor);
-  await fecharBanco(banco);
+  servidor = criarServidor({
+    banco,
+    pastaUploads: config.pastaUploads,
+    pastaDist: config.pastaDist,
+    producao: config.producao,
+    corsOrigins: config.corsOrigins,
+    publicSiteUrl: config.publicSiteUrl,
+    dominioPrincipal: config.dominioPrincipal,
+    tenantDesenvolvimento: config.tenantDesenvolvimento,
+    jwtSecret: config.jwtSecret
+  });
+
+  await aguardarServidor(
+    servidor,
+    config.porta
+  );
+
+  console.log(
+    `Backend da hamburgueria disponível na porta ${config.porta}`
+  );
 }
 
-process.once('SIGINT', () => encerrar().finally(() => process.exit(0)));
-process.once('SIGTERM', () => encerrar().finally(() => process.exit(0)));
+async function encerrar() {
+  try {
+    if (servidor) {
+      await fecharServidor(servidor);
+    }
+
+    if (banco) {
+      await fecharBanco(banco);
+    }
+  } catch (erro) {
+    console.error('Erro ao encerrar o servidor:', erro);
+  }
+}
+
+process.once('SIGINT', () => {
+  encerrar().finally(() => process.exit(0));
+});
+
+process.once('SIGTERM', () => {
+  encerrar().finally(() => process.exit(0));
+});
+
+iniciar().catch((erro) => {
+  console.error('Erro ao iniciar o backend:', erro);
+  process.exit(1);
+});
