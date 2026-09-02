@@ -257,6 +257,15 @@ test('publica somente configurações seguras do tenant resolvido pelo domínio'
       slug: 'loja-a',
       logo_url: '/uploads/loja-a/logo.webp',
       banner_url: 'https://cdn.exemplo.com/loja-a/banner.webp',
+      banner_titulo: 'O Verdadeiro Hambúrguer Artesanal',
+      banner_subtitulo: 'Carne grelhada na hora, sempre fresca.',
+      banner_botao_texto: 'Peça agora',
+      banner_botao_destino: 'cardapio',
+      titulo_cardapio: 'Nosso cardápio',
+      texto_apresentacao: 'Escolha o seu hambúrguer favorito.',
+      titulo_sobre: 'Hambúrguer de verdade, feito do nosso jeito.',
+      texto_sobre: 'Ingredientes selecionados e preparo na hora.',
+      mensagem_rodape: 'Feito com carinho para você.',
       cor_principal: '#a1b2c3',
       cor_secundaria: '#0A0A0A',
       cor_fundo: '#111111',
@@ -298,6 +307,15 @@ test('publica somente configurações seguras do tenant resolvido pelo domínio'
       slug: 'loja-b',
       logo_url: 'javascript:alert(1)',
       banner_url: '//dominio-inseguro.exemplo/banner.webp',
+      banner_titulo: null,
+      banner_subtitulo: null,
+      banner_botao_texto: 'Clique aqui',
+      banner_botao_destino: 'javascript:alert(1)',
+      titulo_cardapio: null,
+      texto_apresentacao: null,
+      titulo_sobre: null,
+      texto_sobre: null,
+      mensagem_rodape: null,
       cor_principal: 'amarelo',
       cor_secundaria: null,
       cor_fundo: null,
@@ -378,6 +396,10 @@ test('publica somente configurações seguras do tenant resolvido pelo domínio'
     assert.deepEqual(configuracaoA.areasEntrega, [{ bairro: 'Centro', taxa: 5 }]);
     assert.equal('segredoInterno' in configuracaoA, false);
     assert.equal('idEstabelecimento' in configuracaoA, false);
+    assert.equal(configuracaoA.bannerTitulo, 'O Verdadeiro Hambúrguer Artesanal');
+    assert.equal(configuracaoA.bannerBotaoTexto, 'Peça agora');
+    assert.equal(configuracaoA.bannerBotaoDestino, 'cardapio');
+    assert.equal(configuracaoA.tituloSobre, 'Hambúrguer de verdade, feito do nosso jeito.');
 
     assert.equal(respostaB.status, 200);
     assert.equal(configuracaoB.nomeLoja, 'Loja B');
@@ -388,6 +410,9 @@ test('publica somente configurações seguras do tenant resolvido pelo domínio'
     assert.equal(configuracaoB.fonte, 'Poppins');
     assert.deepEqual(configuracaoB.formasPagamento, ['Dinheiro']);
     assert.deepEqual(configuracaoB.areasEntrega, []);
+    assert.equal(configuracaoB.bannerBotaoTexto, 'Clique aqui');
+    assert.equal(configuracaoB.bannerBotaoDestino, '');
+    assert.equal(configuracaoB.bannerTitulo, '');
 
     assert.equal(respostaInativa.status, 403);
     assert.equal(consultasConfiguracaoInativa, 0);
@@ -418,6 +443,15 @@ test('salva toda a configuração somente no tenant autenticado e valida o tema'
     slug: 'loja-a',
     logo_url: '/uploads/logo-segura.webp',
     banner_url: '/uploads/banner-seguro.webp',
+    banner_titulo: 'O Verdadeiro Hambúrguer Artesanal',
+    banner_subtitulo: 'Carne grelhada na hora, sempre fresca.',
+    banner_botao_texto: 'Peça agora',
+    banner_botao_destino: 'cardapio',
+    titulo_cardapio: 'Nosso cardápio',
+    texto_apresentacao: 'Escolha o seu hambúrguer favorito.',
+    titulo_sobre: 'Hambúrguer de verdade, feito do nosso jeito.',
+    texto_sobre: 'Ingredientes selecionados e preparo na hora.',
+    mensagem_rodape: 'Feito com carinho para você.',
     cor_principal: '#E95420',
     cor_secundaria: '#120B0B',
     cor_fundo: '#1C1010',
@@ -463,6 +497,15 @@ test('salva toda a configuração somente no tenant autenticado e valida o tema'
     nomeLoja: linhaSalva.nome_loja,
     logo: linhaSalva.logo_url,
     banner: linhaSalva.banner_url,
+    bannerTitulo: linhaSalva.banner_titulo,
+    bannerSubtitulo: linhaSalva.banner_subtitulo,
+    bannerBotaoTexto: linhaSalva.banner_botao_texto,
+    bannerBotaoDestino: linhaSalva.banner_botao_destino,
+    tituloCardapio: linhaSalva.titulo_cardapio,
+    textoApresentacao: linhaSalva.texto_apresentacao,
+    tituloSobre: linhaSalva.titulo_sobre,
+    textoSobre: linhaSalva.texto_sobre,
+    mensagemRodape: linhaSalva.mensagem_rodape,
     corPrincipal: linhaSalva.cor_principal,
     corSecundaria: linhaSalva.cor_secundaria,
     corFundo: linhaSalva.cor_fundo,
@@ -499,6 +542,9 @@ test('salva toda a configuração somente no tenant autenticado e valida o tema'
   assert.equal(configuracao.nomeLoja, 'Loja A renovada');
   assert.equal(configuracao.atendimentoGarcomAtivo, true);
   assert.deepEqual(configuracao.formasPagamento, ['Cartão', 'Dinheiro']);
+  assert.equal(configuracao.bannerTitulo, 'O Verdadeiro Hambúrguer Artesanal');
+  assert.equal(configuracao.bannerBotaoDestino, 'cardapio');
+  assert.equal(configuracao.tituloSobre, 'Hambúrguer de verdade, feito do nosso jeito.');
 
   const gravacao = comandos.find(({ sql }) => sql.includes('INSERT INTO configuracoes_estabelecimento'));
   assert.ok(gravacao);
@@ -506,9 +552,18 @@ test('salva toda a configuração somente no tenant autenticado e valida o tema'
   assert.equal(gravacao.parametros[0], 11);
   assert.equal(gravacao.parametros.includes(22), false);
   assert.equal(gravacao.parametros[12], '/uploads/banner-seguro.webp');
-  assert.deepEqual(JSON.parse(gravacao.parametros[29]), ['Cartão', 'Dinheiro']);
-  assert.equal(gravacao.parametros[30], 'Cancelamento antes do preparo.');
-  assert.equal(gravacao.parametros[31], 'Informações legais da Loja A.');
+  assert.equal(gravacao.parametros[13], 'O Verdadeiro Hambúrguer Artesanal');
+  assert.equal(gravacao.parametros[14], 'Carne grelhada na hora, sempre fresca.');
+  assert.equal(gravacao.parametros[15], 'Peça agora');
+  assert.equal(gravacao.parametros[16], 'cardapio');
+  assert.equal(gravacao.parametros[17], 'Nosso cardápio');
+  assert.equal(gravacao.parametros[18], 'Escolha o seu hambúrguer favorito.');
+  assert.equal(gravacao.parametros[19], 'Hambúrguer de verdade, feito do nosso jeito.');
+  assert.equal(gravacao.parametros[20], 'Ingredientes selecionados e preparo na hora.');
+  assert.equal(gravacao.parametros[21], 'Feito com carinho para você.');
+  assert.deepEqual(JSON.parse(gravacao.parametros[38]), ['Cartão', 'Dinheiro']);
+  assert.equal(gravacao.parametros[39], 'Cancelamento antes do preparo.');
+  assert.equal(gravacao.parametros[40], 'Informações legais da Loja A.');
 
   const auditoria = comandos.find(({ sql }) => sql.includes('INSERT INTO auditoria_admin'));
   assert.deepEqual(auditoria.parametros.slice(0, 5), [11, 7, 'configuracao.atualizada', 'configuracao', '11']);
@@ -521,7 +576,24 @@ test('salva toda a configuração somente no tenant autenticado e valida o tema'
     salvarConfiguracao(banco, 11, { ...dados, fonte: 'Comic Sans' }, 7),
     /fonte permitida/
   );
-  assert.equal(conexoesAbertas, 1);
+  await assert.rejects(
+    salvarConfiguracao(banco, 11, { ...dados, bannerBotaoDestino: 'https://externo.exemplo/' }, 7),
+    /destino válido/
+  );
+  await assert.rejects(
+    salvarConfiguracao(banco, 11, { ...dados, bannerBotaoTexto: '' }, 7),
+    /texto e o destino do botão/
+  );
+  await assert.rejects(
+    salvarConfiguracao(banco, 11, { ...dados, bannerBotaoDestino: '' }, 7),
+    /texto e o destino do botão/
+  );
+  await salvarConfiguracao(banco, 11, { ...dados, bannerBotaoTexto: '', bannerBotaoDestino: '' }, 7);
+  const gravacoes = comandos.filter(({ sql }) => sql.includes('INSERT INTO configuracoes_estabelecimento'));
+  const ultimaGravacao = gravacoes[gravacoes.length - 1];
+  assert.equal(ultimaGravacao.parametros[15], null);
+  assert.equal(ultimaGravacao.parametros[16], null);
+  assert.equal(conexoesAbertas, 2);
 });
 
 test('assina JWT com perfil e tenant e rejeita adulteração ou expiração', () => {

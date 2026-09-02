@@ -22,10 +22,15 @@ test('normaliza o tema público e rejeita valores configuráveis inseguros', () 
     lojaAberta: true,
     entregaAtiva: 'true',
     areasEntrega: [null, { bairro: 'Centro', taxa: 5 }],
-    formasPagamento: ['Pix', { nome: 'inseguro' }]
+    formasPagamento: ['Pix', { nome: 'inseguro' }],
+    bannerTitulo: '  O Verdadeiro Hambúrguer  ',
+    bannerBotaoTexto: 'Peça agora',
+    bannerBotaoDestino: 'javascript:alert(1)'
   });
 
   assert.equal(configuracao.nomeLoja, 'Loja A');
+  assert.equal(configuracao.bannerTitulo, 'O Verdadeiro Hambúrguer');
+  assert.equal(configuracao.bannerBotaoDestino, '');
   assert.equal(configuracao.logo, '');
   assert.equal(configuracao.banner, '/uploads/estabelecimentos/11/banner.webp');
   assert.equal(configuracao.corPrincipal, '#A1B2C3');

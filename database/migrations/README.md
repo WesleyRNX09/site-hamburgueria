@@ -32,4 +32,8 @@ A pasta `legado/` preserva o histórico anterior e não é executada pelo runner
   idempotência.
 - `007_adicionar_superadministradores.sql`: cria credenciais, sessões revogáveis
   e auditoria globais do painel de superadministrador, sem criar senha padrão.
+- `008_adicionar_textos_publicos.sql`: adiciona os textos editáveis do banner,
+  do cardápio e da seção "sobre" (título, subtítulo, texto do botão e destino
+  do banner; título e apresentação do cardápio; título e texto da seção
+  sobre; mensagem de rodapé) a `configuracoes_estabelecimento`, todos opcionais.
 - `legado/20260824_operacao_comercial.sql`: histórico anterior, fora do runner.

@@ -7,6 +7,8 @@ import { useApp } from '../../context/appContext';
 import { usarPlaceholderProduto } from '../../utils/productImage';
 import styles from './index.module.css';
 
+const DESTINOS_BANNER_VALIDOS = new Set(['cardapio', 'promocoes', 'sobre']);
+
 function Home() {
   const [rolouPagina, setRolouPagina] = useState(false);
   const [categoriaAtiva, setCategoriaAtiva] = useState('Todos');
@@ -205,6 +207,18 @@ function Home() {
     : 'Nenhuma modalidade disponível no momento.';
   const podeFinalizar = pedidosOnlineDisponiveis && minimoAtingido;
   const nomeExibicao = configuracao.nomeLoja || 'Cardápio online';
+  const bannerTitulo = configuracao.bannerTitulo?.trim() || '';
+  const bannerSubtitulo = configuracao.bannerSubtitulo?.trim() || '';
+  const bannerBotaoTexto = configuracao.bannerBotaoTexto?.trim() || 'Ver Cardápio';
+  const bannerBotaoDestino = DESTINOS_BANNER_VALIDOS.has(configuracao.bannerBotaoDestino)
+    ? configuracao.bannerBotaoDestino
+    : 'cardapio';
+  const tituloCardapio = configuracao.tituloCardapio?.trim() || 'Nosso cardápio';
+  const textoApresentacao = configuracao.textoApresentacao?.trim() || 'Escolha o seu hambúrguer favorito.';
+  const tituloSobre = configuracao.tituloSobre?.trim() || '';
+  const textoSobre = configuracao.textoSobre?.trim()
+    || 'Trabalhamos com ingredientes selecionados, hambúrguer artesanal preparado na hora e muito sabor em cada pedido.';
+  const mensagemRodape = configuracao.mensagemRodape?.trim() || '';
   const digitosWhatsapp = String(configuracao.whatsapp ?? '').replace(/\D/g, '');
   const whatsappUrl = digitosWhatsapp.length >= 10
     ? `https://wa.me/${digitosWhatsapp.length <= 11 ? `55${digitosWhatsapp}` : digitosWhatsapp}`
@@ -639,21 +653,33 @@ function Home() {
           </span>
 
           <h1>
-            <span className={styles.tituloBranco}>
-              O Verdadeiro
-            </span>
+            {bannerTitulo ? (
+              <span className={styles.tituloAmarelo}>
+                {bannerTitulo}
+              </span>
+            ) : (
+              <>
+                <span className={styles.tituloBranco}>
+                  O Verdadeiro
+                </span>
 
-            <span className={styles.tituloAmarelo}>
-              Hambúrguer Artesanal
-            </span>
+                <span className={styles.tituloAmarelo}>
+                  Hambúrguer Artesanal
+                </span>
+              </>
+            )}
           </h1>
 
           <p className={styles.descricaoBanner}>
-            Carne grelhada na hora, cheddar cremoso,
-            <br className={styles.quebraDesktop} />
-            bacon crocante e ingredientes sempre frescos
-            <br className={styles.quebraDesktop} />
-            para uma experiência irresistível.
+            {bannerSubtitulo || (
+              <>
+                Carne grelhada na hora, cheddar cremoso,
+                <br className={styles.quebraDesktop} />
+                bacon crocante e ingredientes sempre frescos
+                <br className={styles.quebraDesktop} />
+                para uma experiência irresistível.
+              </>
+            )}
           </p>
 
           <div className={styles.botoesBanner}>
@@ -668,9 +694,9 @@ function Home() {
             <button
               type="button"
               className={styles.botaoSecundario}
-              onClick={() => irParaSecao('cardapio')}
+              onClick={() => irParaSecao(bannerBotaoDestino)}
             >
-              Ver Cardápio
+              {bannerBotaoTexto}
             </button>
 
           </div>
@@ -682,9 +708,9 @@ function Home() {
         className={styles.cardapio}
       >
 
-        <h2>Nosso cardápio</h2>
+        <h2>{tituloCardapio}</h2>
 
-        <p>Escolha o seu hambúrguer favorito.</p>
+        <p>{textoApresentacao}</p>
 
         {/* PROMOÇÕES */}
         <div
@@ -958,14 +984,16 @@ function Home() {
             </Link>
 
             <h2>
-              Hambúrguer de verdade,
-              <span> feito do nosso jeito.</span>
+              {tituloSobre || (
+                <>
+                  Hambúrguer de verdade,
+                  <span> feito do nosso jeito.</span>
+                </>
+              )}
             </h2>
 
             <p>
-              Trabalhamos com ingredientes selecionados,
-              hambúrguer artesanal preparado na hora e muito
-              sabor em cada pedido.
+              {textoSobre}
             </p>
 
             {(configuracao.instagramUrl || configuracao.facebookUrl || whatsappUrl) && <div className={styles.redesSociais}>
@@ -1125,6 +1153,7 @@ function Home() {
 
         <div className={styles.rodapeFinal}>
           <div className={styles.direitosRodape}>
+            {mensagemRodape && <p>{mensagemRodape}</p>}
             <p>© {new Date().getFullYear()} {nomeExibicao}. Todos os direitos reservados.</p>
             {configuracao.informacoesLegais && (
               <small className={styles.informacoesLegais}>{configuracao.informacoesLegais}</small>

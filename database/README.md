@@ -1,7 +1,10 @@
 # Banco de dados
 
 Esta pasta é a fonte versionada da estrutura MySQL. O roteiro operacional
-completo está em [`../docs/INSTALACAO.md`](../docs/INSTALACAO.md). A fundação multiempresa
+completo está em [`../docs/INSTALACAO.md`](../docs/INSTALACAO.md); a
+arquitetura de personalização por estabelecimento (campos configuráveis,
+fallbacks, uploads e como adicionar um novo campo) está em
+[`../docs/PERSONALIZACAO.md`](../docs/PERSONALIZACAO.md). A fundação multiempresa
 possui `estabelecimentos`, `configuracoes_estabelecimento` e escopo
 `id_estabelecimento` nas tabelas de negócio. As migrations preservam os dados
 atuais associando-os a um estabelecimento padrão. O slug
@@ -103,7 +106,10 @@ ordem registrada pelo runner:
    unicidades compostas com o estabelecimento;
 7. `007_adicionar_superadministradores.sql` cria as contas globais, sessões
    revogáveis e auditoria do painel de superadministrador;
-8. `verificacoes/002_verificar_migracao_estabelecimento.sql` deve retornar zero
+8. `008_adicionar_textos_publicos.sql` adiciona os textos editáveis do banner,
+   do cardápio e da seção "sobre" a `configuracoes_estabelecimento`, todos
+   opcionais (ver [`../docs/PERSONALIZACAO.md`](../docs/PERSONALIZACAO.md));
+9. `verificacoes/002_verificar_migracao_estabelecimento.sql` deve retornar zero
    para todos os registros sem escopo e relacionamentos divergentes.
 
 Em produção, aplique essas migrations somente com backup validado e junto do

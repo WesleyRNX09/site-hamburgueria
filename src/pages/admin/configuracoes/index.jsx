@@ -7,7 +7,8 @@ import {
   RotateCcw,
   Save,
   Store,
-  Trash2
+  Trash2,
+  Type
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -189,6 +190,33 @@ function ConfiguracoesAdmin() {
                 </div>
               </div>
             </div>
+          </section>
+
+          <section className={styles.card}>
+            <div className={styles.topoCard}>
+              <div><h2>Banner e textos da loja</h2><p>Textos exibidos no banner, no cardápio e na seção sobre do site público.</p></div>
+              <Type className={configStyles.iconeDestaque} size={25} />
+            </div>
+            <div className={styles.gridFormulario}>
+              <div className={`${styles.campo} ${styles.campoCompleto}`}><label htmlFor="bannerTitulo">Título do banner <span>(opcional)</span></label><input id="bannerTitulo" maxLength="160" value={dados.bannerTitulo ?? ''} onChange={(event) => alterar('bannerTitulo', event.target.value)} placeholder="Ex.: O Verdadeiro Hambúrguer Artesanal" /></div>
+              <div className={`${styles.campo} ${styles.campoCompleto}`}><label htmlFor="bannerSubtitulo">Subtítulo do banner <span>(opcional)</span></label><input id="bannerSubtitulo" maxLength="280" value={dados.bannerSubtitulo ?? ''} onChange={(event) => alterar('bannerSubtitulo', event.target.value)} placeholder="Ex.: Carne grelhada na hora, sempre fresca." /></div>
+              <div className={styles.campo}><label htmlFor="bannerBotaoTexto">Texto do botão do banner <span>(opcional)</span></label><input id="bannerBotaoTexto" maxLength="60" value={dados.bannerBotaoTexto ?? ''} onChange={(event) => alterar('bannerBotaoTexto', event.target.value)} placeholder="Ex.: Peça agora" /></div>
+              <div className={styles.campo}>
+                <label htmlFor="bannerBotaoDestino">Destino do botão</label>
+                <select id="bannerBotaoDestino" value={dados.bannerBotaoDestino ?? ''} onChange={(event) => alterar('bannerBotaoDestino', event.target.value)}>
+                  <option value="">Selecione um destino</option>
+                  <option value="cardapio">Cardápio</option>
+                  <option value="promocoes">Promoções</option>
+                  <option value="sobre">Sobre</option>
+                </select>
+              </div>
+              <div className={styles.campo}><label htmlFor="tituloCardapio">Título do cardápio <span>(opcional)</span></label><input id="tituloCardapio" maxLength="160" value={dados.tituloCardapio ?? ''} onChange={(event) => alterar('tituloCardapio', event.target.value)} placeholder="Ex.: Nosso cardápio" /></div>
+              <div className={styles.campo}><label htmlFor="textoApresentacao">Apresentação do cardápio <span>(opcional)</span></label><input id="textoApresentacao" maxLength="280" value={dados.textoApresentacao ?? ''} onChange={(event) => alterar('textoApresentacao', event.target.value)} placeholder="Ex.: Escolha o seu hambúrguer favorito." /></div>
+              <div className={styles.campo}><label htmlFor="tituloSobre">Título da seção sobre <span>(opcional)</span></label><input id="tituloSobre" maxLength="160" value={dados.tituloSobre ?? ''} onChange={(event) => alterar('tituloSobre', event.target.value)} placeholder="Ex.: Hambúrguer de verdade, feito do nosso jeito." /></div>
+              <div className={`${styles.campo} ${styles.campoCompleto}`}><label htmlFor="textoSobre">Texto da seção sobre <span>(opcional)</span></label><textarea id="textoSobre" maxLength="600" value={dados.textoSobre ?? ''} onChange={(event) => alterar('textoSobre', event.target.value)} placeholder="Conte um pouco sobre a história e os ingredientes da sua loja." /></div>
+              <div className={`${styles.campo} ${styles.campoCompleto}`}><label htmlFor="mensagemRodape">Mensagem do rodapé <span>(opcional)</span></label><input id="mensagemRodape" maxLength="280" value={dados.mensagemRodape ?? ''} onChange={(event) => alterar('mensagemRodape', event.target.value)} placeholder="Ex.: Feito com carinho para você." /></div>
+            </div>
+            <div className={styles.aviso}>Preencha o texto e o destino do botão do banner juntos, ou deixe os dois vazios.</div>
           </section>
 
           <section className={styles.card}>

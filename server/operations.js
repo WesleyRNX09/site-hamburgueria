@@ -35,6 +35,7 @@ const FONTES_PERMITIDAS = new Map([
   ['trebuchet ms', 'Trebuchet MS'],
   ['georgia', 'Georgia']
 ]);
+const BANNER_DESTINOS_PERMITIDOS = new Set(['cardapio', 'promocoes', 'sobre']);
 const PAGAMENTOS_PUBLICOS = new Map([
   ['pix', 'Pix'],
   ['cartão', 'Cartão'],
@@ -292,6 +293,15 @@ function mapearConfiguracao(linha) {
     pixCidade: linha.pix_cidade ?? '',
     logo: normalizarUrlPublica(linha.logo_url),
     banner: normalizarUrlPublica(linha.banner_url),
+    bannerTitulo: texto(linha.banner_titulo ?? '', 160),
+    bannerSubtitulo: texto(linha.banner_subtitulo ?? '', 280),
+    bannerBotaoTexto: texto(linha.banner_botao_texto ?? '', 60),
+    bannerBotaoDestino: BANNER_DESTINOS_PERMITIDOS.has(linha.banner_botao_destino) ? linha.banner_botao_destino : '',
+    tituloCardapio: texto(linha.titulo_cardapio ?? '', 160),
+    textoApresentacao: texto(linha.texto_apresentacao ?? '', 280),
+    tituloSobre: texto(linha.titulo_sobre ?? '', 160),
+    textoSobre: texto(linha.texto_sobre ?? '', 600),
+    mensagemRodape: texto(linha.mensagem_rodape ?? '', 280),
     corPrincipal: normalizarCor(linha.cor_principal, CORES_PADRAO.corPrincipal),
     corSecundaria: normalizarCor(linha.cor_secundaria, CORES_PADRAO.corSecundaria),
     corFundo: normalizarCor(linha.cor_fundo, CORES_PADRAO.corFundo),
@@ -321,6 +331,15 @@ export async function buscarConfiguracao(banco, idEstabelecimento) {
       e.slug,
       ce.logo_url,
       ce.banner_url,
+      ce.banner_titulo,
+      ce.banner_subtitulo,
+      ce.banner_botao_texto,
+      ce.banner_botao_destino,
+      ce.titulo_cardapio,
+      ce.texto_apresentacao,
+      ce.titulo_sobre,
+      ce.texto_sobre,
+      ce.mensagem_rodape,
       ce.cor_principal,
       ce.cor_secundaria,
       ce.cor_fundo,
@@ -366,6 +385,15 @@ export function selecionarConfiguracaoPublica(configuracao) {
     slug: configuracao.slug,
     logo: configuracao.logo,
     banner: configuracao.banner,
+    bannerTitulo: configuracao.bannerTitulo,
+    bannerSubtitulo: configuracao.bannerSubtitulo,
+    bannerBotaoTexto: configuracao.bannerBotaoTexto,
+    bannerBotaoDestino: configuracao.bannerBotaoDestino,
+    tituloCardapio: configuracao.tituloCardapio,
+    textoApresentacao: configuracao.textoApresentacao,
+    tituloSobre: configuracao.tituloSobre,
+    textoSobre: configuracao.textoSobre,
+    mensagemRodape: configuracao.mensagemRodape,
     corPrincipal: configuracao.corPrincipal,
     corSecundaria: configuracao.corSecundaria,
     corFundo: configuracao.corFundo,
@@ -413,6 +441,24 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
   const pixCidade = texto(dados.pixCidade, 60);
   const logo = texto(dados.logo, 500);
   const banner = texto(dados.banner, 500);
+  const bannerTitulo = texto(dados.bannerTitulo, 160);
+  const bannerSubtitulo = texto(dados.bannerSubtitulo, 280);
+  const bannerBotaoTexto = texto(dados.bannerBotaoTexto, 60);
+  const bannerBotaoDestinoInformado = texto(dados.bannerBotaoDestino, 20).toLowerCase();
+  if (bannerBotaoDestinoInformado && !BANNER_DESTINOS_PERMITIDOS.has(bannerBotaoDestinoInformado)) {
+    throw erroDominio('Selecione um destino válido para o botão do banner.');
+  }
+  const bannerBotaoDestino = BANNER_DESTINOS_PERMITIDOS.has(bannerBotaoDestinoInformado)
+    ? bannerBotaoDestinoInformado
+    : '';
+  if (Boolean(bannerBotaoTexto) !== Boolean(bannerBotaoDestino)) {
+    throw erroDominio('Informe o texto e o destino do botão do banner juntos, ou deixe ambos vazios.');
+  }
+  const tituloCardapio = texto(dados.tituloCardapio, 160);
+  const textoApresentacao = texto(dados.textoApresentacao, 280);
+  const tituloSobre = texto(dados.tituloSobre, 160);
+  const textoSobre = texto(dados.textoSobre, 600);
+  const mensagemRodape = texto(dados.mensagemRodape, 280);
   const corPrincipal = validarCorConfiguracao(dados.corPrincipal, CORES_PADRAO.corPrincipal);
   const corSecundaria = validarCorConfiguracao(dados.corSecundaria, CORES_PADRAO.corSecundaria);
   const corFundo = validarCorConfiguracao(dados.corFundo, CORES_PADRAO.corFundo);
@@ -478,11 +524,13 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
     INSERT INTO configuracoes_estabelecimento
       (id_estabelecimento, telefone, email, endereco, taxa_entrega_centavos,
        tempo_entrega, pedido_minimo_centavos, loja_aberta, pix_chave, pix_beneficiario, pix_cidade,
-       logo_url, banner_url, cor_principal, cor_secundaria, cor_fundo, cor_card, cor_texto, fonte,
+       logo_url, banner_url, banner_titulo, banner_subtitulo, banner_botao_texto, banner_botao_destino,
+       titulo_cardapio, texto_apresentacao, titulo_sobre, texto_sobre, mensagem_rodape,
+       cor_principal, cor_secundaria, cor_fundo, cor_card, cor_texto, fonte,
        whatsapp, horario_funcionamento, instagram_url, facebook_url, entrega_ativa, retirada_ativa,
        atendimento_garcom_ativo, aceita_cartao, aceita_dinheiro, areas_entrega_json,
        formas_pagamento_json, politica_cancelamento, informacoes_legais)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       telefone = VALUES(telefone), email = VALUES(email), endereco = VALUES(endereco),
       taxa_entrega_centavos = VALUES(taxa_entrega_centavos),
@@ -490,6 +538,11 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
       loja_aberta = VALUES(loja_aberta), pix_chave = VALUES(pix_chave),
       pix_beneficiario = VALUES(pix_beneficiario), pix_cidade = VALUES(pix_cidade),
       logo_url = VALUES(logo_url), banner_url = VALUES(banner_url),
+      banner_titulo = VALUES(banner_titulo), banner_subtitulo = VALUES(banner_subtitulo),
+      banner_botao_texto = VALUES(banner_botao_texto), banner_botao_destino = VALUES(banner_botao_destino),
+      titulo_cardapio = VALUES(titulo_cardapio), texto_apresentacao = VALUES(texto_apresentacao),
+      titulo_sobre = VALUES(titulo_sobre), texto_sobre = VALUES(texto_sobre),
+      mensagem_rodape = VALUES(mensagem_rodape),
       cor_principal = VALUES(cor_principal), cor_secundaria = VALUES(cor_secundaria),
       cor_fundo = VALUES(cor_fundo), cor_card = VALUES(cor_card), cor_texto = VALUES(cor_texto),
       fonte = VALUES(fonte),
@@ -516,6 +569,15 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
     pixChave ? (pixCidade || null) : null,
     logo || null,
     banner || null,
+    bannerTitulo || null,
+    bannerSubtitulo || null,
+    bannerBotaoTexto || null,
+    bannerBotaoDestino || null,
+    tituloCardapio || null,
+    textoApresentacao || null,
+    tituloSobre || null,
+    textoSobre || null,
+    mensagemRodape || null,
     corPrincipal,
     corSecundaria,
     corFundo,
@@ -543,7 +605,7 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
       'configuracao.atualizada',
       'configuracao',
       idEstabelecimento,
-      { identidadeVisual: true, operacao: true, informacoesPublicas: true }
+      { identidadeVisual: true, operacao: true, informacoesPublicas: true, textosPublicos: true }
     );
   });
   return buscarConfiguracao(banco, idEstabelecimento);

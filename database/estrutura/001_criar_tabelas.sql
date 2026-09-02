@@ -39,6 +39,15 @@ CREATE TABLE IF NOT EXISTS configuracoes_estabelecimento (
   id_estabelecimento BIGINT UNSIGNED PRIMARY KEY,
   logo_url VARCHAR(500),
   banner_url VARCHAR(500),
+  banner_titulo VARCHAR(160),
+  banner_subtitulo VARCHAR(280),
+  banner_botao_texto VARCHAR(60),
+  banner_botao_destino VARCHAR(20),
+  titulo_cardapio VARCHAR(160),
+  texto_apresentacao VARCHAR(280),
+  titulo_sobre VARCHAR(160),
+  texto_sobre VARCHAR(600),
+  mensagem_rodape VARCHAR(280),
   cor_principal CHAR(7) NOT NULL DEFAULT '#FFC107',
   cor_secundaria CHAR(7) NOT NULL DEFAULT '#0A0A0A',
   cor_fundo CHAR(7) NOT NULL DEFAULT '#111111',
@@ -79,7 +88,10 @@ CREATE TABLE IF NOT EXISTS configuracoes_estabelecimento (
   CONSTRAINT chk_config_cor_card
     CHECK (cor_card REGEXP '^#[0-9A-Fa-f]{6}$'),
   CONSTRAINT chk_config_cor_texto
-    CHECK (cor_texto REGEXP '^#[0-9A-Fa-f]{6}$')
+    CHECK (cor_texto REGEXP '^#[0-9A-Fa-f]{6}$'),
+  CONSTRAINT chk_config_banner_botao_destino
+    CHECK (banner_botao_destino IS NULL
+      OR banner_botao_destino IN ('cardapio', 'promocoes', 'sobre'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS superadministradores (

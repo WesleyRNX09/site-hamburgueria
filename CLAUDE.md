@@ -89,28 +89,39 @@ Esta seção deve ser mantida atualizada com os comandos reais do projeto. Sempr
 2. Nunca assuma que um script existe só porque é comum em outros projetos Node/React.
 3. Prefira `npm run <script>` a reproduzir manualmente o que o script faz por dentro.
 
+Este projeto não usa pastas `/frontend` e `/backend` separadas: é um único
+`package.json` na raiz, com o frontend em `src/` e o backend em `server/`.
+
 ## Instalação
 
-- Backend: *(preencher — ex.: `cd backend && npm install`)*
-- Frontend: *(preencher — ex.: `cd frontend && npm install`)*
+- Única, na raiz: `npm install`.
 
 ## Ambiente de desenvolvimento
 
-- Subir backend: *(preencher)*
-- Subir frontend: *(preencher)*
-- Variáveis de ambiente obrigatórias: ver `.env.example`.
+- Subir frontend e backend juntos: `npm run dev` (frontend em
+  `http://localhost:5173`, API em `http://localhost:3001`).
+- Somente frontend: `npm run dev:web`.
+- Somente backend: `npm run dev:api`.
+- Variáveis de ambiente obrigatórias: ver `env.example` (o projeto não usa o
+  nome `.env.example`) e o guia de instalação em `docs/INSTALACAO.md`.
 
 ## Qualidade
 
-- Lint: *(preencher)*
-- Testes backend: *(preencher)*
-- Testes frontend: *(preencher)*
-- Build de produção do frontend: *(preencher)*
+- Lint: `npm run lint`.
+- Testes (backend + utilitários de frontend, sem integração MySQL):
+  `npm test`.
+- Testes de isolamento multiempresa: `npm run test:security`.
+- Integração MySQL real (opt-in, banco descartável): `RUN_MYSQL_TESTS=1 npm test`
+  — nunca aponte para um banco remoto/persistente ao usar essa variável.
+- Build de produção do frontend: `npm run build`.
 
 ## Banco de dados
 
 - Instalação limpa: `database/CRIAR_db.sql`.
-- Migrations: *(preencher comando/ferramenta usada, se houver)*
+- Migrations incrementais: `npm run db:migrate` (nunca em banco remoto sem
+  autorização explícita e backup validado).
+- Preparo de um schema novo e vazio: `npm run db:prepare`.
+- Checar conexão sem alterar estrutura: `npm run db:check`.
 
 ---
 

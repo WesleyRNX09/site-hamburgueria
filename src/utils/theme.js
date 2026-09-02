@@ -39,6 +39,13 @@ function normalizarFonte(valor) {
   return FONTES.get(texto(valor, 80).toLowerCase()) ?? FONTES.get('poppins');
 }
 
+const BANNER_DESTINOS_PERMITIDOS = new Set(['cardapio', 'promocoes', 'sobre']);
+
+function normalizarDestinoBanner(valor) {
+  const destino = texto(valor, 20).toLowerCase();
+  return BANNER_DESTINOS_PERMITIDOS.has(destino) ? destino : '';
+}
+
 function corDeContraste(corHexadecimal) {
   const vermelho = Number.parseInt(corHexadecimal.slice(1, 3), 16);
   const verde = Number.parseInt(corHexadecimal.slice(3, 5), 16);
@@ -56,6 +63,15 @@ export function normalizarConfiguracaoPublica(recebida = {}) {
     slug: /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(texto(recebida.slug, 100)) ? texto(recebida.slug, 100) : '',
     logo: urlPublica(recebida.logo),
     banner: urlPublica(recebida.banner),
+    bannerTitulo: texto(recebida.bannerTitulo, 160),
+    bannerSubtitulo: texto(recebida.bannerSubtitulo, 280),
+    bannerBotaoTexto: texto(recebida.bannerBotaoTexto, 60),
+    bannerBotaoDestino: normalizarDestinoBanner(recebida.bannerBotaoDestino),
+    tituloCardapio: texto(recebida.tituloCardapio, 160),
+    textoApresentacao: texto(recebida.textoApresentacao, 280),
+    tituloSobre: texto(recebida.tituloSobre, 160),
+    textoSobre: texto(recebida.textoSobre, 600),
+    mensagemRodape: texto(recebida.mensagemRodape, 280),
     corPrincipal,
     corSecundaria: cor(recebida.corSecundaria, configuracaoInicial.corSecundaria),
     corFundo: cor(recebida.corFundo, configuracaoInicial.corFundo),

@@ -37,9 +37,13 @@ JavaScript configurável vindo do banco.
 
 O administrador autenticado edita esses dados em `/admin/configuracoes`, com
 prévia do tema, upload de logo e banner, contatos, operação, pagamentos, áreas
-de entrega e textos legais. A API ignora identificadores de estabelecimento do
-formulário, usa exclusivamente o tenant confirmado pelo host e pela sessão e
-registra a atualização na auditoria administrativa.
+de entrega, textos legais e os textos públicos do banner, do cardápio e da
+seção "sobre" (título, subtítulo, texto e destino do botão do banner; título e
+apresentação do cardápio; título e texto da seção sobre; mensagem de rodapé).
+A API ignora identificadores de estabelecimento do formulário, usa
+exclusivamente o tenant confirmado pelo host e pela sessão e registra a
+atualização na auditoria administrativa. Arquitetura completa da
+personalização em [`docs/PERSONALIZACAO.md`](docs/PERSONALIZACAO.md).
 
 ## Requisitos
 
