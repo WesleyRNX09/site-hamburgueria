@@ -120,8 +120,8 @@ function AcessosAdmin() {
 
       <section className={`${styles.card} ${styles.secaoSeparada}`}>
         <div className={styles.topoCard}><div><h2>Histórico administrativo</h2><p>Confirmações, estornos, cancelamentos e mudanças de acesso.</p></div></div>
-        <div className={styles.tabelaContainer}>
-          <table className={styles.tabela} aria-label="Histórico administrativo"><thead><tr><th>Data</th><th>Administrador</th><th>Ação</th><th>Registro</th></tr></thead><tbody>{auditoria.map((registro) => <tr key={registro.id}><td>{dataHora(registro.criadoEm)}</td><td><strong>{registro.administrador}</strong></td><td>{registro.acao.replaceAll('.', ' ')}</td><td>{registro.entidade} {registro.entidadeId}</td></tr>)}</tbody></table>
+        <div className={`${styles.tabelaContainer} ${styles.tabelaCartoes}`}>
+          <table className={styles.tabela} aria-label="Histórico administrativo"><thead><tr><th>Data</th><th>Administrador</th><th>Ação</th><th>Registro</th></tr></thead><tbody>{auditoria.map((registro) => <tr key={registro.id}><td data-rotulo="Data">{dataHora(registro.criadoEm)}</td><td data-rotulo="Administrador"><strong>{registro.administrador}</strong></td><td data-rotulo="Ação">{registro.acao.replaceAll('.', ' ')}</td><td data-rotulo="Registro">{registro.entidade} {registro.entidadeId}</td></tr>)}</tbody></table>
           {auditoria.length === 0 && <div className={styles.vazio}><p>As próximas ações relevantes aparecerão aqui.</p></div>}
         </div>
       </section>

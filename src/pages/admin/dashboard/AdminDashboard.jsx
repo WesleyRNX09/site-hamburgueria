@@ -75,17 +75,17 @@ function AdminDashboard() {
             <div><h2>Pedidos recentes</h2><p>Últimas entradas no sistema</p></div>
             <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/pedidos')}>Ver todos</button>
           </div>
-          <div className={styles.tabelaContainer}>
+          <div className={`${styles.tabelaContainer} ${styles.tabelaCartoes}`}>
             <table className={styles.tabela} aria-label="Pedidos recentes">
               <thead><tr><th>Pedido</th><th>Origem</th><th>Status</th><th>Total</th><th>Ação</th></tr></thead>
               <tbody>
                 {pedidos.slice(0, 5).map((pedido) => (
                   <tr key={pedido.id} className={pedidosNovos.includes(pedido.id) ? styles.pedidoNovo : ''}>
-                    <td><strong>{pedido.id}</strong><span className={styles.textoSecundario}>{pedido.cliente}</span></td>
-                    <td>{pedido.origem}</td>
-                    <td><span className={`${styles.status} ${classeStatus(pedido.status)}`}>{pedido.status}</span></td>
-                    <td><strong>{moeda(pedido.total)}</strong></td>
-                    <td><button type="button" className={styles.botaoIcone} aria-label={`Ver ${pedido.id}`} onClick={() => navigate(`/admin/pedidos/${pedido.id.replace('#', '')}`)}><Eye size={16} /></button></td>
+                    <td data-rotulo="Pedido"><strong>{pedido.id}</strong><span className={styles.textoSecundario}>{pedido.cliente}</span></td>
+                    <td data-rotulo="Origem">{pedido.origem}</td>
+                    <td data-rotulo="Status"><span className={`${styles.status} ${classeStatus(pedido.status)}`}>{pedido.status}</span></td>
+                    <td data-rotulo="Total"><strong>{moeda(pedido.total)}</strong></td>
+                    <td data-rotulo="Ação"><button type="button" className={styles.botaoIcone} aria-label={`Ver ${pedido.id}`} onClick={() => navigate(`/admin/pedidos/${pedido.id.replace('#', '')}`)}><Eye size={16} /></button></td>
                   </tr>
                 ))}
               </tbody>

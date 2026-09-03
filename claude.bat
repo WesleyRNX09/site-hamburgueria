@@ -1,0 +1,1 @@
+C:\Users\wesley.pereira98\.local\bin\claude.exe" %
