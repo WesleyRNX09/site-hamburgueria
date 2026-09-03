@@ -67,6 +67,12 @@ ordem os arquivos de `estrutura/` e depois `seeds/001_dados_iniciais.sql`:
 3. `estrutura/002_criar_relacionamentos.sql`;
 4. `seeds/001_dados_iniciais.sql`.
 
+## Ambiente local de desenvolvimento
+
+[`local/`](local/README.md) prepara o MySQL local (schema vazio + conta da
+aplicação) para que o desenvolvimento não use o banco remoto de produção. Essa
+pasta é ambiente, não estrutura: nenhuma tabela é criada por ela.
+
 ## Preparação local explícita
 
 `npm run db:prepare` é uma conveniência para um banco novo e vazio. Em

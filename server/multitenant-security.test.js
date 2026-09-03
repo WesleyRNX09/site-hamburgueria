@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 import { criarServidor } from './app.js';
+import { checksumMigration } from './db/migration-utils.js';
 import { buscarAdicional, buscarProduto, criarProduto } from './catalog.js';
 import {
   acompanharPedido,
@@ -402,6 +403,22 @@ test('código do servidor e SQLs mantêm as restrições permanentes de seguran�
     assert.equal(/\bTRUNCATE\b/i.test(conteudo), false, `TRUNCATE encontrado em ${migration}`);
     assert.equal(/\bDELETE\s+FROM\b/i.test(conteudo), false, `DELETE FROM encontrado em ${migration}`);
     assert.equal(/SELECT\s+\*/i.test(conteudo), false, `SELECT * encontrado em ${migration}`);
+  }
+
+  // Uma instalação nova por CRIAR_db.sql já contém a estrutura final, então
+  // ele precisa registrar o checksum de TODA migration. Sem isso o runner
+  // reaplica ALTERs sobre colunas que já existem e a migração quebra.
+  const checksumsRegistrados = new Map(
+    [...sqlCriacao.matchAll(/\('(\d{3}_[a-z0-9_-]+\.sql)',\s*'([0-9a-f]{64})'\)/g)]
+      .map((ocorrencia) => [ocorrencia[1], ocorrencia[2]])
+  );
+  for (const migration of migracoes) {
+    const conteudo = await readFile(resolve(pastaMigracoes, migration), 'utf8');
+    assert.equal(
+      checksumsRegistrados.get(migration),
+      checksumMigration(conteudo),
+      `database/CRIAR_db.sql precisa registrar ${migration} com o checksum atual em schema_migrations.`
+    );
   }
 
   const testesApi = await readFile(resolve(pastaProjeto, 'server/api.test.js'), 'utf8');

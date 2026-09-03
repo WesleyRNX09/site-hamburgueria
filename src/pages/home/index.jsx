@@ -20,15 +20,11 @@ function Home() {
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
   const [modalProdutoAberto, setModalProdutoAberto] = useState(false);
   const [produtoSelecionado, setProdutoSelecionado] = useState(null);
-  const [menuAberto, setMenuAberto] = useState(false);
-  const [menuCompacto, setMenuCompacto] = useState(() => window.matchMedia('(max-width: 1000px)').matches);
   const modalProdutoRef = useRef(null);
   const fecharModalRef = useRef(null);
   const carrinhoRef = useRef(null);
   const fecharCarrinhoRef = useRef(null);
-  const menuRef = useRef(null);
-  const fecharMenuRef = useRef(null);
-  const botaoMenuRef = useRef(null);
+  const trilhoPromocoesRef = useRef(null);
 
   const [observacao, setObservacao] = useState('');
   const [quantidadeModal, setQuantidadeModal] = useState(1);
@@ -56,42 +52,73 @@ function Home() {
   const produtos = produtosSalvos.filter((produto) => produto.ativo !== false);
   const promocoes = promocoesSalvas.filter((promocao) => promocao.disponivel !== false);
 
-  const quantidadePromocoesVisiveis = 2;
+  function cartoesDoTrilho() {
+    const trilho = trilhoPromocoesRef.current;
+    if (!trilho) return [];
+    return [...trilho.children].filter((filho) => filho.tagName === 'ARTICLE');
+  }
 
-    const maxIndicePromocao =
-      Math.max(
-        0,
-        promocoes.length - quantidadePromocoesVisiveis
-      );
+  /* O indicador acompanha a rolagem: cartao cuja posicao esta mais
+     proxima do inicio da area visivel. */
+  function aoRolarPromocoes() {
+    const cartoes = cartoesDoTrilho();
+    if (cartoes.length === 0) return;
 
+    const inicio = cartoes[0].offsetLeft;
+    const rolagem = trilhoPromocoesRef.current.scrollLeft;
 
-    function proximaPromocao() {
-      setIndicePromocao((indiceAtual) => {
-        if (indiceAtual >= maxIndicePromocao) {
-          return 0;
-        }
+    let maisProximo = 0;
+    let menorDistancia = Infinity;
 
-        return indiceAtual + 1;
-      });
-    }
+    cartoes.forEach((cartao, indice) => {
+      const distancia = Math.abs(cartao.offsetLeft - inicio - rolagem);
+      if (distancia < menorDistancia) {
+        menorDistancia = distancia;
+        maisProximo = indice;
+      }
+    });
 
+    setIndicePromocao(maisProximo);
+  }
 
-    function promocaoAnterior() {
-      setIndicePromocao((indiceAtual) => {
-        if (indiceAtual <= 0) {
-          return maxIndicePromocao;
-        }
+  function irParaPromocao(indice) {
+    const cartoes = cartoesDoTrilho();
+    const alvo = cartoes[indice];
+    if (!alvo) return;
 
-        return indiceAtual - 1;
-      });
-    }
+    trilhoPromocoesRef.current.scrollTo({
+      left: alvo.offsetLeft - cartoes[0].offsetLeft,
+      behavior: 'smooth'
+    });
+  }
 
+  /* As setas andam um cartao por vez e continuam dando a volta no fim,
+     como antes — agora movendo a rolagem em vez de trocar a janela. */
+  function rolarPromocoes(direcao) {
+    const trilho = trilhoPromocoesRef.current;
+    const cartoes = cartoesDoTrilho();
+    if (!trilho || cartoes.length < 2) return;
 
-    const promocoesVisiveis =
-      promocoes.slice(
-        indicePromocao,
-        indicePromocao + quantidadePromocoesVisiveis
-      );
+    const passo = cartoes[1].offsetLeft - cartoes[0].offsetLeft;
+    const limite = trilho.scrollWidth - trilho.clientWidth;
+    let destino = trilho.scrollLeft + direcao * passo;
+
+    if (destino > limite + 1) destino = 0;
+    else if (destino < -1) destino = limite;
+
+    trilho.scrollTo({
+      left: Math.max(0, Math.min(destino, limite)),
+      behavior: 'smooth'
+    });
+  }
+
+  function proximaPromocao() {
+    rolarPromocoes(1);
+  }
+
+  function promocaoAnterior() {
+    rolarPromocoes(-1);
+  }
 
   const adicionais = adicionaisSalvos;
 
@@ -109,22 +136,12 @@ function Home() {
         );
 
   async function abrirCarrinho() {
-    setMenuAberto(false);
     setCarrinhoAberto(true);
     await revalidarCarrinho().catch(() => {});
   }
 
   function fecharCarrinho() {
     setCarrinhoAberto(false);
-  }
-
-  function abrirMenu() {
-    setCarrinhoAberto(false);
-    setMenuAberto(true);
-  }
-
-  function fecharMenu() {
-    setMenuAberto(false);
   }
 
   function abrirModalProduto(produto) {
@@ -220,6 +237,20 @@ function Home() {
   const resumoAtendimento = formasAtendimento.length
     ? `Atendimento: ${formasAtendimento.join(', ')}`
     : 'Nenhuma modalidade disponível no momento.';
+  const statusCompleto = pedidosOnlineDisponiveis
+    ? 'Aberta para pedidos'
+    : configuracao.lojaAberta
+      ? 'Pedidos online indisponíveis'
+      : 'Fechada no momento';
+  const statusCurto = pedidosOnlineDisponiveis
+    ? 'Aberto'
+    : configuracao.lojaAberta
+      ? 'Só consulta'
+      : 'Fechado';
+  const horarioResumido = String(configuracao.horarioFuncionamento ?? '')
+    .split('\n')
+    .map((linha) => linha.trim())
+    .find(Boolean) || '';
   const podeFinalizar = pedidosOnlineDisponiveis && minimoAtingido;
   const nomeExibicao = configuracao.nomeLoja || 'Cardápio online';
   const bannerTitulo = configuracao.bannerTitulo?.trim() || '';
@@ -257,7 +288,6 @@ function Home() {
   }, [configuracao.banner]);
   
   function irParaSecao(id) {
-  setMenuAberto(false);
   const secao = document.getElementById(id);
 
   if (secao) {
@@ -283,20 +313,13 @@ function Home() {
   }, []);
 
   useEffect(() => {
-    const media = window.matchMedia('(max-width: 1000px)');
-    const atualizarMenuCompacto = (evento) => setMenuCompacto(evento.matches);
-    media.addEventListener('change', atualizarMenuCompacto);
-    return () => media.removeEventListener('change', atualizarMenuCompacto);
-  }, []);
-
-  useEffect(() => {
-    if (!modalProdutoAberto && !carrinhoAberto && !menuAberto) return undefined;
+    if (!modalProdutoAberto && !carrinhoAberto) return undefined;
 
     const focoAnterior = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
-    const container = modalProdutoAberto ? modalProdutoRef.current : menuAberto ? menuRef.current : carrinhoRef.current;
-    const alvoInicial = modalProdutoAberto ? fecharModalRef.current : menuAberto ? fecharMenuRef.current : fecharCarrinhoRef.current;
+    const container = modalProdutoAberto ? modalProdutoRef.current : carrinhoRef.current;
+    const alvoInicial = modalProdutoAberto ? fecharModalRef.current : fecharCarrinhoRef.current;
     const overflowAnterior = document.body.style.overflow;
     const animacao = window.requestAnimationFrame(() => alvoInicial?.focus());
 
@@ -309,8 +332,6 @@ function Home() {
         setObservacao('');
         setQuantidadeModal(1);
         setAdicionaisSelecionados([]);
-      } else if (menuAberto) {
-        setMenuAberto(false);
       } else {
         setCarrinhoAberto(false);
       }
@@ -348,7 +369,7 @@ function Home() {
       document.body.style.overflow = overflowAnterior;
       focoAnterior?.focus();
     };
-  }, [carrinhoAberto, modalProdutoAberto, menuAberto]);
+  }, [carrinhoAberto, modalProdutoAberto]);
 
   useEffect(() => {
     function verificarSecaoAtual() {
@@ -539,39 +560,10 @@ function Home() {
             <LogoEstabelecimento configuracao={configuracao} alternativa={nomeExibicao} />
           </Link>
 
-          <button
-            type="button"
-            className={styles.botaoMenuMobile}
-            ref={botaoMenuRef}
-            aria-label="Abrir menu"
-            aria-haspopup="true"
-            aria-expanded={menuAberto}
-            aria-controls="menu-principal-mobile"
-            onClick={abrirMenu}
-          >
-            <span />
-            <span />
-            <span />
-          </button>
-
           <nav
-            id="menu-principal-mobile"
-            className={`${styles.menu} ${menuAberto ? styles.menuAberto : ''}`}
+            className={styles.menu}
             aria-label="Navegação principal"
-            ref={menuRef}
-            aria-hidden={menuCompacto && !menuAberto}
-            inert={menuCompacto && !menuAberto ? true : undefined}
           >
-            <button
-              type="button"
-              className={styles.fecharMenu}
-              ref={fecharMenuRef}
-              aria-label="Fechar menu"
-              onClick={fecharMenu}
-            >
-              ×
-            </button>
-
             <a
               href="#inicio"
               className={
@@ -675,7 +667,7 @@ function Home() {
               <circle cx="18" cy="20" r="1" fill="currentColor" />
             </svg>
 
-            Ver Carrinho
+            <span className={styles.textoCarrinho}>Ver Carrinho</span>
 
             {quantidadeCarrinho > 0 && (
               <span className={styles.numeroCarrinho}>
@@ -701,8 +693,16 @@ function Home() {
       >
         <div className={styles.conteudoBanner}>
           <div className={`${styles.statusLoja} ${pedidosOnlineDisponiveis ? styles.statusAberta : styles.statusFechada}`} role="status">
-            <strong>{pedidosOnlineDisponiveis ? 'Aberta para pedidos' : configuracao.lojaAberta ? 'Pedidos online indisponíveis' : 'Fechada no momento'}</strong>
-            <span>{pedidosOnlineDisponiveis ? `${resumoAtendimento} • Estimativa: ${configuracao.tempoEntrega}` : 'O cardápio continua disponível para consulta.'}</span>
+            <span className={styles.pontoStatus} aria-hidden="true" />
+
+            <strong className={styles.statusRotuloLongo}>{statusCompleto}</strong>
+            <strong className={styles.statusRotuloCurto}>{statusCurto}</strong>
+
+            {horarioResumido && (
+              <span className={styles.statusHorario}>{horarioResumido}</span>
+            )}
+
+            <span className={styles.statusDetalhe}>{pedidosOnlineDisponiveis ? `${resumoAtendimento} • Estimativa: ${configuracao.tempoEntrega}` : 'O cardápio continua disponível para consulta.'}</span>
           </div>
           <span className={styles.textoPequeno}>
             🔥 FEITO NA HORA
@@ -834,12 +834,14 @@ function Home() {
           <div className={styles.carrosselPromocoes}>
 
             <div
-              key={indicePromocao}
               className={styles.listaPromocoes}
-              aria-live="polite"
+              ref={trilhoPromocoesRef}
+              onScroll={aoRolarPromocoes}
+              role="group"
+              aria-label="Promoções do dia"
             >
 
-              {promocoesVisiveis.map((promocao) => (
+              {promocoes.map((promocao) => (
 
                 <article
                   key={promocao.id}
@@ -922,16 +924,14 @@ function Home() {
 
           {promocoes.length > 0 && <div className={styles.indicadoresPromocao}>
 
-            {Array.from({
-              length: maxIndicePromocao + 1
-            }).map((_, indice) => (
+            {promocoes.map((promocao, indice) => (
 
               <button
-                key={indice}
+                key={promocao.id}
                 type="button"
                 aria-label={`Ir para promoção ${indice + 1}`}
                 onClick={() =>
-                  setIndicePromocao(indice)
+                  irParaPromocao(indice)
                 }
                 className={
                   indicePromocao === indice
@@ -947,7 +947,7 @@ function Home() {
 
         </div>
 
-        <div className={styles.categorias}>
+        <div className={styles.categorias} role="group" aria-label="Filtrar por categoria">
           {categorias.map((categoria) => (
             <button
               key={categoria}
@@ -1487,14 +1487,6 @@ function Home() {
 
         </div>
       )}
-
-      <div
-        className={`${styles.overlayCarrinho} ${
-          menuAberto ? styles.overlayVisivel : ''
-        }`}
-        aria-hidden="true"
-        onClick={fecharMenu}
-      />
 
       <div
         className={`${styles.overlayCarrinho} ${
