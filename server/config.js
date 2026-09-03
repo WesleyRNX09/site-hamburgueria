@@ -47,7 +47,7 @@ export const config = {
     connectionLimit: Number(process.env.DB_CONNECTION_LIMIT) || 10,
     ssl: process.env.DB_SSL === 'true',
     sslCa: process.env.DB_SSL_CA || '',
-    criarBancoSeAusente: !producao
+    criarBancoSeAusente: !producao && process.env.DB_CREATE_IF_MISSING !== '0'
   },
   pastaUploads: caminhoConfigurado(process.env.UPLOADS_PATH, 'server/uploads'),
   pastaDist: resolve(pastaProjeto, 'dist'),
