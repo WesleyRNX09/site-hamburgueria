@@ -119,6 +119,14 @@
   gap: 3.5rem;
 }
 
+.botaoMenuMobile {
+  display: none;
+}
+
+.fecharMenu {
+  display: none;
+}
+
 .menu a {
   position: relative;
 
@@ -990,7 +998,7 @@
 
   min-width: 9.5rem;
   height: 2rem;
-  width: 12rem;
+  max-width: calc(100% - 2rem);
   padding: 0 0.7rem;
 
   display: flex;
@@ -998,10 +1006,13 @@
   justify-content: center;
   gap: 0.25rem;
 
+  overflow: hidden;
   color: var(--cor-fundo);
   font-size: 1rem;
   font-weight: 800;
   text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 
   background-color: var(--cor-principal);
   border-radius: 2rem;
@@ -2991,8 +3002,77 @@
 ========================= */
 
 @media (max-width: 1000px) {
+  .botaoMenuMobile {
+    display: grid;
+    width: 4.4rem;
+    height: 4.4rem;
+    flex: 0 0 auto;
+    place-items: center;
+    gap: 0.4rem;
+    border: 1px solid rgb(from var(--cor-principal) r g b / 0.35);
+    border-radius: 1rem;
+    background: rgba(10, 10, 10, 0.5);
+    cursor: pointer;
+  }
+
+  .botaoMenuMobile span {
+    width: 2rem;
+    height: 0.2rem;
+    border-radius: 0.2rem;
+    background: var(--cor-principal);
+  }
+
   .menu {
-    display: none;
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 1999;
+    display: flex;
+    width: min(85%, 32rem);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2.2rem;
+    background: linear-gradient(145deg, var(--cor-card-elevado), var(--cor-fundo));
+    border-left: 1px solid rgb(from var(--cor-principal) r g b / 0.3);
+    box-shadow: -15px 0 50px rgba(0, 0, 0, 0.5);
+    padding: 8rem 3rem 3rem;
+    transform: translateX(105%);
+    transition: transform 0.35s ease;
+    overflow-y: auto;
+  }
+
+  .menuAberto {
+    transform: translateX(0);
+  }
+
+  .menu a {
+    font-size: 1.9rem;
+  }
+
+  .fecharMenu {
+    position: absolute;
+    top: 2rem;
+    right: 2rem;
+    display: flex;
+    width: 3.5rem;
+    height: 3.5rem;
+    min-width: 3.5rem;
+    min-height: 3.5rem;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgb(from var(--cor-principal) r g b / 0.6);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--cor-principal);
+    font-size: 2rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  }
+
+  .fecharMenu:hover {
+    background-color: var(--cor-principal);
+    color: var(--cor-fundo);
+    transform: rotate(90deg);
   }
 
   .banner {
@@ -3024,6 +3104,15 @@
     padding: 0 1rem;
 
     font-size: 0.85rem;
+  }
+
+  .botaoMenuMobile {
+    width: 3.8rem;
+    height: 3.8rem;
+  }
+
+  .menu {
+    padding: 7rem 2rem 2rem;
   }
 
   .banner {

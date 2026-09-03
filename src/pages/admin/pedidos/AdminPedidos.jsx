@@ -77,21 +77,21 @@ function AdminPedidos() {
           </div>
         </div>
 
-        <div className={styles.tabelaContainer}>
+        <div className={`${styles.tabelaContainer} ${styles.tabelaCartoes}`}>
           <table className={styles.tabela} aria-label="Lista de pedidos">
             <thead><tr><th>Pedido</th><th>Cliente</th><th>Origem</th><th>Itens</th><th>Pagamento</th><th>Status</th><th>Horário</th><th>Total</th><th>Ações</th></tr></thead>
             <tbody>
               {filtrados.map((pedido) => (
                 <tr key={pedido.id} className={pedidosNovos.includes(pedido.id) ? styles.pedidoNovo : ''}>
-                  <td><strong>{pedido.id}</strong></td>
-                  <td><strong>{pedido.cliente}</strong><span className={styles.textoSecundario}>{pedido.telefone}</span></td>
-                  <td>{pedido.origem}</td>
-                  <td><strong>{pedido.itens.length} {pedido.itens.length === 1 ? 'item' : 'itens'}</strong><span className={styles.textoSecundario}>{pedido.itens.map((item) => item.nome).join(', ')}</span></td>
-                  <td><strong>{pedido.pagamento}</strong><span className={styles.textoSecundario}>{pedido.pagamentoStatus}</span></td>
-                  <td><span className={`${styles.status} ${classeStatus(pedido.status)}`}>{pedido.status}</span></td>
-                  <td>{pedido.horario}</td>
-                  <td><strong>{moeda(pedido.total)}</strong></td>
-                  <td><button type="button" className={styles.botaoIcone} aria-label={`Visualizar ${pedido.id}`} onClick={() => navigate(`/admin/pedidos/${pedido.id.replace('#', '')}`)}><Eye size={16} /></button></td>
+                  <td data-rotulo="Pedido"><strong>{pedido.id}</strong></td>
+                  <td data-rotulo="Cliente"><strong>{pedido.cliente}</strong><span className={styles.textoSecundario}>{pedido.telefone}</span></td>
+                  <td data-rotulo="Origem">{pedido.origem}</td>
+                  <td data-rotulo="Itens"><strong>{pedido.itens.length} {pedido.itens.length === 1 ? 'item' : 'itens'}</strong><span className={styles.textoSecundario}>{pedido.itens.map((item) => item.nome).join(', ')}</span></td>
+                  <td data-rotulo="Pagamento"><strong>{pedido.pagamento}</strong><span className={styles.textoSecundario}>{pedido.pagamentoStatus}</span></td>
+                  <td data-rotulo="Status"><span className={`${styles.status} ${classeStatus(pedido.status)}`}>{pedido.status}</span></td>
+                  <td data-rotulo="Horário">{pedido.horario}</td>
+                  <td data-rotulo="Total"><strong>{moeda(pedido.total)}</strong></td>
+                  <td data-rotulo="Ações"><button type="button" className={styles.botaoIcone} aria-label={`Visualizar ${pedido.id}`} onClick={() => navigate(`/admin/pedidos/${pedido.id.replace('#', '')}`)}><Eye size={16} /></button></td>
                 </tr>
               ))}
             </tbody>

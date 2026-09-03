@@ -20,6 +20,7 @@
 
 .logoArea {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 12px;
   padding: 0 10px 30px;
@@ -66,8 +67,17 @@
 
 .navegacao {
   display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
   gap: 6px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(from var(--cor-principal) r g b / 0.35) transparent;
 }
+
+.navegacao::-webkit-scrollbar { width: 6px; }
+.navegacao::-webkit-scrollbar-thumb { border-radius: 999px; background: rgb(from var(--cor-principal) r g b / 0.35); }
 
 .linkMenu {
   position: relative;
@@ -107,6 +117,7 @@
 
 .sair {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 12px;
   margin-top: auto;
@@ -259,5 +270,11 @@
 @media (max-width: 600px) {
   .alertaPedido { top: 72px; right: 12px; width: calc(100vw - 24px); }
   .cabecalho { display: block; }
-  .cabecalhoDireita { margin-top: 18px; justify-content: space-between; }
+  .cabecalhoDireita { margin-top: 18px; flex-wrap: wrap; row-gap: 10px; justify-content: space-between; }
+}
+
+@media (max-width: 374px) {
+  .principal { padding: 78px 14px 30px; }
+  .cabecalhoDireita { gap: 10px; }
+  .perfil > span { width: 38px; height: 38px; }
 }

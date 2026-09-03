@@ -80,19 +80,19 @@ function FuncionariosAdmin() {
 
       <section className={styles.card}>
         <div className={styles.topoCard}><div><h2>Equipe cadastrada</h2><p>Controle status, acesso e desempenho.</p></div></div>
-        <div className={styles.tabelaContainer}>
+        <div className={`${styles.tabelaContainer} ${styles.tabelaCartoes}`}>
           <table className={styles.tabela} aria-label="Funcionários cadastrados">
             <thead><tr><th>Funcionário</th><th>Cargo</th><th>Status</th><th>PIN</th><th>Comandas</th><th>Vendas</th><th>Ações</th></tr></thead>
             <tbody>
               {funcionarios.map((funcionario) => (
                 <tr key={funcionario.id}>
-                  <td><strong>{funcionario.nome}</strong><span className={styles.textoSecundario}>{funcionario.id}</span></td>
-                  <td>{funcionario.cargo}</td>
-                  <td><button disabled={alterandoId === funcionario.id} type="button" className={`${styles.status} ${funcionario.status === 'Ativo' ? styles.statusAtivo : styles.statusInativo}`} onClick={() => mudarStatus(funcionario)}>{alterandoId === funcionario.id ? 'Atualizando…' : funcionario.status}</button></td>
-                  <td>••••</td>
-                  <td>{funcionario.comandas}</td>
-                  <td>{funcionario.vendas}</td>
-                  <td><div className={styles.acoes}><button type="button" className={styles.botaoIcone} aria-label={`Editar ${funcionario.nome}`} onClick={() => setFormulario({ ...funcionario })}><Edit3 size={16} /></button><button type="button" className={styles.botaoIcone} aria-label={`QR Code de ${funcionario.nome}`} onClick={() => navigate(`/admin/funcionarios/${funcionario.id}/qr`)}><QrCode size={16} /></button></div></td>
+                  <td data-rotulo="Funcionário"><strong>{funcionario.nome}</strong><span className={styles.textoSecundario}>{funcionario.id}</span></td>
+                  <td data-rotulo="Cargo">{funcionario.cargo}</td>
+                  <td data-rotulo="Status"><button disabled={alterandoId === funcionario.id} type="button" className={`${styles.status} ${funcionario.status === 'Ativo' ? styles.statusAtivo : styles.statusInativo}`} onClick={() => mudarStatus(funcionario)}>{alterandoId === funcionario.id ? 'Atualizando…' : funcionario.status}</button></td>
+                  <td data-rotulo="PIN">••••</td>
+                  <td data-rotulo="Comandas">{funcionario.comandas}</td>
+                  <td data-rotulo="Vendas">{funcionario.vendas}</td>
+                  <td data-rotulo="Ações"><div className={styles.acoes}><button type="button" className={styles.botaoIcone} aria-label={`Editar ${funcionario.nome}`} onClick={() => setFormulario({ ...funcionario })}><Edit3 size={16} /></button><button type="button" className={styles.botaoIcone} aria-label={`QR Code de ${funcionario.nome}`} onClick={() => navigate(`/admin/funcionarios/${funcionario.id}/qr`)}><QrCode size={16} /></button></div></td>
                 </tr>
               ))}
             </tbody>

@@ -20,10 +20,15 @@ function Home() {
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
   const [modalProdutoAberto, setModalProdutoAberto] = useState(false);
   const [produtoSelecionado, setProdutoSelecionado] = useState(null);
+  const [menuAberto, setMenuAberto] = useState(false);
+  const [menuCompacto, setMenuCompacto] = useState(() => window.matchMedia('(max-width: 1000px)').matches);
   const modalProdutoRef = useRef(null);
   const fecharModalRef = useRef(null);
   const carrinhoRef = useRef(null);
   const fecharCarrinhoRef = useRef(null);
+  const menuRef = useRef(null);
+  const fecharMenuRef = useRef(null);
+  const botaoMenuRef = useRef(null);
 
   const [observacao, setObservacao] = useState('');
   const [quantidadeModal, setQuantidadeModal] = useState(1);
@@ -104,12 +109,22 @@ function Home() {
         );
 
   async function abrirCarrinho() {
+    setMenuAberto(false);
     setCarrinhoAberto(true);
     await revalidarCarrinho().catch(() => {});
   }
 
   function fecharCarrinho() {
     setCarrinhoAberto(false);
+  }
+
+  function abrirMenu() {
+    setCarrinhoAberto(false);
+    setMenuAberto(true);
+  }
+
+  function fecharMenu() {
+    setMenuAberto(false);
   }
 
   function abrirModalProduto(produto) {
@@ -242,6 +257,7 @@ function Home() {
   }, [configuracao.banner]);
   
   function irParaSecao(id) {
+  setMenuAberto(false);
   const secao = document.getElementById(id);
 
   if (secao) {
@@ -267,13 +283,20 @@ function Home() {
   }, []);
 
   useEffect(() => {
-    if (!modalProdutoAberto && !carrinhoAberto) return undefined;
+    const media = window.matchMedia('(max-width: 1000px)');
+    const atualizarMenuCompacto = (evento) => setMenuCompacto(evento.matches);
+    media.addEventListener('change', atualizarMenuCompacto);
+    return () => media.removeEventListener('change', atualizarMenuCompacto);
+  }, []);
+
+  useEffect(() => {
+    if (!modalProdutoAberto && !carrinhoAberto && !menuAberto) return undefined;
 
     const focoAnterior = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
-    const container = modalProdutoAberto ? modalProdutoRef.current : carrinhoRef.current;
-    const alvoInicial = modalProdutoAberto ? fecharModalRef.current : fecharCarrinhoRef.current;
+    const container = modalProdutoAberto ? modalProdutoRef.current : menuAberto ? menuRef.current : carrinhoRef.current;
+    const alvoInicial = modalProdutoAberto ? fecharModalRef.current : menuAberto ? fecharMenuRef.current : fecharCarrinhoRef.current;
     const overflowAnterior = document.body.style.overflow;
     const animacao = window.requestAnimationFrame(() => alvoInicial?.focus());
 
@@ -286,6 +309,8 @@ function Home() {
         setObservacao('');
         setQuantidadeModal(1);
         setAdicionaisSelecionados([]);
+      } else if (menuAberto) {
+        setMenuAberto(false);
       } else {
         setCarrinhoAberto(false);
       }
@@ -323,7 +348,7 @@ function Home() {
       document.body.style.overflow = overflowAnterior;
       focoAnterior?.focus();
     };
-  }, [carrinhoAberto, modalProdutoAberto]);
+  }, [carrinhoAberto, modalProdutoAberto, menuAberto]);
 
   useEffect(() => {
     function verificarSecaoAtual() {
@@ -514,7 +539,38 @@ function Home() {
             <LogoEstabelecimento configuracao={configuracao} alternativa={nomeExibicao} />
           </Link>
 
-          <nav className={styles.menu} aria-label="Navegação principal">
+          <button
+            type="button"
+            className={styles.botaoMenuMobile}
+            ref={botaoMenuRef}
+            aria-label="Abrir menu"
+            aria-haspopup="true"
+            aria-expanded={menuAberto}
+            aria-controls="menu-principal-mobile"
+            onClick={abrirMenu}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+
+          <nav
+            id="menu-principal-mobile"
+            className={`${styles.menu} ${menuAberto ? styles.menuAberto : ''}`}
+            aria-label="Navegação principal"
+            ref={menuRef}
+            aria-hidden={menuCompacto && !menuAberto}
+            inert={menuCompacto && !menuAberto ? true : undefined}
+          >
+            <button
+              type="button"
+              className={styles.fecharMenu}
+              ref={fecharMenuRef}
+              aria-label="Fechar menu"
+              onClick={fecharMenu}
+            >
+              ×
+            </button>
 
             <a
               href="#inicio"
@@ -1431,6 +1487,14 @@ function Home() {
 
         </div>
       )}
+
+      <div
+        className={`${styles.overlayCarrinho} ${
+          menuAberto ? styles.overlayVisivel : ''
+        }`}
+        aria-hidden="true"
+        onClick={fecharMenu}
+      />
 
       <div
         className={`${styles.overlayCarrinho} ${

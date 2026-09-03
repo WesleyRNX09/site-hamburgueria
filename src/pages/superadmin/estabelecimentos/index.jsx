@@ -296,12 +296,12 @@ function EstabelecimentosSuperadmin() {
             <tbody>
               {estabelecimentos.map((item) => (
                 <tr key={item.id}>
-                  <td><strong>{item.nomeFantasia}</strong><small>/{item.slug}{item.dominioPersonalizado ? ` • ${item.dominioPersonalizado}` : ''}</small></td>
-                  <td><span className={`${styles.status} ${item.status === 'ativo' ? styles.ativo : styles.inativo}`}>{textoStatus(item.status)}</span></td>
-                  <td><span className={styles.plano}>{textoStatus(item.plano)}</span></td>
-                  <td><span className={`${styles.status} ${item.statusAssinatura === 'ativa' ? styles.ativo : styles.atencao}`}>{textoStatus(item.statusAssinatura)}</span><small className={styles.vencimento}><CalendarClock size={12} /> {dataCurta(item.vencimentoAssinatura)}</small></td>
-                  <td>{item.totalAdministradores}</td>
-                  <td><div className={styles.acoes}><button type="button" aria-label={`Editar ${item.nomeFantasia}`} title="Editar" onClick={() => abrirEdicao(item)}><Edit3 size={17} /></button><button type="button" disabled={processando} aria-label={`${item.status === 'ativo' ? 'Desativar' : 'Ativar'} ${item.nomeFantasia}`} title={item.status === 'ativo' ? 'Desativar' : 'Ativar'} onClick={() => alternarStatus(item)}><Power size={17} /></button></div></td>
+                  <td data-rotulo="Estabelecimento"><strong>{item.nomeFantasia}</strong><small>/{item.slug}{item.dominioPersonalizado ? ` • ${item.dominioPersonalizado}` : ''}</small></td>
+                  <td data-rotulo="Acesso"><span className={`${styles.status} ${item.status === 'ativo' ? styles.ativo : styles.inativo}`}>{textoStatus(item.status)}</span></td>
+                  <td data-rotulo="Plano"><span className={styles.plano}>{textoStatus(item.plano)}</span></td>
+                  <td data-rotulo="Assinatura"><span className={`${styles.status} ${item.statusAssinatura === 'ativa' ? styles.ativo : styles.atencao}`}>{textoStatus(item.statusAssinatura)}</span><small className={styles.vencimento}><CalendarClock size={12} /> {dataCurta(item.vencimentoAssinatura)}</small></td>
+                  <td data-rotulo="Administradores">{item.totalAdministradores}</td>
+                  <td data-rotulo="Ações"><div className={styles.acoes}><button type="button" aria-label={`Editar ${item.nomeFantasia}`} title="Editar" onClick={() => abrirEdicao(item)}><Edit3 size={17} /></button><button type="button" disabled={processando} aria-label={`${item.status === 'ativo' ? 'Desativar' : 'Ativar'} ${item.nomeFantasia}`} title={item.status === 'ativo' ? 'Desativar' : 'Ativar'} onClick={() => alternarStatus(item)}><Power size={17} /></button></div></td>
                 </tr>
               ))}
             </tbody>

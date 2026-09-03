@@ -78,6 +78,7 @@
   .cores { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
   .filtros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filtros select { min-width: 0; }
+  .filtros button { grid-column: 1 / -1; }
   .tabelaContainer { overflow-x: auto; }
 }
 
@@ -90,4 +91,22 @@
   .acoesFormulario button, .filtros button { width: 100%; }
   .campo input, .campo select, .filtros input, .filtros select, .botaoPrimario, .botaoSecundario { min-height: 46px; font-size: 16px; }
   .campo > span, .cor > span, .formularioTopo p, .listaTopo p, .ajuda, .erro, .sucesso, .vazio span { font-size: 14px; }
+
+  /* Tabela vira lista de cartões: evita rolagem horizontal em telas estreitas */
+  .tabelaContainer { overflow-x: visible; border: 0; border-radius: 0; background: transparent; }
+  .tabelaContainer table { min-width: 0; }
+  .tabelaContainer table, .tabelaContainer tbody, .tabelaContainer tr, .tabelaContainer td { display: block; width: 100%; }
+  .tabelaContainer thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; }
+  .tabelaContainer tbody tr { border: 1px solid #2b2b2e; border-radius: 12px; background: #141416; margin-bottom: 12px; padding: 4px 14px; }
+  .tabelaContainer tbody tr:last-child { margin-bottom: 0; }
+  .tabelaContainer td { display: flex; flex-direction: column; gap: 5px; border-top: 1px solid #232326; padding: 12px 0; }
+  .tabelaContainer td:first-child { border-top: 0; }
+  .tabelaContainer td::before { content: attr(data-rotulo); color: #77777c; font-size: 10px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+  .tabelaContainer td > small { max-width: none; white-space: normal; }
+  .acoes button { width: 42px; height: 42px; }
+}
+
+@media (max-width: 374px) {
+  .metricas article { padding: 14px; }
+  .listaCard, .formularioCard { padding: 14px; }
 }

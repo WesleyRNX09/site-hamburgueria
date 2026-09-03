@@ -199,7 +199,7 @@
 }
 .abaAtiva { border-color: var(--cor-principal); background: var(--cor-principal); color: var(--cor-sobre-principal); }
 
-.acoes { display: flex; align-items: center; gap: 7px; }
+.acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .acoesCabecalho { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
 .vazio { padding: 44px 20px; color: #929292; text-align: center; }
 .vazio svg { margin-bottom: 12px; color: color-mix(in srgb, var(--cor-principal) 65%, black); }
@@ -446,7 +446,8 @@
   .card,
   .painel { padding: 17px; }
   .metrica { min-height: 108px; }
-  .topoCard { align-items: flex-start; }
+  .topoCard { align-items: flex-start; flex-wrap: wrap; row-gap: 10px; }
+  .topoCard > .seletor { width: 100%; }
   .rodapeFormulario { flex-direction: column-reverse; }
   .rodapeFormulario button { width: 100%; }
   .acoesCabecalho { width: 100%; }
@@ -454,6 +455,7 @@
   .gradeSelecaoAdicionais { grid-template-columns: 1fr; }
   .adicionalLinha { grid-template-columns: minmax(0, 1fr) auto; }
   .adicionalLinha .acoes { grid-column: 1 / -1; justify-content: flex-end; }
+  .adicionalLinha > .status + button { grid-column: 1 / -1; }
   .linhaAreaEntrega { grid-template-columns: 1fr 44px; }
   .linhaAreaEntrega .campo:nth-child(2) { grid-column: 1; }
   .linhaAreaEntrega .botaoIcone { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
@@ -467,6 +469,7 @@
   .finalizarComandaAdmin > button { grid-column: auto; }
   .itemPedido { grid-template-columns: 50px minmax(0, 1fr); }
   .itemPedido img { width: 50px; height: 50px; }
+  .itemPedido > strong { grid-column: 1 / -1; margin-top: 4px; text-align: right; }
   .acoesItemComanda { grid-column: 1 / -1; width: 100%; grid-template-columns: minmax(0, 1fr) auto; align-items: center; justify-items: start; }
 
   .botaoPrimario,
@@ -480,6 +483,10 @@
   }
 
   .botaoIcone { min-width: 44px; }
+
+  .produtoImagem button.status,
+  .adicionalLinha button.status,
+  .tabela button.status { min-height: 40px; padding: 0 14px; }
 
   .busca input,
   .campo input,
@@ -512,4 +519,18 @@
 
   .tabela th { font-size: 12px; }
   .tabela td { font-size: 14px; }
+
+  /* Tabelas que optam por virar lista de cartões no mobile (via .tabelaCartoes) */
+  .tabelaCartoes { overflow-x: visible; border: 0; border-radius: 0; background: transparent; }
+  .tabelaCartoes .tabela { min-width: 0; }
+  .tabelaCartoes .tabela,
+  .tabelaCartoes .tabela tbody,
+  .tabelaCartoes .tabela tr,
+  .tabelaCartoes .tabela td { display: block; width: 100%; }
+  .tabelaCartoes .tabela thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; }
+  .tabelaCartoes .tabela tbody tr { margin-bottom: 12px; border: 1px solid #292929; border-radius: 12px; background: var(--cor-card-profundo); padding: 4px 14px; }
+  .tabelaCartoes .tabela tbody tr:last-child { margin-bottom: 0; }
+  .tabelaCartoes .tabela td { display: flex; flex-direction: column; gap: 5px; border-top: 1px solid #232326; padding: 12px 0; font-size: 14px; }
+  .tabelaCartoes .tabela td:first-child { border-top: 0; }
+  .tabelaCartoes .tabela td::before { content: attr(data-rotulo); color: #77777c; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; }
 }

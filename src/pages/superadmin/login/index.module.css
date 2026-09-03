@@ -1,48 +1,157 @@
 .pagina {
-  --amarelo: #ffc107;
+  --super-amarelo: #ffc107;
+  --super-fundo: #0a0a0b;
+  --super-borda: #2a2a2d;
   position: relative;
   display: grid;
+  grid-template-columns: 1fr;
   min-height: 100vh;
-  overflow: hidden;
-  place-items: center;
-  background: #09090a;
-  padding: 42px 20px;
+  overflow-x: hidden;
+  background: var(--super-fundo);
   color: #f5f5f5;
 }
-.pagina::before { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px); background-size: 42px 42px; content: ''; mask-image: linear-gradient(to bottom, black, transparent 85%); }
-.luz { position: absolute; top: -280px; width: 620px; height: 620px; border-radius: 50%; background: rgba(255, 193, 7, .11); filter: blur(100px); }
-.container { position: relative; z-index: 1; width: min(100%, 520px); }
-.marca { display: flex; align-items: center; justify-content: center; gap: 11px; margin-bottom: 42px; }
-.marca > span { display: grid; width: 45px; height: 45px; place-items: center; border: 1px solid var(--amarelo); border-radius: 13px; color: var(--amarelo); }
-.marca strong, .marca small { display: block; }
-.marca strong { font-size: 17px; }
-.marca small { margin-top: 4px; color: var(--amarelo); font-size: 9px; font-weight: 900; letter-spacing: 2.7px; }
-.introducao { margin-bottom: 25px; text-align: center; }
-.rotulo { color: var(--amarelo); font-size: 10px; font-weight: 900; letter-spacing: 2px; }
-.introducao h1 { margin: 10px 0 11px; font-size: clamp(29px, 7vw, 42px); line-height: 1.08; }
-.introducao h1 em { color: var(--amarelo); font-style: normal; }
-.introducao p { max-width: 460px; margin: 0 auto; color: #99999e; font-size: 13px; line-height: 1.65; }
-.card { display: grid; gap: 20px; border: 1px solid #303034; border-radius: 18px; background: rgba(21, 21, 23, .94); padding: 28px; box-shadow: 0 28px 80px rgba(0,0,0,.45); }
-.cardCabecalho { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; border-bottom: 1px solid #2a2a2d; padding-bottom: 20px; }
-.cardCabecalho h2 { margin: 0; font-size: 20px; }
-.cardCabecalho p { margin: 6px 0 0; color: #8f8f94; font-size: 12px; }
-.cardCabecalho svg { flex: 0 0 auto; color: var(--amarelo); }
+
+/* ---------- Painel de marca (split-screen a partir do notebook) ---------- */
+
+.painelMarca {
+  position: relative;
+  display: none;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 44px;
+  overflow: hidden;
+  border-right: 1px solid rgba(255, 193, 7, 0.16);
+  background: linear-gradient(165deg, #131314 0%, #0a0a0b 65%);
+  padding: 52px 46px;
+}
+
+.marcaFundo {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(480px 480px at 12% -10%, rgba(255, 193, 7, 0.14), transparent 60%),
+    radial-gradient(420px 420px at 100% 100%, rgba(255, 193, 7, 0.08), transparent 60%),
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size: auto, auto, 42px 42px, 42px 42px;
+  mask-image: linear-gradient(to bottom, black, transparent 92%);
+  pointer-events: none;
+}
+
+.marcaTopo { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; }
+.marcaSelo { display: grid; width: 46px; height: 46px; flex: 0 0 auto; place-items: center; border: 1px solid var(--super-amarelo); border-radius: 13px; background: rgba(255, 193, 7, 0.08); color: var(--super-amarelo); }
+.marcaTopo strong, .marcaTopo small { display: block; }
+.marcaTopo strong { font-size: 18px; }
+.marcaTopo small { margin-top: 4px; color: var(--super-amarelo); font-size: 9px; font-weight: 900; letter-spacing: 2.8px; }
+
+.marcaCorpo { position: relative; z-index: 1; max-width: 420px; }
+.marcaRotulo { color: var(--super-amarelo); font-size: 10px; font-weight: 900; letter-spacing: 2px; }
+.marcaCorpo h2 { margin: 12px 0 14px; font-size: clamp(26px, 2.6vw, 34px); line-height: 1.15; }
+.marcaCorpo h2 em { color: var(--super-amarelo); font-style: normal; }
+.marcaCorpo > p { margin: 0 0 28px; color: #a3a3a8; font-size: 14px; line-height: 1.7; }
+
+.marcaLista { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.marcaLista li { display: flex; align-items: center; gap: 12px; color: #d3d3d6; font-size: 13px; font-weight: 600; }
+.marcaLista svg { flex: 0 0 auto; color: var(--super-amarelo); }
+
+.marcaRodape { position: relative; z-index: 1; margin: 0; color: #6c6c70; font-size: 11px; }
+
+/* ---------- Painel de formulário ---------- */
+
+.painelFormulario {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 48px 20px;
+}
+
+.painelFormulario::before {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
+  content: '';
+  pointer-events: none;
+}
+
+.luz { position: absolute; top: -280px; left: 50%; width: 620px; height: 620px; border-radius: 50%; background: rgba(255, 193, 7, 0.11); filter: blur(100px); transform: translateX(-50%); pointer-events: none; }
+
+.container { position: relative; z-index: 1; width: min(100%, 440px); }
+
+.marcaMobile { display: flex; align-items: center; justify-content: center; gap: 11px; margin-bottom: 34px; }
+.marcaMobile > span { display: grid; width: 44px; height: 44px; flex: 0 0 auto; place-items: center; border: 1px solid var(--super-amarelo); border-radius: 13px; color: var(--super-amarelo); }
+.marcaMobile strong, .marcaMobile small { display: block; }
+.marcaMobile strong { font-size: 16px; }
+.marcaMobile small { margin-top: 3px; color: var(--super-amarelo); font-size: 9px; font-weight: 900; letter-spacing: 2.6px; }
+
+.introducao { margin-bottom: 26px; text-align: center; }
+.rotulo { color: var(--super-amarelo); font-size: 10px; font-weight: 900; letter-spacing: 2px; }
+.introducao h1 { margin: 10px 0 10px; font-size: clamp(26px, 5.5vw, 34px); line-height: 1.15; }
+.introducao h1 em { color: var(--super-amarelo); font-style: normal; }
+.introducao p { max-width: 380px; margin: 0 auto; color: #99999e; font-size: 13px; line-height: 1.65; }
+
+.card { display: grid; gap: 20px; border: 1px solid var(--super-borda); border-radius: 18px; background: rgba(21, 21, 23, 0.94); padding: 30px; box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45); }
+
 .campo { display: grid; gap: 8px; color: #dedee1; font-size: 12px; font-weight: 750; }
-.campo input { width: 100%; height: 48px; border: 1px solid #38383c; border-radius: 9px; outline: none; background: #0d0d0f; padding: 0 13px; color: white; font: inherit; }
-.campo input:focus { border-color: var(--amarelo); box-shadow: 0 0 0 3px rgba(255, 193, 7, .08); }
+.campo input { width: 100%; height: 48px; border: 1px solid #38383c; border-radius: 9px; outline: none; background: #0d0d0f; padding: 0 13px; color: #fff; font: inherit; font-size: 15px; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.campo input::placeholder { color: #626266; }
+.campo input:focus { border-color: var(--super-amarelo); box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.1); }
+
 .senha { position: relative; }
 .senha input { padding-right: 48px; }
-.senha button { position: absolute; top: 2px; right: 2px; display: grid; width: 44px; height: 44px; place-items: center; border: 0; background: transparent; color: #8d8d92; cursor: pointer; }
-.erro { border: 1px solid rgba(255, 91, 91, .35); border-radius: 9px; background: rgba(255, 91, 91, .07); padding: 11px 13px; color: #ff8e8e; font-size: 12px; }
-.entrar { min-height: 50px; border: 1px solid var(--amarelo); border-radius: 9px; background: var(--amarelo); color: #090909; font: inherit; font-size: 14px; font-weight: 900; cursor: pointer; }
-.entrar:hover { background: #ffd13f; transform: translateY(-1px); }
-.entrar:disabled { opacity: .5; cursor: wait; transform: none; }
-.aviso { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 0; color: #848489; font-size: 10px; text-align: center; }
-.aviso svg { flex: 0 0 auto; color: var(--amarelo); }
-@media (max-width: 560px) {
-  .pagina { padding: 28px 14px; }
-  .marca { margin-bottom: 28px; }
-  .card { border-radius: 14px; padding: 22px 17px; }
-  .campo input, .entrar { font-size: 16px; }
-  .introducao p, .cardCabecalho p, .campo, .erro, .aviso { font-size: 14px; }
+.senha button { position: absolute; top: 2px; right: 2px; display: grid; width: 44px; height: 44px; place-items: center; border: 0; border-radius: 0 8px 8px 0; background: transparent; color: #8d8d92; cursor: pointer; }
+.senha button:hover { color: var(--super-amarelo); }
+
+.erro { display: flex; align-items: flex-start; gap: 9px; border: 1px solid rgba(255, 91, 91, 0.35); border-radius: 10px; background: rgba(255, 91, 91, 0.08); padding: 12px 13px; color: #ff8e8e; font-size: 13px; line-height: 1.5; animation: entrarErro 0.18s ease-out; }
+.erro svg { flex: 0 0 auto; margin-top: 1px; }
+
+@keyframes entrarErro {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.entrar { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 50px; border: 1px solid var(--super-amarelo); border-radius: 9px; background: var(--super-amarelo); color: #090909; font: inherit; font-size: 14px; font-weight: 900; cursor: pointer; transition: background-color 0.15s ease, transform 0.15s ease; }
+.entrar:hover:not(:disabled) { background: #ffd13f; transform: translateY(-1px); }
+.entrar:disabled { opacity: 0.65; cursor: wait; transform: none; }
+
+.spinner { animation: girarSpinner 0.7s linear infinite; }
+
+@keyframes girarSpinner {
+  to { transform: rotate(360deg); }
+}
+
+.aviso { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 0; color: #848489; font-size: 10.5px; text-align: center; }
+.aviso svg { flex: 0 0 auto; color: var(--super-amarelo); }
+
+/* ---------- Breakpoints ---------- */
+
+@media (max-width: 374px) {
+  .painelFormulario { padding: 32px 14px; }
+  .marcaMobile { margin-bottom: 26px; }
+  .card { border-radius: 14px; padding: 20px 16px; gap: 17px; }
+  .introducao { margin-bottom: 20px; }
+  .introducao p, .campo, .erro, .aviso { font-size: 12.5px; }
+  .luz { width: 420px; height: 420px; top: -190px; }
+}
+
+@media (min-width: 375px) and (max-width: 767px) {
+  .painelFormulario { padding: 36px 16px; }
+}
+
+@media (min-width: 1025px) {
+  .pagina { grid-template-columns: minmax(420px, 38%) 1fr; }
+  .painelMarca { display: flex; }
+  .marcaMobile { display: none; }
+  .introducao { text-align: left; }
+  .introducao p { margin: 0; }
+  .card { padding: 32px; }
+  .luz { top: -320px; left: 68%; }
+}
+
+@media (min-width: 1440px) {
+  .painelMarca { padding: 64px; }
+  .marcaCorpo { max-width: 460px; }
+  .container { width: min(100%, 460px); }
 }

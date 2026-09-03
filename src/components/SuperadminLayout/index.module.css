@@ -28,13 +28,13 @@
 .logoArea span:not(.marcaIcone) { display: block; margin-top: 6px; color: var(--super-amarelo); font-size: 9px; font-weight: 900; letter-spacing: 2.8px; }
 .fecharMenu, .botaoMenu, .overlay { display: none; }
 .navegacao { display: grid; gap: 6px; }
-.linkMenu { position: relative; display: flex; min-height: 50px; align-items: center; gap: 13px; border-radius: 10px; padding: 0 14px; color: #aaa; font-size: 14px; font-weight: 750; text-decoration: none; }
+.linkMenu { position: relative; display: flex; min-height: 50px; align-items: center; gap: 13px; border-radius: 10px; padding: 0 14px; color: #aaa; font-size: 14px; font-weight: 750; text-decoration: none; transition: background-color 0.15s ease, color 0.15s ease; }
 .linkMenu:hover { background: #1b1b1e; color: #fff; }
 .linkAtivo { background: rgba(255, 193, 7, 0.11); color: var(--super-amarelo); }
 .linkAtivo::before { position: absolute; left: 0; width: 3px; height: 27px; border-radius: 99px; background: var(--super-amarelo); content: ''; }
 .escopo { display: flex; align-items: center; gap: 8px; border: 1px solid #2b2b2e; border-radius: 10px; margin-top: auto; padding: 11px; color: #8c8c90; font-size: 11px; }
 .escopo svg { color: var(--super-amarelo); }
-.sair { display: flex; min-height: 48px; align-items: center; gap: 12px; border: 0; border-top: 1px solid #252527; margin-top: 16px; background: transparent; padding: 18px 12px 0; color: #999; font: inherit; font-weight: 700; cursor: pointer; }
+.sair { display: flex; min-height: 48px; align-items: center; gap: 12px; border: 0; border-top: 1px solid #252527; margin-top: 16px; background: transparent; padding: 18px 12px 0; color: #999; font: inherit; font-weight: 700; cursor: pointer; transition: color 0.15s ease; }
 .sair:hover { color: var(--super-amarelo); }
 .principal { width: calc(100% - 260px); min-width: 0; margin-left: 260px; padding: 28px 38px 52px; }
 .cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
@@ -62,5 +62,12 @@
 
 @media (max-width: 600px) {
   .cabecalho { display: block; }
-  .cabecalhoDireita { margin-top: 18px; justify-content: space-between; }
+  .cabecalhoDireita { margin-top: 18px; flex-wrap: wrap; row-gap: 10px; justify-content: space-between; }
+}
+
+@media (max-width: 374px) {
+  .principal { padding: 78px 14px 30px; }
+  .cabecalhoDireita { gap: 10px; }
+  .perfil > span { width: 38px; height: 38px; }
+  .escopo { padding: 10px; font-size: 10.5px; }
 }
