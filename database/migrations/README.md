@@ -53,4 +53,18 @@ A pasta `legado/` preserva o histórico anterior e não é executada pelo runner
   acesso: `pin_hash` passa a aceitar NULL enquanto a senha não é criada e
   `senha_definida_em` marca o link como usado. Faz backfill do usuário a
   partir do nome e mantém quem já tinha PIN entrando com a mesma senha.
+- `013_acesso_unico_do_garcom.sql`: troca o QR Code por funcionário por um
+  único QR Code do estabelecimento (`estabelecimentos.token_acesso_garcom`) e
+  faz o garçom entrar só com a senha, indexada por
+  `funcionarios.senha_busca` (única por estabelecimento). Também passa
+  `comandas.funcionario_id` para ON DELETE SET NULL, para o administrador
+  poder excluir um garçom sem perder o histórico. As credenciais antigas
+  (usuário + senha) são invalidadas, porque não há como convertê-las sem a
+  senha em texto puro: cada funcionário volta a "sem senha" até o
+  administrador cadastrar a nova.
+- `014_separar_cardapio_do_salao.sql`: acrescenta `canal` (`ambos`, `online`,
+  `salao`) a `categorias` e `produtos`, para a loja física ter mais itens que
+  o site sem duplicar cadastro. Coluna nova com DEFAULT `ambos`: nenhuma
+  linha é reescrita e o cardápio online continua igual. A visibilidade é a
+  interseção entre produto e categoria, e um CHECK limita os valores.
 - `legado/20260824_operacao_comercial.sql`: histórico anterior, fora do runner.

@@ -13,7 +13,8 @@ Workbench.
 - promoções exibidas no site;
 - pedidos de delivery e retirada, itens, adicionais, pagamentos e acompanhamento;
 - confirmação manual e idempotente de pagamentos, cancelamento e estorno com autor e horário;
-- funcionários com login próprio (usuário e senha protegida por `scrypt`) e QR Code individual de primeiro acesso;
+- funcionários com senha própria (protegida por `scrypt`), um único QR Code de acesso por estabelecimento e exclusão pelo painel;
+- cardápio único com dois canais: cada categoria e produto aparece no cardápio online, só no salão (mesas e comandas) ou nos dois;
 - sessões revogáveis do garçom com JWT, mesas, comandas e itens da comanda;
 - vínculo automático entre garçom, mesa, comanda e pedido do salão;
 - identidade e operação da lanchonete: nome, logo, contatos, horário, redes sociais, status, delivery, áreas, taxas, mínimo e pagamentos;
@@ -148,9 +149,10 @@ Se o `.env` ou o MySQL ainda não estiverem disponíveis, o frontend continua in
 - Administrador: `/admin/login`, com as credenciais definidas em `ADMIN_USER` e `ADMIN_PASSWORD`
 - Superadministrador: `/superadmin/login`, com as credenciais definidas em
   `SUPERADMIN_USER` e `SUPERADMIN_PASSWORD`
-- Garçom: cadastre o funcionário (nome, cargo e usuário) no painel administrativo e entregue o QR Code de primeiro acesso; nele o próprio garçom cria a senha e, a partir daí, entra em `/garcom/acesso` com usuário e senha
+- Cardápio do salão: em **Categorias** e **Cardápio**, o campo "Onde aparece" separa o que vai ao site do que só existe na loja física. O padrão é "Cardápio online e salão", então nada muda até você marcar algo como "Somente salão". O app do garçom abre pelas categorias e mostra os itens em lista; o backend recusa item de um canal no outro, mesmo que o id seja enviado direto na requisição.
+- Garçom: cadastre o funcionário (nome, cargo e senha) no painel administrativo e deixe à vista o QR Code da equipe, que é um só para toda a loja; o garçom lê o código, cai em `/garcom/acesso` e entra digitando apenas a senha cadastrada
 
-Dados demonstrativos ficam desativados por padrão em todos os ambientes: a loja nasce fechada, sem produtos, adicionais, promoções, funcionários ou pedidos fictícios. `SEED_DEMO_DATA=1` só tem efeito no comando explícito `npm run db:prepare` e deve ser usado exclusivamente em ambiente descartável. Os tokens demonstrativos são aleatórios e, sem `DEMO_WAITER_PIN`, a senha inicial também é aleatória. Senhas são armazenadas como hash, e tokens de acesso só aparecem em rotas administrativas autenticadas. O QR Code serve uma única vez, para o funcionário criar a própria senha (mínimo de 6 dígitos); depois disso o link deixa de valer e a sessão só nasce da validação de usuário e senha. Um novo QR só pode ser gerado pelo painel administrativo, e gerá-lo apaga a senha atual e derruba as sessões abertas do funcionário.
+Dados demonstrativos ficam desativados por padrão em todos os ambientes: a loja nasce fechada, sem produtos, adicionais, promoções, funcionários ou pedidos fictícios. `SEED_DEMO_DATA=1` só tem efeito no comando explícito `npm run db:prepare` e deve ser usado exclusivamente em ambiente descartável. Os tokens demonstrativos são aleatórios e, sem `DEMO_WAITER_PASSWORD`, a senha inicial também é aleatória. Senhas são armazenadas como hash `scrypt`, e o token do QR Code só aparece em rotas administrativas autenticadas. O QR Code é um por estabelecimento e não expira sozinho: ele leva à tela de acesso e é exigido junto com a senha no login, de modo que a senha curta nunca protege a conta sozinha. Trocar o QR pelo painel invalida na hora os códigos já impressos; trocar a senha de um funcionário derruba as sessões abertas dele, e excluí-lo encerra o acesso mantendo comandas e pedidos no histórico.
 
 ## Comandos
 
@@ -206,10 +208,11 @@ contatos, atendimento, pagamentos, entrega e textos legais — e não aceita um
 
 ### Garçom
 
-- `POST /api/garcom/login`
+- `GET /api/garcom/acesso/:token` (confere o QR Code da equipe)
+- `POST /api/garcom/login` (token do QR + senha)
 - `GET|DELETE /api/garcom/sessao`
 - `GET /api/garcom/dados`
-- abertura de comanda, inclusão/remoção de itens, envio à cozinha, solicitação de conta e fechamento em `/api/garcom/comandas/...`
+- abertura de comanda, inclusão/remoção de itens e envio à cozinha em `/api/garcom/comandas/...`. Solicitar a conta e fechar a comanda são do caixa: o garçom acompanha o total, mas não tem rota para isso
 
 ### Superadministrador
 

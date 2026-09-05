@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import mysql from 'mysql2/promise';
 
-import { criarHashSenha } from './security.js';
+import { criarHashSenha, criarIndiceSenhaGarcom } from './security.js';
 import { checksumMigration } from './db/migration-utils.js';
 import {
   adicionaisSeed,
@@ -115,7 +115,7 @@ async function revogarCredenciaisDemonstracaoLegadas(banco, idEstabelecimento) {
       const tokenAleatorio = `garcom-${randomUUID().replaceAll('-', '')}`;
       await conexao.execute(`
         UPDATE funcionarios
-        SET pin_hash = ?, token_acesso = ?, ativo = 0
+        SET pin_hash = ?, senha_busca = NULL, token_acesso = ?, ativo = 0
         WHERE id = ? AND id_estabelecimento = ?
       `, [criarHashSenha(pinAleatorio), tokenAleatorio, funcionario.id, idEstabelecimento]);
       await conexao.execute(`
@@ -343,7 +343,7 @@ async function criarOperacaoInicial(
   banco,
   idEstabelecimento,
   incluirDadosDemonstracao,
-  pinFuncionarioDemonstracao
+  senhaFuncionarioDemonstracao
 ) {
   if (await metadadoExiste(banco, 'operacao_inicial_criada')) return;
 
@@ -387,23 +387,25 @@ async function criarOperacaoInicial(
       }
 
       for (const funcionario of funcionariosSeed) {
-        const pin = pinFuncionarioDemonstracao || String(randomInt(100000, 1000000));
+        /* O garçom entra digitando só a senha, então duas senhas iguais na
+           mesma equipe se anulariam: o sufixo com o id mantém cada uma única,
+           inclusive quando DEMO_WAITER_PASSWORD fixa a base para os testes.
+           Sem a variável, a senha do ambiente de demonstração é aleatória. */
+        const senha = `${senhaFuncionarioDemonstracao || `garcom${randomInt(100000, 1000000)}`}${funcionario.id}`;
         const token = `garcom-${randomUUID().replaceAll('-', '')}`;
-        /* O garçom de demonstração nasce com senha para o ambiente de teste
-           entrar direto; um cadastro real começa sem senha, definida pelo
-           próprio funcionário no primeiro acesso pelo QR Code. */
         await conexao.execute(`
           INSERT INTO funcionarios
-            (id_estabelecimento, id, nome, cargo, usuario, pin_hash, token_acesso,
-             senha_definida_em, ativo)
-          VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1)
+            (id_estabelecimento, id, nome, cargo, usuario, pin_hash, senha_busca,
+             token_acesso, senha_definida_em, ativo)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1)
         `, [
           idEstabelecimento,
           funcionario.id,
           funcionario.nome,
           funcionario.cargo,
           funcionario.usuario,
-          criarHashSenha(pin),
+          criarHashSenha(senha),
+          criarIndiceSenhaGarcom(idEstabelecimento, senha),
           token
         ]);
       }
@@ -560,12 +562,14 @@ export async function prepararBanco({
   mysql: configuracaoMySql,
   administrador,
   incluirDadosDemonstracao = false,
-  pinFuncionarioDemonstracao = null,
+  senhaFuncionarioDemonstracao = null,
   slugEstabelecimento = 'estabelecimento-padrao'
 }) {
   if (!administrador?.senha) throw new Error('Defina ADMIN_PASSWORD para preparar o banco.');
-  if (pinFuncionarioDemonstracao && !/^\d{6,12}$/.test(pinFuncionarioDemonstracao)) {
-    throw new Error('DEMO_WAITER_PIN deve conter de 6 a 12 dígitos.');
+  if (senhaFuncionarioDemonstracao && !/^[a-z0-9][a-z0-9._-]{2,20}$/.test(senhaFuncionarioDemonstracao)) {
+    throw new Error(
+      'DEMO_WAITER_PASSWORD deve ter de 3 a 21 caracteres, usando letras minúsculas, números, ponto, hífen ou _.'
+    );
   }
   const nomeBanco = validarNomeBanco(configuracaoMySql.database);
   const configuracaoBase = await configuracaoBaseMySql(configuracaoMySql);
@@ -606,7 +610,7 @@ export async function prepararBanco({
       banco,
       idEstabelecimento,
       incluirDadosDemonstracao,
-      pinFuncionarioDemonstracao
+      senhaFuncionarioDemonstracao
     );
     return banco;
   } catch (erro) {

@@ -23,6 +23,22 @@ export function verificarSenha(senha, valorSalvo) {
   }
 }
 
+/*
+  Índice de busca da senha do garçom. O garçom entra digitando só a senha, então
+  o login precisa achar o cadastro sem testar o `pin_hash` de toda a equipe — e
+  um sal aleatório por linha não permitiria essa busca.
+
+  O sal vem do estabelecimento: a mesma senha em lojas diferentes gera índices
+  diferentes, o que impede comparar equipes de tenants distintos e mantém a
+  unicidade da senha restrita ao próprio estabelecimento. Continua sendo scrypt,
+  então o índice não é mais barato de atacar que o hash em si, e quem autentica
+  de fato é `verificarSenha` sobre o `pin_hash`.
+*/
+export function criarIndiceSenhaGarcom(idEstabelecimento, senha) {
+  const sal = createHash('sha256').update(`garcom:${Number(idEstabelecimento)}`).digest();
+  return scryptSync(senha, sal, 32).toString('hex');
+}
+
 export function criarHashToken(token) {
   return createHash('sha256').update(token).digest('hex');
 }

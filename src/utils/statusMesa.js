@@ -7,8 +7,10 @@
   ("Livre" / "Ocupada") e `comanda.status` ("Aberta", "Na cozinha",
   "Conta solicitada") — e não criam nenhum estado novo no banco.
 
-  "outro" só aparece no app do garçom, que enxerga apenas as próprias
-  comandas: a mesa está ocupada, mas por outro funcionário.
+  "outro" é a folga entre uma leitura e outra: a mesa consta como ocupada
+  mas a comanda correspondente ainda não chegou na lista. Painel e app do
+  garçom enxergam todas as comandas do estabelecimento, então ele some assim
+  que os dados se alinham.
 
   "pendente" não é um status novo no banco: é a comanda aberta que ainda
   tem item sem lançar para a cozinha, derivado dos itens que o backend já

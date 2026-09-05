@@ -41,19 +41,18 @@ import {
   limparItensPendentesAdminApi,
   estornarPagamentoPedidoApi,
   excluirAdicionalApi,
+  excluirFuncionarioApi,
   excluirProdutoApi,
   excluirPromocaoApi,
   finalizarComandaAdminApi,
   loginAdmin,
-  definirSenhaPrimeiroAcessoGarcom,
-  gerarAcessoFuncionarioApi,
   loginGarcom,
   logoutAdmin,
   logoutGarcom,
   removerItemComandaApi,
   removerItemComandaAdminApi,
+  rotacionarAcessoGarcomApi,
   salvarConfiguracaoApi,
-  solicitarContaApi,
   validarSessaoAdmin,
   validarCarrinhoApi,
   validarSessaoGarcom,
@@ -131,6 +130,8 @@ export function AppProvider({ children }) {
   const [adicionais, setAdicionais] = useState([]);
   const [promocoes, setPromocoes] = useState([]);
   const [funcionarios, setFuncionarios] = useState([]);
+  // Token do QR Code único da equipe, exibido na tela de funcionários.
+  const [acessoGarcom, setAcessoGarcom] = useState('');
   const [mesas, setMesas] = useState([]);
   const [pedidos, setPedidos] = useState([]);
   const [comandas, setComandas] = useState([]);
@@ -231,6 +232,7 @@ export function AppProvider({ children }) {
       setPromocoes(normalizarPromocoes(dados.promocoes, produtosNormalizados ?? []));
     }
     if (dados.funcionarios) setFuncionarios(dados.funcionarios);
+    if (dados.acessoGarcom) setAcessoGarcom(dados.acessoGarcom);
     if (dados.mesas) setMesas(dados.mesas);
     if (dados.pedidos) {
       const idsRecebidos = new Set(dados.pedidos.map((pedido) => pedido.id));
@@ -434,6 +436,7 @@ export function AppProvider({ children }) {
     setComandas([]);
     setMesas([]);
     setFuncionarios([]);
+    setAcessoGarcom('');
     setAdministradores([]);
     setAuditoria([]);
     setAlertaNovoPedido(null);
@@ -451,20 +454,16 @@ export function AppProvider({ children }) {
     await recarregarGarcom();
   }
 
-  async function entrarGarcom(usuario, pin) {
+  /* O token vem do QR Code único da equipe; a senha é a única coisa que o
+     garçom digita. */
+  async function entrarGarcom(tokenAcesso, senha) {
     try {
-      await abrirSessaoGarcom(await loginGarcom(usuario, pin));
+      await abrirSessaoGarcom(await loginGarcom(tokenAcesso, senha));
       return true;
     } catch (erro) {
       if (erro instanceof ErroApi && erro.status === 401) return false;
       throw erro;
     }
-  }
-
-  /* Primeiro acesso: o garçom define a senha pelo link do QR e já entra no
-     atendimento, sem passar de novo pela tela de login. */
-  async function definirSenhaGarcom(tokenAcesso, pin) {
-    await abrirSessaoGarcom(await definirSenhaPrimeiroAcessoGarcom(tokenAcesso, pin));
   }
 
   async function sairGarcom() {
@@ -591,10 +590,15 @@ export function AppProvider({ children }) {
     return resposta.funcionario.id;
   }
 
-  async function gerarAcessoFuncionario(id) {
-    const { funcionario } = await gerarAcessoFuncionarioApi(id);
-    setFuncionarios((atuais) => atuais.map((item) => item.id === id ? funcionario : item));
-    return funcionario;
+  async function excluirFuncionario(id) {
+    await excluirFuncionarioApi(id);
+    setFuncionarios((atuais) => atuais.filter((item) => item.id !== id));
+  }
+
+  async function rotacionarAcessoGarcom() {
+    const { acessoGarcom: novoToken } = await rotacionarAcessoGarcomApi();
+    setAcessoGarcom(novoToken);
+    return novoToken;
   }
 
   async function alternarFuncionario(id) {
@@ -764,11 +768,6 @@ export function AppProvider({ children }) {
     return true;
   }
 
-  async function solicitarConta(comandaId) {
-    await solicitarContaApi(comandaId);
-    await recarregarGarcom();
-  }
-
   async function setConfiguracao(dados) {
     const { configuracao: salva } = await salvarConfiguracaoApi(dados);
     const normalizada = normalizarConfiguracaoPublica(salva);
@@ -782,6 +781,8 @@ export function AppProvider({ children }) {
     adicionais,
     promocoes,
     funcionarios,
+    acessoGarcom,
+    rotacionarAcessoGarcom,
     mesas,
     pedidos,
     comandas,
@@ -806,7 +807,6 @@ export function AppProvider({ children }) {
     entrarAdmin,
     sairAdmin,
     entrarGarcom,
-    definirSenhaGarcom,
     sairGarcom,
     salvarProduto,
     salvarCategoria,
@@ -819,7 +819,7 @@ export function AppProvider({ children }) {
     salvarPromocao,
     removerPromocao,
     salvarFuncionario,
-    gerarAcessoFuncionario,
+    excluirFuncionario,
     alternarFuncionario,
     atualizarStatusPedido,
     confirmarPagamentoPedido,
@@ -836,7 +836,6 @@ export function AppProvider({ children }) {
     adicionarItemComanda,
     removerItemComanda,
     enviarComanda,
-    solicitarConta,
     limparItensPendentes,
     adicionarItemComandaAdmin,
     atualizarItemComandaAdmin,

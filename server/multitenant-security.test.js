@@ -265,6 +265,9 @@ function bancoLeituraTenant(idEsperado, nomeLoja) {
       consultas.push({ sql, parametros });
       assert.equal(Number(parametros[0]), idEsperado);
       assert.equal(/SELECT\s+\*/i.test(sql), false);
+      if (sql.includes('SELECT token_acesso_garcom')) {
+        return [[{ token_acesso_garcom: `equipe-${idEsperado}` }]];
+      }
       if (sql.includes('INNER JOIN configuracoes_estabelecimento ce')) {
         return [[{
           nome_loja: nomeLoja,
@@ -293,8 +296,9 @@ test('painel, relatórios e dados do garçom consultam somente o tenant autentic
   assert.equal(painelGarcom.configuracao.nomeLoja, 'Loja A');
   assert.ok(bancoA.consultas.length >= 9);
   assert.ok(bancoB.consultas.length >= 9);
+  // O garçom vê o salão inteiro do próprio estabelecimento — e só dele.
   const consultaComandasGarcom = bancoGarcom.consultas.find(({ sql }) => sql.includes('FROM comandas c'));
-  assert.deepEqual(consultaComandasGarcom.parametros, [11, 201]);
+  assert.deepEqual(consultaComandasGarcom.parametros, [11]);
 });
 
 test('configuração de conexão muda somente por variáveis do ambiente', async () => {

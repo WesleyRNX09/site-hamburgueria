@@ -12,7 +12,7 @@ const banco = await prepararBanco({
   mysql: config.mysql,
   administrador: config.administrador,
   incluirDadosDemonstracao: config.incluirDadosDemonstracao,
-  pinFuncionarioDemonstracao: config.pinFuncionarioDemonstracao,
+  senhaFuncionarioDemonstracao: config.senhaFuncionarioDemonstracao,
   slugEstabelecimento: config.tenantDesenvolvimento
 });
 await fecharBanco(banco);

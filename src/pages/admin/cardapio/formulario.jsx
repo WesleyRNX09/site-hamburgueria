@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
 import { useApp } from '../../../context/appContext';
+import { CANAIS_CATALOGO, canalCatalogo } from '../../../utils/canalCatalogo';
 import { otimizarImagemProduto } from '../../../utils/imageUpload';
 import { usarPlaceholderProduto } from '../../../utils/productImage';
 import styles from '../shared.module.css';
@@ -11,6 +12,7 @@ import styles from '../shared.module.css';
 const formularioVazio = {
   nome: '',
   categoriaId: '',
+  canal: 'ambos',
   descricao: '',
   preco: '',
   imagem: '',
@@ -107,6 +109,13 @@ function FormularioProduto() {
             <div className={`${styles.campo} ${styles.campoCompleto}`}><label htmlFor="descricao">Descrição</label><textarea id="descricao" value={dados.descricao} onChange={(event) => alterar('descricao', event.target.value)} placeholder="Descreva ingredientes e características..." /></div>
             <div className={styles.campo}><label htmlFor="preco">Preço</label><input id="preco" inputMode="decimal" value={dados.preco} onChange={(event) => alterar('preco', event.target.value)} placeholder="34,90" /></div>
             <div className={styles.campo}><label htmlFor="destaque">Destaque <span>(opcional)</span></label><input id="destaque" value={dados.destaque ?? ''} onChange={(event) => alterar('destaque', event.target.value)} placeholder="Ex: Mais vendido" /></div>
+            <div className={styles.campo}>
+              <label htmlFor="canalProduto">Onde aparece</label>
+              <select id="canalProduto" value={dados.canal ?? 'ambos'} onChange={(event) => alterar('canal', event.target.value)}>
+                {CANAIS_CATALOGO.map((canal) => <option key={canal.valor} value={canal.valor}>{canal.rotulo}</option>)}
+              </select>
+              <small className={styles.textoSecundario}>{canalCatalogo(dados.canal).ajuda}</small>
+            </div>
 
             <div className={`${styles.campo} ${styles.campoCompleto}`}>
               <div className={styles.tituloCampoComAcao}>

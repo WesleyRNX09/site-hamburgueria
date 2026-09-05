@@ -94,7 +94,7 @@ ALTER TABLE comandas
   ADD CONSTRAINT fk_comandas_mesa
     FOREIGN KEY (mesa_id) REFERENCES mesas(id),
   ADD CONSTRAINT fk_comandas_funcionario
-    FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id),
+    FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id) ON DELETE SET NULL,
   ADD CONSTRAINT fk_comandas_aberta_por_admin
     FOREIGN KEY (aberta_por_admin_id) REFERENCES administradores(id) ON DELETE SET NULL;
 

@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import GradeMesas, { LegendaMesas } from '../../components/GradeMesas';
+import GradeMesas from '../../components/GradeMesas';
 import WaiterLayout from '../../components/WaiterLayout';
 import { useApp } from '../../context/appContext';
 import { statusDaMesa } from '../../utils/statusMesa';
 import styles from './garcom.module.css';
-
-const ESTADOS_GARCOM = ['livre', 'aberta', 'pendente', 'cozinha', 'conta', 'outro'];
 
 function MesasGarcom() {
   const { mesas, comandas, abrirComanda } = useApp();
@@ -33,9 +31,6 @@ function MesasGarcom() {
     }
   }
 
-  const minhas = mesas.filter((mesa) => comandaDaMesa(mesa)).length;
-  const livres = mesas.filter((mesa) => mesa.status !== 'Ocupada').length;
-
   return (
     <WaiterLayout
       titulo="Mesas do salão"
@@ -49,20 +44,14 @@ function MesasGarcom() {
         </div>
       ) : (
         <section className={`${styles.painel} ${styles.painelSalao}`}>
-          <div className={styles.resumoSalao}>
-            <div><span>Livres</span><strong>{livres}</strong></div>
-            <div><span>Comigo</span><strong>{minhas}</strong></div>
-            <div><span>Mesas</span><strong>{mesas.length}</strong></div>
-          </div>
-
+          {/* Só a grade: no salão o garçom precisa do número da mesa, não de
+              resumo nem de legenda ocupando a tela do celular. */}
           <GradeMesas
             mesas={mesas}
             statusPorMesa={(mesa) => statusDaMesa(mesa, comandaDaMesa(mesa))}
-            mesaBloqueada={(mesa, status) => processando || status === 'outro'}
+            mesaBloqueada={() => processando}
             aoSelecionar={acessar}
           />
-
-          <LegendaMesas estados={ESTADOS_GARCOM} />
         </section>
       )}
     </WaiterLayout>

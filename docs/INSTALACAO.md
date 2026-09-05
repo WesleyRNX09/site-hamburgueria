@@ -98,7 +98,7 @@ SYNC_SUPERADMIN_CREDENTIALS=0
 
 # Dados demonstrativos — mantenha desativados em produção
 SEED_DEMO_DATA=0
-DEMO_WAITER_PIN=
+DEMO_WAITER_PASSWORD=
 ```
 
 Regras importantes:

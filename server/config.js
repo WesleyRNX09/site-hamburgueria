@@ -32,7 +32,7 @@ export const config = {
   porta: Number(process.env.PORT) || 3001,
   producao,
   incluirDadosDemonstracao: process.env.SEED_DEMO_DATA === '1',
-  pinFuncionarioDemonstracao: process.env.DEMO_WAITER_PIN || null,
+  senhaFuncionarioDemonstracao: process.env.DEMO_WAITER_PASSWORD || null,
   publicSiteUrl: process.env.PUBLIC_SITE_URL || '',
   dominioPrincipal: process.env.DOMINIO_PRINCIPAL || '',
   tenantDesenvolvimento: process.env.TENANT_DESENVOLVIMENTO || (!producao ? 'estabelecimento-padrao' : ''),

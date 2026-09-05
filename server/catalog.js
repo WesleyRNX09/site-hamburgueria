@@ -16,6 +16,58 @@ export function precoParaCentavos(valor) {
   return Math.round(Number(normalizado) * 100);
 }
 
+/*
+  Onde categoria e produto aparecem. O cardápio online e o salão dividem o
+  mesmo catálogo, mas a loja física vende mais coisa: 'salao' guarda o que não
+  deve chegar ao site, 'online' o contrário, e 'ambos' é o padrão de quem já
+  existia antes desta separação.
+*/
+export const CANAIS_CATALOGO = ['ambos', 'online', 'salao'];
+
+export function normalizarCanal(valor, padrao = 'ambos') {
+  const canal = String(valor ?? '').trim().toLowerCase();
+  return CANAIS_CATALOGO.includes(canal) ? canal : padrao;
+}
+
+/*
+  Filtro de visibilidade de um canal. A regra vale para as duas pontas: um
+  produto marcado 'ambos' dentro de uma categoria 'salao' continua fora do
+  cardápio online, porque a categoria já o tirou de lá.
+*/
+export function filtroCanal(canal, { aliasProduto = null, aliasCategoria = 'c' } = {}) {
+  if (!canal || canal === 'ambos') return { sql: '', parametros: [] };
+  const condicoes = [];
+  const parametros = [];
+  if (aliasProduto) {
+    condicoes.push(`${aliasProduto}.canal IN ('ambos', ?)`);
+    parametros.push(canal);
+  }
+  if (aliasCategoria) {
+    condicoes.push(`${aliasCategoria}.canal IN ('ambos', ?)`);
+    parametros.push(canal);
+  }
+  return { sql: condicoes.map((condicao) => `AND ${condicao}`).join(' '), parametros };
+}
+
+function mapearCategoria(linha) {
+  return {
+    id: Number(linha.id),
+    nome: linha.nome,
+    canal: linha.canal,
+    ordem: Number(linha.ordem),
+    ativo: Boolean(linha.ativo)
+  };
+}
+
+async function buscarCategoria(banco, idEstabelecimento, id) {
+  const [linhas] = await banco.execute(`
+    SELECT id, nome, canal, ordem, ativo
+    FROM categorias
+    WHERE id = ? AND id_estabelecimento = ?
+  `, [id, idEstabelecimento]);
+  return linhas[0] ? mapearCategoria(linhas[0]) : null;
+}
+
 function mapearAdicional(linha) {
   return {
     id: Number(linha.id),
@@ -31,6 +83,7 @@ function mapearProduto(linha, vinculos) {
     categoriaId: Number(linha.categoria_id),
     nome: linha.nome,
     categoria: linha.categoria,
+    canal: linha.canal,
     descricao: linha.descricao,
     preco: formatarPreco(linha.preco_centavos),
     imagem: linha.imagem_url,
@@ -60,20 +113,32 @@ async function buscarVinculos(banco, idEstabelecimento, produtosIds = []) {
 
 const SELECT_PRODUTOS = `
   SELECT p.id, p.categoria_id, p.nome, p.descricao, p.preco_centavos,
-         p.imagem_url, p.destaque, p.ativo, c.nome AS categoria
+         p.imagem_url, p.destaque, p.ativo, p.canal, c.nome AS categoria
   FROM produtos p
   INNER JOIN categorias c
     ON c.id = p.categoria_id AND c.id_estabelecimento = p.id_estabelecimento
 `;
 
-export async function listarCatalogo(banco, idEstabelecimento, { administrativo = false } = {}) {
+/*
+  `canal` recorta o catálogo para quem vai consumi-lo: 'online' para o site,
+  'salao' para o app do garçom, nada (ou 'ambos') para o painel, que precisa
+  enxergar e administrar os dois cardápios.
+*/
+export async function listarCatalogo(
+  banco,
+  idEstabelecimento,
+  { administrativo = false, canal = null } = {}
+) {
+  const canalCategoria = filtroCanal(canal, { aliasCategoria: 'categorias' });
+  const canalProduto = filtroCanal(canal, { aliasProduto: 'p', aliasCategoria: 'c' });
   const [[categorias], [adicionais], [produtos]] = await Promise.all([
     banco.execute(`
-      SELECT id, nome, ordem, ativo
+      SELECT id, nome, canal, ordem, ativo
       FROM categorias
       WHERE id_estabelecimento = ? ${administrativo ? '' : 'AND ativo = 1'}
+        ${canalCategoria.sql}
       ORDER BY ordem, nome
-    `, [idEstabelecimento]),
+    `, [idEstabelecimento, ...canalCategoria.parametros]),
     banco.execute(`
       SELECT id, nome, preco_centavos, ativo
       FROM adicionais
@@ -82,17 +147,13 @@ export async function listarCatalogo(banco, idEstabelecimento, { administrativo 
     `, [idEstabelecimento]),
     banco.execute(`${SELECT_PRODUTOS}
       WHERE p.id_estabelecimento = ? ${administrativo ? '' : 'AND p.ativo = 1 AND c.ativo = 1'}
+        ${canalProduto.sql}
       ORDER BY p.id
-    `, [idEstabelecimento])
+    `, [idEstabelecimento, ...canalProduto.parametros])
   ]);
   const vinculos = await buscarVinculos(banco, idEstabelecimento, produtos.map((produto) => Number(produto.id)));
   return {
-    categorias: categorias.map((categoria) => ({
-      id: Number(categoria.id),
-      nome: categoria.nome,
-      ordem: Number(categoria.ordem),
-      ativo: Boolean(categoria.ativo)
-    })),
+    categorias: categorias.map(mapearCategoria),
     adicionais: adicionais.map(mapearAdicional),
     produtos: produtos.map((produto) => mapearProduto(produto, vinculos))
   };
@@ -105,45 +166,31 @@ function validarCategoria(dados) {
   if (!Number.isInteger(ordem) || ordem < 0 || ordem > 9999) {
     throw new Error('Informe uma ordem entre 0 e 9999.');
   }
-  return { nome, ordem, ativo: dados?.ativo === false ? 0 : 1 };
+  return {
+    nome,
+    ordem,
+    canal: normalizarCanal(dados?.canal),
+    ativo: dados?.ativo === false ? 0 : 1
+  };
 }
 
 export async function criarCategoria(banco, idEstabelecimento, dados) {
   const categoria = validarCategoria(dados);
   const [resultado] = await banco.execute(`
-    INSERT INTO categorias (id_estabelecimento, nome, ordem, ativo) VALUES (?, ?, ?, ?)
-  `, [idEstabelecimento, categoria.nome, categoria.ordem, categoria.ativo]);
-  const [linhas] = await banco.execute(`
-    SELECT id, nome, ordem, ativo
-    FROM categorias
-    WHERE id = ? AND id_estabelecimento = ?
-  `, [resultado.insertId, idEstabelecimento]);
-  return {
-    id: Number(linhas[0].id),
-    nome: linhas[0].nome,
-    ordem: Number(linhas[0].ordem),
-    ativo: Boolean(linhas[0].ativo)
-  };
+    INSERT INTO categorias (id_estabelecimento, nome, canal, ordem, ativo)
+    VALUES (?, ?, ?, ?, ?)
+  `, [idEstabelecimento, categoria.nome, categoria.canal, categoria.ordem, categoria.ativo]);
+  return buscarCategoria(banco, idEstabelecimento, Number(resultado.insertId));
 }
 
 export async function atualizarCategoria(banco, idEstabelecimento, id, dados) {
   const categoria = validarCategoria(dados);
   const [resultado] = await banco.execute(`
-    UPDATE categorias SET nome = ?, ordem = ?, ativo = ?
+    UPDATE categorias SET nome = ?, canal = ?, ordem = ?, ativo = ?
     WHERE id = ? AND id_estabelecimento = ?
-  `, [categoria.nome, categoria.ordem, categoria.ativo, id, idEstabelecimento]);
+  `, [categoria.nome, categoria.canal, categoria.ordem, categoria.ativo, id, idEstabelecimento]);
   if (!resultado.affectedRows) return null;
-  const [linhas] = await banco.execute(`
-    SELECT id, nome, ordem, ativo
-    FROM categorias
-    WHERE id = ? AND id_estabelecimento = ?
-  `, [id, idEstabelecimento]);
-  return {
-    id: Number(linhas[0].id),
-    nome: linhas[0].nome,
-    ordem: Number(linhas[0].ordem),
-    ativo: Boolean(linhas[0].ativo)
-  };
+  return buscarCategoria(banco, idEstabelecimento, id);
 }
 
 export async function alternarStatusCategoria(banco, idEstabelecimento, id, ativo) {
@@ -151,17 +198,7 @@ export async function alternarStatusCategoria(banco, idEstabelecimento, id, ativ
     UPDATE categorias SET ativo = ? WHERE id = ? AND id_estabelecimento = ?
   `, [ativo ? 1 : 0, id, idEstabelecimento]);
   if (!resultado.affectedRows) return null;
-  const [linhas] = await banco.execute(`
-    SELECT id, nome, ordem, ativo
-    FROM categorias
-    WHERE id = ? AND id_estabelecimento = ?
-  `, [id, idEstabelecimento]);
-  return {
-    id: Number(linhas[0].id),
-    nome: linhas[0].nome,
-    ordem: Number(linhas[0].ordem),
-    ativo: Boolean(linhas[0].ativo)
-  };
+  return buscarCategoria(banco, idEstabelecimento, id);
 }
 
 export async function buscarProduto(banco, idEstabelecimento, id) {
@@ -226,6 +263,7 @@ async function validarProduto(banco, idEstabelecimento, dados) {
     nome,
     descricao,
     categoriaId,
+    canal: normalizarCanal(dados.canal),
     precoCentavos,
     adicionaisIds,
     destaque: String(dados.destaque ?? '').trim() || null,
@@ -251,11 +289,13 @@ export async function criarProduto(banco, idEstabelecimento, dados, imagemUrl) {
   const id = await executarTransacao(banco, async (conexao) => {
     const [resultado] = await conexao.execute(`
       INSERT INTO produtos
-        (id_estabelecimento, categoria_id, nome, descricao, preco_centavos, imagem_url, destaque, ativo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (id_estabelecimento, categoria_id, canal, nome, descricao, preco_centavos,
+         imagem_url, destaque, ativo)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       idEstabelecimento,
       produto.categoriaId,
+      produto.canal,
       produto.nome,
       produto.descricao,
       produto.precoCentavos,
@@ -276,11 +316,12 @@ export async function atualizarProduto(banco, idEstabelecimento, id, dados, imag
   await executarTransacao(banco, async (conexao) => {
     await conexao.execute(`
       UPDATE produtos
-      SET categoria_id = ?, nome = ?, descricao = ?, preco_centavos = ?, imagem_url = ?,
-          destaque = ?, ativo = ?
+      SET categoria_id = ?, canal = ?, nome = ?, descricao = ?, preco_centavos = ?,
+          imagem_url = ?, destaque = ?, ativo = ?
       WHERE id = ? AND id_estabelecimento = ?
     `, [
       produto.categoriaId,
+      produto.canal,
       produto.nome,
       produto.descricao,
       produto.precoCentavos,

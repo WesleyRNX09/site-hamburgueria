@@ -1,4 +1,4 @@
-.pagina { width: 100%; min-height: 100vh; background: var(--cor-secundaria); color: var(--cor-texto); }
+.pagina { display: flex; width: 100%; min-height: 100vh; flex-direction: column; background: var(--cor-secundaria); color: var(--cor-texto); }
 .header { position: sticky; top: 0; z-index: 20; display: flex; min-height: 76px; align-items: center; justify-content: space-between; gap: 22px; border-bottom: 1px solid rgb(from var(--cor-principal) r g b / 0.2); background: rgba(8, 8, 8, 0.96); padding: 0 max(18px, calc((100vw - 1180px) / 2)); backdrop-filter: blur(12px); }
 .logo { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; color: var(--cor-texto); text-align: left; cursor: pointer; }
 .logo > span { display: grid; width: 42px; height: 42px; place-items: center; border: 1.5px solid var(--cor-principal); border-radius: 12px; color: var(--cor-principal); }
@@ -19,7 +19,7 @@
 .perfil small { margin-top: 3px; color: #929292; font-size: 11px; }
 .perfil button { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid #303030; border-radius: 10px; background: var(--cor-card-profundo); color: #999; cursor: pointer; }
 .perfil button:hover { border-color: var(--cor-principal); color: var(--cor-principal); }
-.main { max-width: 1180px; margin: 0 auto; padding: 34px 18px 54px; }
+.main { display: flex; width: 100%; max-width: 1180px; flex: 1; flex-direction: column; margin: 0 auto; padding: 34px 18px 54px; }
 .titulo { margin-bottom: 24px; }
 .titulo h1 { margin: 0; font-size: clamp(27px, 4vw, 38px); }
 .titulo p { margin: 7px 0 0; color: #858585; font-size: 14px; }

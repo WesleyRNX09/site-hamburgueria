@@ -34,8 +34,7 @@ import {
   atualizarStatusPedido,
   buscarConfiguracao,
   buscarConfiguracaoPublica,
-  buscarFuncionarioPorTokenPendente,
-  buscarFuncionarioPorUsuario,
+  buscarFuncionarioPorSenha,
   confirmarPagamento,
   criarAdministrador,
   criarMesa,
@@ -43,6 +42,7 @@ import {
   enviarComanda,
   enviarComandaAdmin,
   estornarPagamento,
+  excluirFuncionario,
   excluirPromocao,
   finalizarComandaAdmin,
   listarDadosAdmin,
@@ -53,12 +53,11 @@ import {
   limparItensNaoLancadosAdmin,
   removerItemComanda,
   removerItemComandaAdmin,
+  rotacionarTokenAcessoGarcom,
   salvarConfiguracao,
-  definirSenhaPrimeiroAcesso,
-  gerarNovoAcessoFuncionario,
   salvarFuncionario,
   salvarPromocao,
-  solicitarConta
+  tokenAcessoGarcomValido
 } from './operations.js';
 import {
   criarHashToken,
@@ -389,7 +388,7 @@ async function rotaPublica({ banco, requisicao, resposta, caminho, url, limitado
 
   if (requisicao.method === 'GET' && caminho === '/api/catalogo') {
     resposta.setHeader('Cache-Control', 'no-store');
-    responderJson(resposta, 200, await listarCatalogo(banco, idEstabelecimento));
+    responderJson(resposta, 200, await listarCatalogo(banco, idEstabelecimento, { canal: 'online' }));
     return true;
   }
 
@@ -1000,15 +999,12 @@ async function rotaAdmin({
     responderJson(resposta, 200, { funcionario });
     return true;
   }
-  const funcionarioAcesso = caminho.match(/^\/api\/admin\/funcionarios\/(\d+)\/acesso$/);
-  if (requisicao.method === 'POST' && funcionarioAcesso) {
-    const funcionario = await gerarNovoAcessoFuncionario(
-      banco,
-      idEstabelecimento,
-      funcionarioAcesso[1]
-    );
-    if (!funcionario) throw new ErroHttp(404, 'Funcionário não encontrado.');
-    responderJson(resposta, 200, { funcionario });
+  /* QR Code único da equipe: trocá-lo invalida os códigos já impressos, sem
+     mexer em nenhum cadastro. */
+  if (requisicao.method === 'POST' && caminho === '/api/admin/acesso-garcom') {
+    responderJson(resposta, 200, {
+      acessoGarcom: await rotacionarTokenAcessoGarcom(banco, idEstabelecimento)
+    });
     return true;
   }
   const funcionarioId = caminho.match(/^\/api\/admin\/funcionarios\/(\d+)$/);
@@ -1021,6 +1017,13 @@ async function rotaAdmin({
         funcionarioId[1]
       )
     });
+    return true;
+  }
+  if (requisicao.method === 'DELETE' && funcionarioId) {
+    if (!await excluirFuncionario(banco, idEstabelecimento, funcionarioId[1])) {
+      throw new ErroHttp(404, 'Funcionário não encontrado.');
+    }
+    responderJson(resposta, 200, { sucesso: true });
     return true;
   }
 
@@ -1123,79 +1126,40 @@ async function rotaGarcom({
   jwtSecret
 }) {
   const idEstabelecimento = requisicao.estabelecimento.id;
-  /* Primeiro acesso pelo QR Code: a tela confirma de quem é o link antes de
-     pedir a senha. Só devolve nome, cargo e usuário — nada que sirva para
-     entrar — e mesmo assim conta como tentativa, para o token não poder ser
+  /* QR Code único da equipe: a tela só confirma que o código ainda vale antes
+     de pedir a senha. Não devolve nada sobre o estabelecimento nem sobre a
+     equipe, e mesmo assim conta como tentativa, para o token não poder ser
      varrido às cegas. */
-  const primeiroAcesso = caminho.match(/^\/api\/garcom\/primeiro-acesso\/([\w.-]{1,160})$/);
-  if (requisicao.method === 'GET' && primeiroAcesso) {
-    const chaves = chavesTentativa(requisicao, 'garcom', primeiroAcesso[1]);
+  const acessoEquipe = caminho.match(/^\/api\/garcom\/acesso\/([\w.-]{1,160})$/);
+  if (requisicao.method === 'GET' && acessoEquipe) {
+    const chaves = chavesTentativa(requisicao, 'garcom', acessoEquipe[1]);
     validarLimiteLogin(limitadorGarcom, chaves);
-    const funcionario = await buscarFuncionarioPorTokenPendente(
-      banco,
-      idEstabelecimento,
-      primeiroAcesso[1]
-    );
-    if (!funcionario) {
+    if (!await tokenAcessoGarcomValido(banco, idEstabelecimento, acessoEquipe[1])) {
       chaves.forEach((chave) => limitadorGarcom.registrarFalha(chave));
-      throw new ErroHttp(404, 'Este link de acesso não é mais válido. Peça um novo QR Code ao gerente.');
+      throw new ErroHttp(404, 'Este QR Code não vale mais. Peça o código atual ao gerente.');
     }
-    responderJson(resposta, 200, {
-      funcionario: {
-        nome: funcionario.nome,
-        cargo: funcionario.cargo,
-        usuario: funcionario.usuario
-      }
-    });
+    responderJson(resposta, 200, { valido: true });
     return true;
   }
 
-  /* Define a senha e já entra: o garçom lê o QR uma vez, escolhe a senha e
-     segue para o atendimento. O link não vale mais depois disso. */
-  if (requisicao.method === 'POST' && caminho === '/api/garcom/primeiro-acesso') {
-    const dados = await lerJson(requisicao);
-    const tokenAcesso = String(dados.token ?? '');
-    const chaves = chavesTentativa(requisicao, 'garcom', tokenAcesso);
-    validarLimiteLogin(limitadorGarcom, chaves);
-    const funcionario = await definirSenhaPrimeiroAcesso(
-      banco,
-      idEstabelecimento,
-      tokenAcesso,
-      String(dados.pin ?? '')
-    );
-    chaves.forEach((chave) => limitadorGarcom.limpar(chave));
-    const sessao = await criarSessao(
-      banco,
-      jwtSecret,
-      idEstabelecimento,
-      'sessoes_garcom',
-      'funcionario_id',
-      funcionario.id,
-      'garcom',
-      DURACAO_SESSAO_GARCOM_MS
-    );
-    responderJson(resposta, 201, {
-      token: sessao.token,
-      expiraEm: sessao.expiraEm,
-      garcom: {
-        id: String(funcionario.id),
-        nome: funcionario.nome,
-        cargo: funcionario.cargo,
-        perfil: 'Garçom',
-        idEstabelecimento,
-        superadministrador: false
-      }
-    });
-    return true;
-  }
-
+  /* Login do garçom: só a senha, para o acesso no meio do salão ser rápido. O
+     QR Code da equipe entra junto como segunda condição — sem ele a senha
+     curta ficaria sozinha protegendo a conta. */
   if (requisicao.method === 'POST' && caminho === '/api/garcom/login') {
     const dados = await lerJson(requisicao);
-    const usuario = String(dados.usuario ?? '').trim().toLowerCase();
-    const chaves = chavesTentativa(requisicao, 'garcom', usuario);
+    const tokenEquipe = String(dados.token ?? '');
+    const chaves = chavesTentativa(requisicao, 'garcom', tokenEquipe);
     validarLimiteLogin(limitadorGarcom, chaves);
-    const funcionario = await buscarFuncionarioPorUsuario(banco, idEstabelecimento, usuario);
-    if (!funcionario || !verificarSenha(String(dados.pin ?? ''), funcionario.pin_hash)) {
+    if (!await tokenAcessoGarcomValido(banco, idEstabelecimento, tokenEquipe)) {
+      chaves.forEach((chave) => limitadorGarcom.registrarFalha(chave));
+      throw new ErroHttp(404, 'Este QR Code não vale mais. Peça o código atual ao gerente.');
+    }
+    const funcionario = await buscarFuncionarioPorSenha(
+      banco,
+      idEstabelecimento,
+      String(dados.senha ?? '')
+    );
+    if (!funcionario) {
       chaves.forEach((chave) => limitadorGarcom.registrarFalha(chave));
       throw new ErroHttp(401, 'Não foi possível autenticar com os dados informados.');
     }
@@ -1249,7 +1213,7 @@ async function rotaGarcom({
   const garcom = await obterGarcom(banco, requisicao, jwtSecret);
 
   if (requisicao.method === 'GET' && caminho === '/api/garcom/dados') {
-    responderJson(resposta, 200, await listarDadosGarcom(banco, idEstabelecimento, garcom.id));
+    responderJson(resposta, 200, await listarDadosGarcom(banco, idEstabelecimento));
     return true;
   }
 
@@ -1303,13 +1267,6 @@ async function rotaGarcom({
     responderJson(resposta, 200, { sucesso: true });
     return true;
   }
-  const conta = caminho.match(/^\/api\/garcom\/comandas\/(\d+)\/conta$/);
-  if (requisicao.method === 'POST' && conta) {
-    await solicitarConta(banco, idEstabelecimento, conta[1], garcom.id);
-    responderJson(resposta, 200, { sucesso: true });
-    return true;
-  }
-
   return false;
 }
 

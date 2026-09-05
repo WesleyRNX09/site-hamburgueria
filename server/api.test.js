@@ -1040,8 +1040,7 @@ if (!executarIntegracao) {
   let pastaUploads;
   let urlBase;
   let urlBaseTenantB;
-  let usuarioGarcomDemonstracao;
-  let usuarioGarcomAna;
+  let acessoEquipe;
   let tokenSessaoGarcom;
   let idGarcomDemonstracao;
   let tokenAdmin;
@@ -1134,7 +1133,7 @@ if (!executarIntegracao) {
       mysql: configuracaoMySql,
       administrador,
       incluirDadosDemonstracao: true,
-      pinFuncionarioDemonstracao: '246810'
+      senhaFuncionarioDemonstracao: 'demo'
     });
     const [tenantB] = await banco.execute(`
       INSERT INTO estabelecimentos
@@ -1244,8 +1243,9 @@ if (!executarIntegracao) {
     assert.equal(dados.status, 200);
     assert.equal(dados.corpo.pedidos.length, pedidosSeed.length);
     assert.equal(dados.corpo.mesas.length, mesasSeed.length);
-    usuarioGarcomDemonstracao = dados.corpo.funcionarios.find((item) => item.nome === 'Carlos Silva').usuario;
-    usuarioGarcomAna = dados.corpo.funcionarios.find((item) => item.nome === 'Ana Souza').usuario;
+    // QR Code único da equipe: mesmo token para todos os garçons do tenant.
+    acessoEquipe = dados.corpo.acessoGarcom;
+    assert.ok(acessoEquipe);
     tokenAdmin = login.corpo.token;
 
     const configurada = await salvarConfiguracaoTeste();
@@ -1616,7 +1616,7 @@ if (!executarIntegracao) {
   test('autentica garçom e abre comanda vinculada automaticamente', async () => {
     const login = await chamar('/api/garcom/login', {
       metodo: 'POST',
-      dados: { usuario: usuarioGarcomDemonstracao, pin: '246810' }
+      dados: { token: acessoEquipe, senha: 'demo1' }
     });
     assert.equal(login.status, 200);
     assert.equal(login.corpo.garcom.nome, 'Carlos Silva');
@@ -1642,22 +1642,21 @@ if (!executarIntegracao) {
     assert.equal(aberta.corpo.comanda.funcionarioId, login.corpo.garcom.id);
   });
 
-  test('isola comandas por garçom e exige a sequência operacional', async () => {
+  test('compartilha o salão entre a equipe e exige a sequência operacional', async () => {
     const dados = await chamar('/api/garcom/dados', { token: tokenSessaoGarcom });
     assert.equal(dados.status, 200);
     assert.ok(dados.corpo.comandas.length > 0);
-    assert.ok(dados.corpo.comandas.every(
-      (comanda) => comanda.funcionarioId === idGarcomDemonstracao || comanda.funcionarioId === null
-    ));
-    assert.equal(dados.corpo.comandas.some((comanda) => comanda.garcom === 'Ana Souza'), false);
+    // A mesa atendida por outro garçom aparece para toda a equipe.
+    assert.equal(dados.corpo.comandas.some((comanda) => comanda.garcom === 'Ana Souza'), true);
 
     const comanda = dados.corpo.comandas.find((item) => item.mesaId === 1);
     assert.ok(comanda);
-    const contaAntecipada = await chamar(`/api/garcom/comandas/${comanda.id}/conta`, {
+    // Fechar a conta é do caixa: a rota não existe mais para o garçom.
+    const contaPeloGarcom = await chamar(`/api/garcom/comandas/${comanda.id}/conta`, {
       metodo: 'POST',
       token: tokenSessaoGarcom
     });
-    assert.equal(contaAntecipada.status, 409);
+    assert.equal(contaPeloGarcom.status, 404);
 
     const item = await chamar(`/api/garcom/comandas/${comanda.id}/itens`, {
       metodo: 'POST',
@@ -1727,15 +1726,138 @@ if (!executarIntegracao) {
 
     const loginAna = await chamar('/api/garcom/login', {
       metodo: 'POST',
-      dados: { usuario: usuarioGarcomAna, pin: '246810' }
+      dados: { token: acessoEquipe, senha: 'demo2' }
     });
     assert.equal(loginAna.status, 200);
-    const tentativaIdor = await chamar(`/api/garcom/comandas/${comanda.id}/itens`, {
+    // Outro garçom da mesma equipe continua o atendimento da mesma comanda.
+    const outroGarcom = await chamar(`/api/garcom/comandas/${comanda.id}/itens`, {
       metodo: 'POST',
       token: loginAna.corpo.token,
       dados: { produtoId: 1, quantidade: 1, adicionais: [] }
     });
-    assert.equal(tentativaIdor.status, 403);
+    assert.equal(outroGarcom.status, 201);
+
+    // A comanda segue creditada a quem a abriu, e o item guarda quem o lançou.
+    const compartilhada = await chamar('/api/garcom/dados', { token: loginAna.corpo.token });
+    const comandaCompartilhada = compartilhada.corpo.comandas.find((item) => item.id === comanda.id);
+    assert.equal(comandaCompartilhada.funcionarioId, idGarcomDemonstracao);
+    const enviarPelaAna = await chamar(`/api/garcom/comandas/${comanda.id}/enviar`, {
+      metodo: 'POST',
+      token: loginAna.corpo.token
+    });
+    assert.equal(enviarPelaAna.status, 200);
+    const conferencia = await chamar('/api/garcom/dados', { token: tokenSessaoGarcom });
+    const comandaConferida = conferencia.corpo.comandas.find((item) => item.id === comanda.id);
+    assert.equal(comandaConferida.itens.at(-1).enviadoPor.nome, 'Ana Souza');
+  });
+
+  test('separa o cardápio do salão do cardápio online', async () => {
+    const categoriaSalao = await chamar('/api/admin/categorias', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { nome: 'Chopp', ordem: 90, canal: 'salao' }
+    });
+    assert.equal(categoriaSalao.status, 201);
+    assert.equal(categoriaSalao.corpo.categoria.canal, 'salao');
+
+    const soNoSalao = await chamar('/api/admin/produtos', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: {
+        nome: 'Chopp 300ml',
+        categoriaId: categoriaSalao.corpo.categoria.id,
+        descricao: 'Tirado na hora, só na mesa.',
+        preco: '12,00',
+        adicionaisIds: []
+      }
+    });
+    assert.equal(soNoSalao.status, 201);
+    const idChopp = soNoSalao.corpo.produto.id;
+
+    // Produto 'online' dentro de categoria que aparece nos dois lugares.
+    const soOnline = await chamar('/api/admin/produtos', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: {
+        nome: 'Combo Entrega',
+        categoria: 'Hambúrgueres',
+        descricao: 'Combo exclusivo do delivery.',
+        preco: '59,90',
+        canal: 'online',
+        adicionaisIds: []
+      }
+    });
+    assert.equal(soOnline.status, 201);
+    assert.equal(soOnline.corpo.produto.canal, 'online');
+    const idComboEntrega = soOnline.corpo.produto.id;
+
+    // O painel administra os dois cardápios e enxerga tudo.
+    const painel = await chamar('/api/admin/dados', { token: tokenAdmin });
+    assert.ok(painel.corpo.produtos.some((produto) => produto.id === idChopp));
+    assert.ok(painel.corpo.produtos.some((produto) => produto.id === idComboEntrega));
+
+    // O site não recebe nada do salão.
+    const publico = await chamar('/api/publico/inicial');
+    assert.equal(publico.corpo.categorias.some((item) => item.nome === 'Chopp'), false);
+    assert.equal(publico.corpo.produtos.some((produto) => produto.id === idChopp), false);
+    assert.ok(publico.corpo.produtos.some((produto) => produto.id === idComboEntrega));
+
+    // O garçom recebe o cardápio do salão, sem o que é exclusivo do site.
+    const salao = await chamar('/api/garcom/dados', { token: tokenSessaoGarcom });
+    assert.ok(salao.corpo.categorias.some((item) => item.nome === 'Chopp'));
+    assert.ok(salao.corpo.produtos.some((produto) => produto.id === idChopp));
+    assert.equal(salao.corpo.produtos.some((produto) => produto.id === idComboEntrega), false);
+
+    // Mandar o id direto na requisição não fura o recorte, dos dois lados.
+    const pedidoComItemDoSalao = await chamar('/api/pedidos', {
+      metodo: 'POST',
+      dados: dadosPedido({ itens: [{ id: idChopp, quantidade: 1 }] })
+    });
+    assert.equal(pedidoComItemDoSalao.status, 409);
+
+    const comandaDoSalao = salao.corpo.comandas.find((item) => item.mesaId === 1);
+    assert.ok(comandaDoSalao);
+    const itemSoOnline = await chamar(`/api/garcom/comandas/${comandaDoSalao.id}/itens`, {
+      metodo: 'POST',
+      token: tokenSessaoGarcom,
+      dados: { produtoId: idComboEntrega, quantidade: 1, adicionais: [] }
+    });
+    assert.equal(itemSoOnline.status, 409);
+
+    const itemDoSalao = await chamar(`/api/garcom/comandas/${comandaDoSalao.id}/itens`, {
+      metodo: 'POST',
+      token: tokenSessaoGarcom,
+      dados: { produtoId: idChopp, quantidade: 1, adicionais: [] }
+    });
+    assert.equal(itemDoSalao.status, 201);
+
+    // Promoção é vitrine do site: produto só do salão não pode ser anunciado.
+    const promocaoInvalida = await chamar('/api/admin/promocoes', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: {
+        produtoId: idChopp,
+        nome: 'Chopp em dobro',
+        descricao: 'Promoção de teste.',
+        precoAntigo: '12,00',
+        preco: '9,00'
+      }
+    });
+    assert.equal(promocaoInvalida.status, 409);
+
+    // A mesma promoção passa quando o produto aparece no cardápio online.
+    const promocaoValida = await chamar('/api/admin/promocoes', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: {
+        produtoId: 1,
+        nome: 'Promoção de teste do canal',
+        descricao: 'Produto que aparece no site.',
+        precoAntigo: '29,90',
+        preco: '24,90'
+      }
+    });
+    assert.equal(promocaoValida.status, 201);
   });
 
   test('administrador cria mesas, edita itens e finaliza comandas', async () => {
@@ -1890,107 +2012,153 @@ if (!executarIntegracao) {
     assert.equal(recancelar.status, 409);
   });
 
-  test('primeiro acesso cria a senha uma única vez e o QR deixa de valer', async () => {
+  test('cadastra garçom com senha e entra só com ela pelo QR único da equipe', async () => {
     const cadastrado = await chamar('/api/admin/funcionarios', {
       metodo: 'POST',
       token: tokenAdmin,
-      dados: { nome: 'Bruno Lima', cargo: 'Garçom', usuario: 'bruno.lima' }
+      dados: { nome: 'Bruno Lima', cargo: 'Garçom', senha: 'bruno' }
     });
     assert.equal(cadastrado.status, 201);
-    assert.equal(cadastrado.corpo.funcionario.acessoPendente, true);
-    const tokenQr = cadastrado.corpo.funcionario.token;
+    assert.equal(cadastrado.corpo.funcionario.senhaDefinida, true);
+    // O token pessoal do QR antigo não aparece mais no painel.
+    assert.equal('token' in cadastrado.corpo.funcionario, false);
 
-    // Sem senha definida, o login por usuário ainda não abre nada.
-    const antesDaSenha = await chamar('/api/garcom/login', {
+    // Senha curta demais não passa na validação do servidor.
+    const curta = await chamar('/api/admin/funcionarios', {
       metodo: 'POST',
-      dados: { usuario: 'bruno.lima', pin: '654321' }
-    });
-    assert.equal(antesDaSenha.status, 401);
-
-    const convite = await chamar(`/api/garcom/primeiro-acesso/${tokenQr}`);
-    assert.equal(convite.status, 200);
-    assert.equal(convite.corpo.funcionario.usuario, 'bruno.lima');
-    assert.equal('token' in convite.corpo.funcionario, false);
-
-    const curta = await chamar('/api/garcom/primeiro-acesso', {
-      metodo: 'POST',
-      dados: { token: tokenQr, pin: '1234' }
+      token: tokenAdmin,
+      dados: { nome: 'Curta Silva', cargo: 'Garçom', senha: 'abc' }
     });
     assert.equal(curta.status, 400);
 
-    const definida = await chamar('/api/garcom/primeiro-acesso', {
+    // A senha identifica a pessoa, então não pode se repetir na mesma equipe.
+    const repetida = await chamar('/api/admin/funcionarios', {
       metodo: 'POST',
-      dados: { token: tokenQr, pin: '654321' }
+      token: tokenAdmin,
+      dados: { nome: 'Outro Bruno', cargo: 'Garçom', senha: 'bruno' }
     });
-    assert.equal(definida.status, 201);
-    assert.ok(definida.corpo.token);
+    assert.equal(repetida.status, 409);
 
-    // O mesmo link não serve para uma segunda troca de senha.
-    const repetido = await chamar('/api/garcom/primeiro-acesso', {
-      metodo: 'POST',
-      dados: { token: tokenQr, pin: '999999' }
-    });
-    assert.equal(repetido.status, 404);
-    const conviteUsado = await chamar(`/api/garcom/primeiro-acesso/${tokenQr}`);
-    assert.equal(conviteUsado.status, 404);
+    // O mesmo QR da equipe serve para o garçom recém-cadastrado.
+    const convite = await chamar(`/api/garcom/acesso/${acessoEquipe}`);
+    assert.equal(convite.status, 200);
+    assert.equal(convite.corpo.valido, true);
 
     const login = await chamar('/api/garcom/login', {
       metodo: 'POST',
-      dados: { usuario: 'bruno.lima', pin: '654321' }
+      dados: { token: acessoEquipe, senha: 'bruno' }
     });
     assert.equal(login.status, 200);
     assert.equal(login.corpo.garcom.nome, 'Bruno Lima');
 
-    // Novo QR do painel: a senha anterior morre junto com a sessão aberta.
-    const renovado = await chamar(`/api/admin/funcionarios/${cadastrado.corpo.funcionario.id}/acesso`, {
+    // Maiúsculas do teclado do celular não derrubam o acesso.
+    const comMaiuscula = await chamar('/api/garcom/login', {
+      metodo: 'POST',
+      dados: { token: acessoEquipe, senha: 'Bruno' }
+    });
+    assert.equal(comMaiuscula.status, 200);
+
+    // Sem o QR da equipe a senha sozinha não abre sessão.
+    const semQr = await chamar('/api/garcom/login', {
+      metodo: 'POST',
+      dados: { token: 'equipe-inexistente', senha: 'bruno' }
+    });
+    assert.equal(semQr.status, 404);
+
+    // Trocar a senha pelo painel derruba a sessão aberta e mata a senha antiga.
+    const trocada = await chamar(`/api/admin/funcionarios/${cadastrado.corpo.funcionario.id}`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { nome: 'Bruno Lima', cargo: 'Garçom', senha: 'bruno2' }
+    });
+    assert.equal(trocada.status, 200);
+    const sessaoDerrubada = await chamar('/api/garcom/sessao', { token: login.corpo.token });
+    assert.equal(sessaoDerrubada.status, 401);
+    const senhaAntiga = await chamar('/api/garcom/login', {
+      metodo: 'POST',
+      dados: { token: acessoEquipe, senha: 'bruno' }
+    });
+    assert.equal(senhaAntiga.status, 401);
+    const senhaNova = await chamar('/api/garcom/login', {
+      metodo: 'POST',
+      dados: { token: acessoEquipe, senha: 'bruno2' }
+    });
+    assert.equal(senhaNova.status, 200);
+
+    // Editar sem informar senha mantém a que já existe.
+    const semSenha = await chamar(`/api/admin/funcionarios/${cadastrado.corpo.funcionario.id}`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { nome: 'Bruno Lima Souza', cargo: 'Garçom' }
+    });
+    assert.equal(semSenha.status, 200);
+    const aindaEntra = await chamar('/api/garcom/login', {
+      metodo: 'POST',
+      dados: { token: acessoEquipe, senha: 'bruno2' }
+    });
+    assert.equal(aindaEntra.status, 200);
+
+    // Excluir encerra o acesso e some da equipe; o histórico permanece.
+    const excluido = await chamar(`/api/admin/funcionarios/${cadastrado.corpo.funcionario.id}`, {
+      metodo: 'DELETE',
+      token: tokenAdmin
+    });
+    assert.equal(excluido.status, 200);
+    const reexcluir = await chamar(`/api/admin/funcionarios/${cadastrado.corpo.funcionario.id}`, {
+      metodo: 'DELETE',
+      token: tokenAdmin
+    });
+    assert.equal(reexcluir.status, 404);
+    const depoisDaExclusao = await chamar('/api/garcom/login', {
+      metodo: 'POST',
+      dados: { token: acessoEquipe, senha: 'bruno2' }
+    });
+    assert.equal(depoisDaExclusao.status, 401);
+    const equipe = await chamar('/api/admin/dados', { token: tokenAdmin });
+    assert.equal(
+      equipe.corpo.funcionarios.some((item) => item.id === cadastrado.corpo.funcionario.id),
+      false
+    );
+  });
+
+  test('trocar o QR da equipe invalida o código anterior', async () => {
+    const novo = await chamar('/api/admin/acesso-garcom', {
       metodo: 'POST',
       token: tokenAdmin
     });
-    assert.equal(renovado.status, 200);
-    assert.equal(renovado.corpo.funcionario.acessoPendente, true);
-    assert.notEqual(renovado.corpo.funcionario.token, tokenQr);
+    assert.equal(novo.status, 200);
+    assert.notEqual(novo.corpo.acessoGarcom, acessoEquipe);
 
-    const senhaAntiga = await chamar('/api/garcom/login', {
-      metodo: 'POST',
-      dados: { usuario: 'bruno.lima', pin: '654321' }
-    });
-    assert.equal(senhaAntiga.status, 401);
-    const sessaoDerrubada = await chamar('/api/garcom/sessao', { token: login.corpo.token });
-    assert.equal(sessaoDerrubada.status, 401);
+    const anterior = await chamar(`/api/garcom/acesso/${acessoEquipe}`);
+    assert.equal(anterior.status, 404);
+    const atual = await chamar(`/api/garcom/acesso/${novo.corpo.acessoGarcom}`);
+    assert.equal(atual.status, 200);
 
-    // O QR novo recomeça o ciclo: outra senha, mesmo usuário.
-    const segundaSenha = await chamar('/api/garcom/primeiro-acesso', {
+    const loginComAntigo = await chamar('/api/garcom/login', {
       metodo: 'POST',
-      dados: { token: renovado.corpo.funcionario.token, pin: '112233' }
+      dados: { token: acessoEquipe, senha: 'demo1' }
     });
-    assert.equal(segundaSenha.status, 201);
-    const loginFinal = await chamar('/api/garcom/login', {
-      metodo: 'POST',
-      dados: { usuario: 'bruno.lima', pin: '112233' }
-    });
-    assert.equal(loginFinal.status, 200);
-  });
+    assert.equal(loginComAntigo.status, 404);
 
-  test('recusa usuário repetido no mesmo estabelecimento', async () => {
-    const repetido = await chamar('/api/admin/funcionarios', {
+    acessoEquipe = novo.corpo.acessoGarcom;
+    const loginComNovo = await chamar('/api/garcom/login', {
       metodo: 'POST',
-      token: tokenAdmin,
-      dados: { nome: 'Outro Bruno', cargo: 'Garçom', usuario: 'bruno.lima' }
+      dados: { token: acessoEquipe, senha: 'demo1' }
     });
-    assert.equal(repetido.status, 409);
+    assert.equal(loginComNovo.status, 200);
   });
 
   test('bloqueia novas tentativas após repetidas senhas inválidas', async () => {
     for (let tentativa = 0; tentativa < 5; tentativa += 1) {
       const resposta = await chamar('/api/garcom/login', {
         metodo: 'POST',
-        dados: { usuario: 'usuario-invalido', pin: '000000' }
+        dados: { token: acessoEquipe, senha: 'senha-que-nao-existe' }
       });
       assert.equal(resposta.status, 401);
     }
     const bloqueado = await chamar('/api/garcom/login', {
       metodo: 'POST',
-      dados: { usuario: 'usuario-invalido', pin: '000000' }
+      dados: { token: acessoEquipe, senha: 'senha-que-nao-existe' }
     });
     assert.equal(bloqueado.status, 429);
   });

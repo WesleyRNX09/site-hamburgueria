@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Minus, Plus, RefreshCw, Send, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Check, Minus, Plus, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -22,23 +22,24 @@ function ComandaGarcom() {
   const { mesaId } = useParams();
   const {
     produtos,
+    categorias,
     adicionais,
     mesas,
     comandas,
-    garcomSessao,
     abrirComanda,
     adicionarItemComanda,
     removerItemComanda,
     enviarComanda,
-    solicitarConta,
     limparItensPendentes,
-    recarregarGarcom,
     numeroPreco
   } = useApp();
   const navigate = useNavigate();
   const mesa = mesas.find((item) => item.id === Number(mesaId));
   const comanda = comandas.find((item) => item.mesaId === Number(mesaId) && item.status !== 'Encerrada');
-  const [categoria, setCategoria] = useState('Todos');
+  /* Cardápio em dois passos: a lista abre nas categorias e só entra nos itens
+     depois que o garçom escolhe uma. Guardar o id, e não a categoria inteira,
+     mantém a tela certa quando os dados são recarregados no meio do turno. */
+  const [categoriaAbertaId, setCategoriaAbertaId] = useState(null);
   const [produtoSelecionado, setProdutoSelecionado] = useState(null);
   const [confirmacaoAberta, setConfirmacaoAberta] = useState(false);
   const [quantidade, setQuantidade] = useState(1);
@@ -113,20 +114,26 @@ function ComandaGarcom() {
     return <WaiterLayout titulo="Mesa não encontrada" subtitulo="Volte para selecionar uma mesa válida."><button type="button" className={styles.botaoSecundario} onClick={() => navigate('/garcom/mesas')}><ArrowLeft size={17} /> Voltar</button></WaiterLayout>;
   }
 
+  /* O salão é da equipe: comanda de colega não bloqueia mais a tela. Se a
+     mesa aparece ocupada sem comanda na lista, é atraso de atualização — abrir
+     a comanda entra na que já existe, em vez de criar outra. */
   if (!comanda) {
-    if (mesa.status === 'Ocupada') {
-      return <WaiterLayout titulo={`Mesa ${mesa.numero} em atendimento`} subtitulo="Esta mesa está vinculada a outro funcionário."><button type="button" className={styles.botaoSecundario} onClick={() => navigate('/garcom/mesas')}><ArrowLeft size={17} /> Voltar</button></WaiterLayout>;
-    }
     return <WaiterLayout titulo={`Mesa ${mesa.numero}`} subtitulo="A comanda ainda não foi aberta."><button disabled={processando === 'abrir'} type="button" className={styles.botaoPrincipal} onClick={() => executarAcao('abrir', () => abrirComanda(mesa.id))}>{processando === 'abrir' ? 'Abrindo…' : 'Abrir comanda'}</button>{mensagem && <div className={styles.erro} role="alert">{mensagem}</div>}</WaiterLayout>;
   }
 
-  // Comanda aberta no caixa chega sem responsável: o garçom pode assumir.
-  if (comanda.funcionarioId !== null && comanda.funcionarioId !== garcomSessao.id) {
-    return <WaiterLayout titulo={`Mesa ${mesa.numero} em atendimento`} subtitulo="Esta comanda pertence a outro funcionário."><button type="button" className={styles.botaoSecundario} onClick={() => navigate('/garcom/mesas')}><ArrowLeft size={17} /> Voltar</button></WaiterLayout>;
-  }
-
-  const categorias = ['Todos', ...new Set(produtos.filter((produto) => produto.ativo).map((produto) => produto.categoria))];
-  const filtrados = produtos.filter((produto) => produto.ativo && (categoria === 'Todos' || produto.categoria === categoria));
+  const produtosDoSalao = produtos.filter((produto) => produto.ativo);
+  /* Categoria vazia não vira linha: no salão ela só atrapalharia a busca. */
+  const categoriasDoSalao = categorias
+    .filter((item) => item.ativo !== false)
+    .map((item) => ({
+      ...item,
+      total: produtosDoSalao.filter((produto) => produto.categoriaId === item.id).length
+    }))
+    .filter((item) => item.total > 0);
+  const categoriaAberta = categoriasDoSalao.find((item) => item.id === categoriaAbertaId) ?? null;
+  const produtosDaCategoria = categoriaAberta
+    ? produtosDoSalao.filter((produto) => produto.categoriaId === categoriaAberta.id)
+    : [];
   const total = comanda.itens.reduce((soma, item) => soma + Number(item.preco) * item.quantidade, 0);
   const quantidadeItens = comanda.itens.reduce((soma, item) => soma + item.quantidade, 0);
   const precoModal = produtoSelecionado ? (numeroPreco(produtoSelecionado.preco) + extras.reduce((soma, item) => soma + item.preco, 0)) * quantidade : 0;
@@ -176,17 +183,6 @@ function ComandaGarcom() {
     if (resultado !== null) setMensagem('Itens não lançados removidos.');
   }
 
-  async function pedirConta() {
-    const resultado = await executarAcao('conta', () => solicitarConta(comanda.id));
-    if (resultado !== null) {
-      setMensagem('Conta solicitada.');
-    }
-  }
-
-  async function atualizar() {
-    await executarAcao('atualizar', () => recarregarGarcom());
-  }
-
   async function removerItem(itemId) {
     // Segurança de duas pontas: o backend recusa a remoção de item já
     // lançado; aqui a lixeira nem aparece nesse caso.
@@ -196,38 +192,9 @@ function ComandaGarcom() {
     }
   }
 
-  /* A ação principal muda com o estágio da comanda, mas é sempre a mesma
-     operação de antes — só passou a morar na barra fixa do rodapé, onde o
-     garçom já está olhando o total. */
-  const acaoPrincipal = comanda.status === 'Conta solicitada'
-    ? {
-      chave: 'aguardando',
-      rotulo: 'Conta com o caixa',
-      carregando: 'Aguardando…',
-      executar: () => {},
-      classe: styles.botaoSecundario,
-      icone: null,
-      bloqueada: true
-    }
-    : pendentes.length > 0
-      ? {
-        chave: 'enviar',
-        rotulo: `Lançar para a cozinha (${pendentes.length})`,
-        carregando: 'Lançando…',
-        executar: () => setConfirmacaoAberta(true),
-        classe: styles.botaoPrincipal,
-        icone: <Send size={17} />,
-        bloqueada: false
-      }
-      : {
-        chave: 'conta',
-        rotulo: 'Solicitar conta',
-        carregando: 'Solicitando…',
-        executar: pedirConta,
-        classe: styles.botaoPrincipal,
-        icone: null,
-        bloqueada: comanda.itens.length === 0
-      };
+  /* Lançar para a cozinha é a única ação do rodapé. Fechar a conta é do
+     caixa: o garçom acompanha o valor, mas não solicita nem finaliza. */
+  const podeLancar = pendentes.length > 0;
 
   return (
     <WaiterLayout
@@ -241,47 +208,59 @@ function ComandaGarcom() {
           <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/garcom/mesas')}>
             <ArrowLeft size={16} /> Mesas
           </button>
-          <button type="button" className={styles.botaoSecundario} disabled={Boolean(processando)} onClick={atualizar}>
-            <RefreshCw size={16} /> {processando === 'atualizar' ? 'Atualizando…' : 'Atualizar'}
-          </button>
         </div>
 
         <section className={styles.painel}>
-          <div className={styles.categorias}>
-            {categorias.map((item) => (
-              <button
-                type="button"
-                key={item}
-                aria-pressed={categoria === item}
-                className={`${styles.categoria} ${categoria === item ? styles.categoriaAtiva : ''}`}
-                onClick={() => setCategoria(item)}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
+          {categoriaAberta ? (
+            <>
+              <div className={styles.topoPainel}>
+                <h2>{categoriaAberta.nome}</h2>
+                <button type="button" className={styles.botaoSecundario} onClick={() => setCategoriaAbertaId(null)}>
+                  <ArrowLeft size={16} /> Categorias
+                </button>
+              </div>
 
-          <div className={styles.gradeProdutos}>
-            {filtrados.map((produto) => (
-              <button
-                type="button"
-                key={produto.id}
-                className={styles.produto}
-                disabled={Boolean(processando)}
-                aria-label={`Adicionar ${produto.nome}`}
-                onClick={() => abrirProduto(produto)}
-              >
-                <img src={produto.imagem} alt="" loading="lazy" decoding="async" onError={usarPlaceholderProduto} />
-                <strong>{produto.nome}</strong>
-                <span>{moeda(numeroPreco(produto.preco))}</span>
-              </button>
-            ))}
-          </div>
+              <div className={styles.gradeCatalogo}>
+                {produtosDaCategoria.map((produto) => (
+                  <button
+                    type="button"
+                    key={produto.id}
+                    className={styles.itemCatalogo}
+                    disabled={Boolean(processando)}
+                    aria-label={`Adicionar ${produto.nome} — ${moeda(numeroPreco(produto.preco))}`}
+                    onClick={() => abrirProduto(produto)}
+                  >
+                    <img src={produto.imagem} alt="" loading="lazy" decoding="async" onError={usarPlaceholderProduto} />
+                    <span>{produto.nome}</span>
+                  </button>
+                ))}
+              </div>
 
-          {filtrados.length === 0 && <div className={styles.vazio} role="status">Nenhum produto disponível nesta categoria.</div>}
+              {produtosDaCategoria.length === 0 && <div className={styles.vazio} role="status">Nenhum produto nesta categoria.</div>}
+            </>
+          ) : (
+            <>
+              {/* Sem cabeçalho: a grade de nomes já diz o que fazer, e a barra
+                  do topo continua mostrando de qual mesa é a comanda. */}
+              <div className={styles.gradeCategorias}>
+                {categoriasDoSalao.map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    className={styles.botaoCategoria}
+                    onClick={() => setCategoriaAbertaId(item.id)}
+                  >
+                    {item.nome}
+                  </button>
+                ))}
+              </div>
+
+              {categoriasDoSalao.length === 0 && <div className={styles.vazio} role="status">Nenhum produto liberado para o salão. Cadastre no painel, em Cardápio, marcando "Onde aparece" como salão.</div>}
+            </>
+          )}
         </section>
 
-        <section className={styles.painel}>
+        <section className={`${styles.painel} ${styles.painelConsumo}`}>
           <div className={styles.topoPainel}>
             <div>
               <h2>Consumo da mesa</h2>
@@ -356,15 +335,17 @@ function ComandaGarcom() {
           <span>{quantidadeItens} {quantidadeItens === 1 ? 'item' : 'itens'}</span>
           <strong>{moeda(total)}</strong>
         </div>
-        <button
-          type="button"
-          className={acaoPrincipal.classe}
-          disabled={Boolean(processando) || acaoPrincipal.bloqueada}
-          onClick={acaoPrincipal.executar}
-        >
-          {acaoPrincipal.icone}
-          {processando === acaoPrincipal.chave ? acaoPrincipal.carregando : acaoPrincipal.rotulo}
-        </button>
+        {podeLancar && (
+          <button
+            type="button"
+            className={styles.botaoPrincipal}
+            disabled={Boolean(processando)}
+            onClick={() => setConfirmacaoAberta(true)}
+          >
+            <Send size={17} />
+            {processando === 'enviar' ? 'Lançando…' : `Lançar para a cozinha (${pendentes.length})`}
+          </button>
+        )}
       </div>
 
       {confirmacaoAberta && (

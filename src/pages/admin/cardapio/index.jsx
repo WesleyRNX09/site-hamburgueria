@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
 import { useApp } from '../../../context/appContext';
+import { rotuloCanal } from '../../../utils/canalCatalogo';
 import { usarPlaceholderProduto } from '../../../utils/productImage';
 import styles from '../shared.module.css';
 
@@ -73,7 +74,7 @@ function CardapioAdmin() {
               <button type="button" disabled={processandoId === produto.id} className={`${styles.status} ${produto.ativo ? styles.statusAtivo : styles.statusInativo}`} onClick={() => mudarStatus(produto)}>{processandoId === produto.id ? 'Salvando...' : produto.ativo ? 'Ativo' : 'Inativo'}</button>
             </div>
             <div className={styles.produtoConteudo}>
-              <span className={styles.categoria}>{produto.categoria}</span>
+              <span className={styles.categoria}>{produto.categoria} • {rotuloCanal(produto.canal)}</span>
               <h3>{produto.nome}</h3>
               <p>{produto.descricao}</p>
               <small className={styles.contagemAdicionais}>{produto.adicionaisIds?.length ?? 0} adicionais disponíveis</small>

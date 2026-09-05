@@ -1,9 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
-import { formatarPreco, listarCatalogo, precoParaCentavos } from './catalog.js';
+import { filtroCanal, formatarPreco, listarCatalogo, precoParaCentavos } from './catalog.js';
 import { executarTransacao } from './database.js';
 import { prepararPagamentoComanda } from './payments.js';
-import { criarHashSenha, criarHashToken, verificarSenha } from './security.js';
+import {
+  criarHashSenha,
+  criarHashToken,
+  criarIndiceSenhaGarcom,
+  verificarSenha
+} from './security.js';
 
 const PAGAMENTOS = new Set(['Pix', 'Cartão na entrega', 'Cartão na retirada', 'Cartão', 'Dinheiro', 'A definir']);
 const PAGAMENTOS_DELIVERY = new Set(['Pix', 'Cartão na entrega', 'Dinheiro']);
@@ -16,6 +21,10 @@ const PAGAMENTO_ENTREGA = 'Pagamento na entrega';
 const PAGAMENTO_PAGO = 'Pago';
 const PAGAMENTO_CANCELADO = 'Cancelado';
 const PAGAMENTO_ESTORNADO = 'Estornado';
+/* Recorte do cardápio online, compartilhado por quem valida carrinho e
+   promoção: produto e categoria precisam aparecer no site. */
+const VISIBILIDADE_ONLINE = filtroCanal('online', { aliasProduto: 'p', aliasCategoria: 'c' });
+
 const MAX_LINHAS_PEDIDO = 100;
 const MAX_UNIDADES_PEDIDO = 500;
 const MAX_ADICIONAIS_POR_ITEM = 50;
@@ -683,6 +692,8 @@ async function validarPromocao(banco, idEstabelecimento, dados) {
 
   const produtoId = Number(dados.produtoId) || null;
   if (!produtoId) throw erroDominio('Vincule a promoção a um produto do cardápio.');
+  /* A promoção é vitrine do cardápio online, então só aceita produto que
+     apareça lá — senão o site anunciaria algo que ninguém consegue pedir. */
   const [produtos] = await banco.execute(`
     SELECT p.id, c.nome AS categoria
     FROM produtos p
@@ -690,8 +701,14 @@ async function validarPromocao(banco, idEstabelecimento, dados) {
       ON c.id = p.categoria_id
       AND c.id_estabelecimento = p.id_estabelecimento
     WHERE p.id = ? AND p.id_estabelecimento = ? AND p.ativo = 1 AND c.ativo = 1
-  `, [produtoId, idEstabelecimento]);
-  if (!produtos[0]) throw erroDominio('O produto vinculado à promoção não está disponível.', 409);
+      ${VISIBILIDADE_ONLINE.sql}
+  `, [produtoId, idEstabelecimento, ...VISIBILIDADE_ONLINE.parametros]);
+  if (!produtos[0]) {
+    throw erroDominio(
+      'O produto vinculado à promoção não está disponível no cardápio online.',
+      409
+    );
+  }
 
   return {
     produtoId,
@@ -757,29 +774,62 @@ function mapearFuncionario(linha) {
     cargo: linha.cargo,
     usuario: linha.usuario,
     status: linha.ativo ? 'Ativo' : 'Inativo',
-    token: linha.token_acesso,
-    // O painel precisa saber se o QR ainda vale: enquanto a senha não for
-    // definida, o link de primeiro acesso é a única forma de entrar.
-    acessoPendente: !linha.senha_definida_em,
+    // O painel precisa distinguir quem já pode entrar de quem ainda espera o
+    // administrador definir a senha.
+    senhaDefinida: Boolean(linha.senha_definida_em),
     vendas: Number(linha.vendas ?? 0),
     comandas: Number(linha.comandas ?? 0)
   };
 }
 
-/* Usuário do garçom: mesmo alfabeto do login do administrador, curto o
-   bastante para ser digitado no celular durante o atendimento. */
-function normalizarUsuarioFuncionario(valor) {
-  return texto(valor, 60)
+/*
+  A senha é a única coisa que o garçom digita, então ela também é o que o
+  identifica. Normalizar antes de gravar e antes de comparar evita que o teclado
+  do celular derrube o acesso: o autocorretor costuma mandar "Wesley" onde o
+  administrador cadastrou "wesley".
+*/
+function normalizarSenhaGarcom(valor) {
+  return texto(valor, 40)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/\s+/g, '.');
+    .replace(/\s+/g, '');
+}
+
+function validarSenhaGarcom(senha) {
+  if (!/^[a-z0-9][a-z0-9._-]{3,31}$/.test(senha)) {
+    throw erroDominio(
+      'A senha deve ter de 4 a 32 caracteres, usando letras, números, ponto, hífen ou _.'
+    );
+  }
+  return senha;
+}
+
+/* O login não usa mais o usuário, mas a coluna continua identificando o
+   funcionário nas telas e nos relatórios. Deriva do nome e ganha um sufixo
+   quando dois cadastros do mesmo estabelecimento colidem. */
+async function reservarUsuarioFuncionario(banco, idEstabelecimento, nome, id) {
+  const base = texto(nome, 50)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '') || 'garcom';
+  for (let tentativa = 1; tentativa <= 50; tentativa += 1) {
+    const usuario = tentativa === 1 ? base : `${base}.${tentativa}`;
+    const [conflitos] = await banco.execute(`
+      SELECT id FROM funcionarios
+      WHERE usuario = ? AND id_estabelecimento = ? AND id <> ?
+      LIMIT 1
+    `, [usuario, idEstabelecimento, Number(id) || 0]);
+    if (conflitos.length === 0) return usuario;
+  }
+  return `garcom.${randomUUID().slice(0, 8)}`;
 }
 
 export async function listarFuncionarios(banco, idEstabelecimento, { somenteAtivos = false } = {}) {
   const [linhas] = await banco.execute(`
-    SELECT f.id, f.nome, f.cargo, f.usuario, f.ativo, f.token_acesso,
-      f.senha_definida_em,
+    SELECT f.id, f.nome, f.cargo, f.usuario, f.ativo, f.senha_definida_em,
       COUNT(DISTINCT CASE WHEN c.status = 'Encerrada' THEN c.id END) AS comandas,
       COUNT(DISTINCT CASE WHEN p.status IN ('Entregue', 'Entregue na mesa') THEN p.id END) AS vendas
     FROM funcionarios f
@@ -797,121 +847,153 @@ export async function listarFuncionarios(banco, idEstabelecimento, { somenteAtiv
   return linhas.map(mapearFuncionario);
 }
 
-/* Credencial de primeiro acesso: o token do QR só vale enquanto a senha não
-   foi definida. Depois disso o funcionário entra por usuário e senha, e o
-   mesmo link não abre mais nada. */
-export async function buscarFuncionarioPorTokenPendente(banco, idEstabelecimento, token) {
+/*
+  QR Code único da equipe. É um só por estabelecimento: o administrador imprime
+  uma vez e a equipe inteira usa o mesmo código para chegar à tela de acesso.
+  Nasce sob demanda, na primeira vez que o painel o exibe, para atender também
+  os estabelecimentos criados antes desta funcionalidade.
+*/
+export async function obterTokenAcessoGarcom(banco, idEstabelecimento) {
   const [linhas] = await banco.execute(`
-    SELECT id, nome, cargo, usuario, token_acesso, ativo
-    FROM funcionarios
-    WHERE token_acesso = ?
-      AND id_estabelecimento = ?
-      AND ativo = 1
-      AND senha_definida_em IS NULL
+    SELECT token_acesso_garcom
+    FROM estabelecimentos
+    WHERE id_estabelecimento = ?
     LIMIT 1
-  `, [token, idEstabelecimento]);
-  return linhas[0] ?? null;
+  `, [idEstabelecimento]);
+  if (!linhas[0]) throw erroDominio('Estabelecimento não encontrado.', 404);
+  return linhas[0].token_acesso_garcom || rotacionarTokenAcessoGarcom(banco, idEstabelecimento);
 }
 
-export async function buscarFuncionarioPorUsuario(banco, idEstabelecimento, usuario) {
+/* Trocar o token invalida na hora todo QR Code já impresso ou compartilhado. As
+   sessões abertas seguem valendo até expirarem: o objetivo é cortar quem ainda
+   não entrou, não derrubar o turno em andamento. */
+export async function rotacionarTokenAcessoGarcom(banco, idEstabelecimento) {
+  const token = `equipe-${randomUUID().replaceAll('-', '')}`;
+  const [resultado] = await banco.execute(`
+    UPDATE estabelecimentos
+    SET token_acesso_garcom = ?
+    WHERE id_estabelecimento = ?
+  `, [token, idEstabelecimento]);
+  if (!resultado.affectedRows) throw erroDominio('Estabelecimento não encontrado.', 404);
+  return token;
+}
+
+export async function tokenAcessoGarcomValido(banco, idEstabelecimento, token) {
+  const informado = texto(token, 160);
+  if (!informado) return false;
   const [linhas] = await banco.execute(`
-    SELECT id, nome, cargo, usuario, pin_hash, ativo
+    SELECT 1 AS valido
+    FROM estabelecimentos
+    WHERE id_estabelecimento = ? AND token_acesso_garcom = ?
+    LIMIT 1
+  `, [idEstabelecimento, informado]);
+  return linhas.length > 0;
+}
+
+/*
+  Login do garçom: só a senha. O índice determinístico encontra o cadastro em
+  uma consulta indexada — sem ele seria preciso testar o hash de cada
+  funcionário da equipe a cada tentativa — e o `pin_hash` confirma. O
+  estabelecimento entra nas duas pontas: o índice já é derivado do tenant e a
+  consulta ainda filtra por ele.
+*/
+export async function buscarFuncionarioPorSenha(banco, idEstabelecimento, senha) {
+  const normalizada = normalizarSenhaGarcom(senha);
+  if (!normalizada) return null;
+  const [linhas] = await banco.execute(`
+    SELECT id, nome, cargo, usuario, pin_hash
     FROM funcionarios
-    WHERE LOWER(usuario) = LOWER(?)
+    WHERE senha_busca = ?
       AND id_estabelecimento = ?
       AND ativo = 1
       AND pin_hash IS NOT NULL
     LIMIT 1
-  `, [usuario, idEstabelecimento]);
-  return linhas[0] ?? null;
-}
-
-/* Senha escolhida pelo próprio garçom no primeiro acesso. O mínimo de 6
-   dígitos vale para toda senha nova: sem o QR na tela de login, ela passou a
-   ser a única proteção da conta. PINs antigos de 4 ou 5 dígitos continuam
-   entrando até serem trocados. */
-export async function definirSenhaPrimeiroAcesso(banco, idEstabelecimento, token, pin) {
-  const senha = texto(pin, 12);
-  if (!/^\d{6,12}$/.test(senha)) {
-    throw erroDominio('A senha deve ter de 6 a 12 dígitos numéricos.');
-  }
-  const funcionario = await buscarFuncionarioPorTokenPendente(banco, idEstabelecimento, token);
-  if (!funcionario) {
-    throw erroDominio('Este link de acesso não é mais válido. Peça um novo QR Code ao gerente.', 404);
-  }
-  const [resultado] = await banco.execute(`
-    UPDATE funcionarios
-    SET pin_hash = ?, senha_definida_em = CURRENT_TIMESTAMP
-    WHERE id = ?
-      AND id_estabelecimento = ?
-      AND senha_definida_em IS NULL
-  `, [criarHashSenha(senha), funcionario.id, idEstabelecimento]);
-  if (!resultado.affectedRows) {
-    throw erroDominio('Este link de acesso não é mais válido. Peça um novo QR Code ao gerente.', 404);
-  }
+  `, [criarIndiceSenhaGarcom(idEstabelecimento, normalizada), idEstabelecimento]);
+  const funcionario = linhas[0] ?? null;
+  if (!funcionario || !verificarSenha(normalizada, funcionario.pin_hash)) return null;
   return funcionario;
 }
 
-/* Novo QR: usado quando o garçom esquece a senha ou troca de aparelho. O
-   token muda, a senha é apagada e as sessões abertas caem — o acesso antigo
-   deixa de existir no mesmo momento. */
-export async function gerarNovoAcessoFuncionario(banco, idEstabelecimento, id) {
-  const [linhas] = await banco.execute(`
-    SELECT nome FROM funcionarios WHERE id = ? AND id_estabelecimento = ? LIMIT 1
-  `, [id, idEstabelecimento]);
-  if (!linhas[0]) return null;
-  await banco.execute(`
-    UPDATE funcionarios
-    SET token_acesso = ?, pin_hash = NULL, senha_definida_em = NULL
-    WHERE id = ? AND id_estabelecimento = ?
-  `, [normalizarToken(linhas[0].nome), id, idEstabelecimento]);
-  await banco.execute(`
-    DELETE FROM sessoes_garcom
-    WHERE funcionario_id = ? AND id_estabelecimento = ?
-  `, [id, idEstabelecimento]);
-  const funcionarios = await listarFuncionarios(banco, idEstabelecimento);
-  return funcionarios.find((item) => item.id === String(id));
-}
-
 /*
-  O administrador cadastra nome, cargo e usuário. A senha não passa por aqui:
-  quem a define é o próprio garçom, no primeiro acesso pelo QR Code.
+  O administrador cadastra nome, cargo e senha. A senha é obrigatória no
+  cadastro e opcional na edição: em branco, mantém a atual. Trocar a senha
+  derruba as sessões abertas do funcionário — é o caminho de senha esquecida ou
+  de troca de aparelho, e a credencial antiga precisa morrer no mesmo momento.
 */
 export async function salvarFuncionario(banco, idEstabelecimento, dados, id = null) {
   const nome = texto(dados.nome, 160);
-  const cargo = texto(dados.cargo, 80);
-  const usuario = normalizarUsuarioFuncionario(dados.usuario);
-  if (!nome || !cargo || !/^[a-z0-9][a-z0-9._-]{2,59}$/.test(usuario)) {
-    throw erroDominio(
-      'Informe o nome, o cargo e um usuário de 3 a 60 caracteres (letras, números, ponto, hífen ou _).'
-    );
-  }
-  const [conflitos] = await banco.execute(`
-    SELECT id FROM funcionarios
-    WHERE LOWER(usuario) = LOWER(?) AND id_estabelecimento = ? AND id <> ?
-    LIMIT 1
-  `, [usuario, idEstabelecimento, Number(id) || 0]);
-  if (conflitos.length > 0) {
-    throw erroDominio('Já existe um funcionário com esse usuário neste estabelecimento.', 409);
+  const cargo = texto(dados.cargo, 80) || 'Garçom';
+  const senha = normalizarSenhaGarcom(dados.senha);
+  const funcionarioId = Number(id) || null;
+  if (!nome) throw erroDominio('Informe o nome do funcionário.');
+  if (!funcionarioId || senha) validarSenhaGarcom(senha);
+
+  const usuario = await reservarUsuarioFuncionario(banco, idEstabelecimento, nome, funcionarioId);
+  const indiceSenha = senha ? criarIndiceSenhaGarcom(idEstabelecimento, senha) : null;
+  if (indiceSenha) {
+    const [conflitos] = await banco.execute(`
+      SELECT id FROM funcionarios
+      WHERE senha_busca = ? AND id_estabelecimento = ? AND id <> ?
+      LIMIT 1
+    `, [indiceSenha, idEstabelecimento, funcionarioId || 0]);
+    if (conflitos.length > 0) {
+      throw erroDominio(
+        'Essa senha já é de outro funcionário. Como o garçom entra só com a senha, cada um precisa da sua.',
+        409
+      );
+    }
   }
 
-  let funcionarioId = Number(id) || null;
-  if (funcionarioId) {
-    const [resultado] = await banco.execute(`
-      UPDATE funcionarios SET nome = ?, cargo = ?, usuario = ?
-      WHERE id = ? AND id_estabelecimento = ?
-    `, [nome, cargo, usuario, funcionarioId, idEstabelecimento]);
+  let idFinal = funcionarioId;
+  if (idFinal) {
+    const [resultado] = indiceSenha
+      ? await banco.execute(`
+        UPDATE funcionarios
+        SET nome = ?, cargo = ?, usuario = ?, pin_hash = ?, senha_busca = ?,
+          senha_definida_em = CURRENT_TIMESTAMP
+        WHERE id = ? AND id_estabelecimento = ?
+      `, [nome, cargo, usuario, criarHashSenha(senha), indiceSenha, idFinal, idEstabelecimento])
+      : await banco.execute(`
+        UPDATE funcionarios
+        SET nome = ?, cargo = ?, usuario = ?
+        WHERE id = ? AND id_estabelecimento = ?
+      `, [nome, cargo, usuario, idFinal, idEstabelecimento]);
     if (!resultado.affectedRows) throw erroDominio('Funcionário não encontrado.', 404);
+    if (indiceSenha) {
+      await banco.execute(`
+        DELETE FROM sessoes_garcom
+        WHERE funcionario_id = ? AND id_estabelecimento = ?
+      `, [idFinal, idEstabelecimento]);
+    }
   } else {
     const [resultado] = await banco.execute(`
       INSERT INTO funcionarios
-        (id_estabelecimento, nome, cargo, usuario, pin_hash, token_acesso, ativo)
-      VALUES (?, ?, ?, ?, NULL, ?, 1)
-    `, [idEstabelecimento, nome, cargo, usuario, normalizarToken(nome)]);
-    funcionarioId = Number(resultado.insertId);
+        (id_estabelecimento, nome, cargo, usuario, pin_hash, senha_busca, token_acesso,
+         senha_definida_em, ativo)
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1)
+    `, [
+      idEstabelecimento,
+      nome,
+      cargo,
+      usuario,
+      criarHashSenha(senha),
+      indiceSenha,
+      normalizarToken(nome)
+    ]);
+    idFinal = Number(resultado.insertId);
   }
   const funcionarios = await listarFuncionarios(banco, idEstabelecimento);
-  return funcionarios.find((item) => item.id === String(funcionarioId));
+  return funcionarios.find((item) => item.id === String(idFinal));
+}
+
+/* Excluir apaga o cadastro e as sessões abertas (ON DELETE CASCADE). As
+   comandas e os pedidos que o funcionário atendeu continuam no histórico,
+   apenas sem o vínculo com o cadastro (ON DELETE SET NULL). */
+export async function excluirFuncionario(banco, idEstabelecimento, id) {
+  const [resultado] = await banco.execute(`
+    DELETE FROM funcionarios WHERE id = ? AND id_estabelecimento = ?
+  `, [id, idEstabelecimento]);
+  return resultado.affectedRows > 0;
 }
 
 export async function alternarStatusFuncionario(banco, idEstabelecimento, id, ativo) {
@@ -985,14 +1067,10 @@ async function listarAdicionaisDeItens(banco, idEstabelecimento, tabela, campo, 
   return mapa;
 }
 
-export async function listarComandas(banco, idEstabelecimento, { funcionarioId = null } = {}) {
-  const parametros = [idEstabelecimento];
-  /* Comanda aberta no caixa nasce sem responsável: ela precisa aparecer para
-     qualquer garçom, porque o primeiro que atender a mesa é quem assume. */
-  const filtroFuncionario = funcionarioId == null
-    ? ''
-    : 'AND (c.funcionario_id = ? OR c.funcionario_id IS NULL)';
-  if (funcionarioId != null) parametros.push(funcionarioId);
+/* O salão inteiro é da equipe: qualquer garçom enxerga e atende qualquer
+   comanda do próprio estabelecimento. O recorte que sobra é o do tenant, que
+   nunca sai daqui. */
+export async function listarComandas(banco, idEstabelecimento) {
   const [comandas] = await banco.execute(`
     SELECT c.id, c.mesa_id, c.funcionario_id, c.aberta_por_admin_id, c.status,
       c.pagamento, c.aberta_em, m.numero AS mesa_numero, f.nome AS garcom,
@@ -1008,9 +1086,8 @@ export async function listarComandas(banco, idEstabelecimento, { funcionarioId =
       ON a.id = c.aberta_por_admin_id
       AND a.id_estabelecimento = c.id_estabelecimento
     WHERE c.id_estabelecimento = ? AND c.status NOT IN ('Encerrada', 'Cancelada')
-      ${filtroFuncionario}
     ORDER BY c.aberta_em DESC
-  `, parametros);
+  `, [idEstabelecimento]);
   if (comandas.length === 0) return [];
   const ids = comandas.map((comanda) => Number(comanda.id));
   const marcadores = ids.map(() => '?').join(', ');
@@ -1196,7 +1273,18 @@ export async function listarPedidos(banco, idEstabelecimento, { id = null } = {}
   });
 }
 
-export async function buscarItensValidados(conexao, idEstabelecimento, itensRecebidos) {
+/*
+  `canal` decide de qual cardápio o item pode sair: 'online' para o pedido do
+  site e 'salao' para a comanda de mesa. Sem esse recorte, o cliente poderia
+  pedir pela web um item que só existe no salão mandando o id na requisição.
+*/
+export async function buscarItensValidados(
+  conexao,
+  idEstabelecimento,
+  itensRecebidos,
+  { canal = null } = {}
+) {
+  const visibilidade = filtroCanal(canal, { aliasProduto: 'p', aliasCategoria: 'c' });
   if (!Array.isArray(itensRecebidos) || itensRecebidos.length === 0) {
     throw erroDominio('Adicione ao menos um produto ao pedido.');
   }
@@ -1231,8 +1319,9 @@ export async function buscarItensValidados(conexao, idEstabelecimento, itensRece
         ON c.id = p.categoria_id
         AND c.id_estabelecimento = p.id_estabelecimento
       WHERE p.id = ? AND p.id_estabelecimento = ? AND p.ativo = 1 AND c.ativo = 1
+        ${visibilidade.sql}
       FOR UPDATE
-    `, [produtoId, idEstabelecimento]);
+    `, [produtoId, idEstabelecimento, ...visibilidade.parametros]);
     const produto = produtos[0];
     if (!produto) throw erroDominio('Um produto do pedido não está mais disponível.', 409);
 
@@ -1325,7 +1414,8 @@ export async function revalidarCarrinho(banco, idEstabelecimento, itensRecebidos
         ON c.id = p.categoria_id
         AND c.id_estabelecimento = p.id_estabelecimento
       WHERE p.id = ? AND p.id_estabelecimento = ? AND p.ativo = 1 AND c.ativo = 1
-    `, [produtoId, idEstabelecimento]);
+        ${VISIBILIDADE_ONLINE.sql}
+    `, [produtoId, idEstabelecimento, ...VISIBILIDADE_ONLINE.parametros]);
     const produto = produtos[0];
     if (!produto) {
       alteracoes.push({ carrinhoId, tipo: 'removido', mensagem: `${texto(recebido.nome, 160) || 'Um produto'} não está mais disponível e foi removido.` });
@@ -1522,7 +1612,12 @@ export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
         throw erroDominio('O pagamento em dinheiro está indisponível.', 409);
       }
 
-      const itens = await buscarItensValidados(conexao, idEstabelecimento, dados.itens);
+      const itens = await buscarItensValidados(
+        conexao,
+        idEstabelecimento,
+        dados.itens,
+        { canal: 'online' }
+      );
       const areasEntrega = retirada ? [] : lerAreasEntrega(configuracao.areas_entrega_json);
       const areaEntrega = retirada
         ? null
@@ -1910,9 +2005,10 @@ async function obterComandaDoGarcom(
       WHERE id = ? AND id_estabelecimento = ? AND funcionario_id IS NULL
     `, [funcionarioId, comandaId, idEstabelecimento]);
     comanda.funcionario_id = funcionarioId;
-  } else if (Number(comanda.funcionario_id) !== Number(funcionarioId)) {
-    throw erroDominio('Esta comanda pertence a outro funcionário.', 403);
   }
+  /* Comanda de outro garçom não bloqueia: quem estiver perto da mesa atende.
+     O responsável registrado continua sendo quem abriu, e cada item guarda
+     em `enviado_por_funcionario_id` quem de fato o lançou. */
   if (COMANDAS_FECHADAS.has(comanda.status)) {
     throw erroDominio('Esta comanda já foi encerrada.', 409);
   }
@@ -1988,9 +2084,8 @@ export async function abrirComanda(banco, idEstabelecimento, mesaId, funcionario
           UPDATE comandas SET funcionario_id = ?
           WHERE id = ? AND id_estabelecimento = ? AND funcionario_id IS NULL
         `, [funcionarioId, existentes[0].id, idEstabelecimento]);
-      } else if (Number(existentes[0].funcionario_id) !== Number(funcionarioId)) {
-        throw erroDominio('Esta mesa já está sendo atendida por outro garçom.', 409);
       }
+      // Já atendida por outro garçom: entra na mesma comanda, sem recusar.
       return Number(existentes[0].id);
     }
     const [resultado] = await conexao.execute(`
@@ -2014,7 +2109,7 @@ async function inserirItemNaComanda(conexao, idEstabelecimento, comandaId, coman
     quantidade: dados.quantidade,
     adicionais: dados.adicionais,
     observacao: dados.observacao
-  }]);
+  }], { canal: 'salao' });
   const [[totais]] = await conexao.execute(`
     SELECT COUNT(*) AS linhas, COALESCE(SUM(quantidade), 0) AS unidades
     FROM comanda_itens
@@ -2530,30 +2625,6 @@ export async function cancelarComandaAdmin(
   });
 }
 
-export async function solicitarConta(banco, idEstabelecimento, comandaId, funcionarioId) {
-  await executarTransacao(banco, async (conexao) => {
-    const comanda = await obterComandaDoGarcom(
-      conexao,
-      idEstabelecimento,
-      comandaId,
-      funcionarioId,
-      { bloquear: true }
-    );
-    if (comanda.status !== 'Na cozinha') {
-      throw erroDominio('Envie as alterações da comanda para a cozinha antes de solicitar a conta.', 409);
-    }
-    const [pedidos] = await conexao.execute(`
-      SELECT id FROM pedidos
-      WHERE comanda_id = ? AND id_estabelecimento = ? FOR UPDATE
-    `, [comandaId, idEstabelecimento]);
-    if (!pedidos[0]) throw erroDominio('Envie a comanda para a cozinha antes de solicitar a conta.', 409);
-    await conexao.execute(`
-      UPDATE comandas SET status = 'Conta solicitada'
-      WHERE id = ? AND id_estabelecimento = ?
-    `, [comandaId, idEstabelecimento]);
-  });
-}
-
 export async function fecharComanda(
   banco,
   idEstabelecimento,
@@ -2705,7 +2776,7 @@ export async function finalizarComandaAdmin(
 
 export async function listarDadosPublicos(banco, idEstabelecimento) {
   const [catalogo, promocoes, configuracao] = await Promise.all([
-    listarCatalogo(banco, idEstabelecimento),
+    listarCatalogo(banco, idEstabelecimento, { canal: 'online' }),
     listarPromocoes(banco, idEstabelecimento, { somenteAtivas: true }),
     buscarConfiguracaoPublica(banco, idEstabelecimento)
   ]);
@@ -2713,7 +2784,18 @@ export async function listarDadosPublicos(banco, idEstabelecimento) {
 }
 
 export async function listarDadosAdmin(banco, idEstabelecimento) {
-  const [catalogo, promocoes, funcionarios, mesas, comandas, pedidos, configuracao, administradores, auditoria] = await Promise.all([
+  const [
+    catalogo,
+    promocoes,
+    funcionarios,
+    mesas,
+    comandas,
+    pedidos,
+    configuracao,
+    administradores,
+    auditoria,
+    acessoGarcom
+  ] = await Promise.all([
     listarCatalogo(banco, idEstabelecimento, { administrativo: true }),
     listarPromocoes(banco, idEstabelecimento),
     listarFuncionarios(banco, idEstabelecimento),
@@ -2722,16 +2804,29 @@ export async function listarDadosAdmin(banco, idEstabelecimento) {
     listarPedidos(banco, idEstabelecimento),
     buscarConfiguracao(banco, idEstabelecimento),
     listarAdministradores(banco, idEstabelecimento),
-    listarAuditoriaAdmin(banco, idEstabelecimento)
+    listarAuditoriaAdmin(banco, idEstabelecimento),
+    obterTokenAcessoGarcom(banco, idEstabelecimento)
   ]);
-  return { ...catalogo, promocoes, funcionarios, mesas, comandas, pedidos, configuracao, administradores, auditoria };
+  return {
+    ...catalogo,
+    promocoes,
+    funcionarios,
+    mesas,
+    comandas,
+    pedidos,
+    configuracao,
+    administradores,
+    auditoria,
+    // Token do QR Code único da equipe, exibido na tela de funcionários.
+    acessoGarcom
+  };
 }
 
-export async function listarDadosGarcom(banco, idEstabelecimento, funcionarioId) {
+export async function listarDadosGarcom(banco, idEstabelecimento) {
   const [catalogo, mesas, comandas, configuracao] = await Promise.all([
-    listarCatalogo(banco, idEstabelecimento),
+    listarCatalogo(banco, idEstabelecimento, { canal: 'salao' }),
     listarMesas(banco, idEstabelecimento),
-    listarComandas(banco, idEstabelecimento, { funcionarioId }),
+    listarComandas(banco, idEstabelecimento),
     buscarConfiguracao(banco, idEstabelecimento)
   ]);
   return { ...catalogo, mesas, comandas, configuracao };

@@ -292,8 +292,14 @@ export function alterarStatusFuncionarioApi(id, ativo) {
   return requisicao(`/api/admin/funcionarios/${id}/status`, { metodo: 'PATCH', dados: { ativo }, autenticacao: 'admin' });
 }
 
-export function gerarAcessoFuncionarioApi(id) {
-  return requisicao(`/api/admin/funcionarios/${id}/acesso`, { metodo: 'POST', autenticacao: 'admin' });
+export function excluirFuncionarioApi(id) {
+  return requisicao(`/api/admin/funcionarios/${id}`, { metodo: 'DELETE', autenticacao: 'admin' });
+}
+
+/* Troca o token do QR Code único da equipe: os códigos já impressos param de
+   valer na hora. */
+export function rotacionarAcessoGarcomApi() {
+  return requisicao('/api/admin/acesso-garcom', { metodo: 'POST', autenticacao: 'admin' });
 }
 
 export function atualizarStatusPedidoApi(id, status) {
@@ -322,16 +328,13 @@ export function salvarConfiguracaoApi(dados) {
   return requisicao('/api/admin/configuracao', { metodo: 'PUT', dados, autenticacao: 'admin' });
 }
 
-export function loginGarcom(usuario, pin) {
-  return requisicao('/api/garcom/login', { metodo: 'POST', dados: { usuario, pin } });
+export function loginGarcom(token, senha) {
+  return requisicao('/api/garcom/login', { metodo: 'POST', dados: { token, senha } });
 }
 
-export function consultarPrimeiroAcessoGarcom(token) {
-  return requisicao(`/api/garcom/primeiro-acesso/${encodeURIComponent(token)}`);
-}
-
-export function definirSenhaPrimeiroAcessoGarcom(token, pin) {
-  return requisicao('/api/garcom/primeiro-acesso', { metodo: 'POST', dados: { token, pin } });
+/* Confere se o QR Code lido ainda é o atual antes de a tela pedir a senha. */
+export function validarAcessoGarcom(token) {
+  return requisicao(`/api/garcom/acesso/${encodeURIComponent(token)}`);
 }
 
 export function validarSessaoGarcom() {
@@ -369,7 +372,4 @@ export function limparItensPendentesApi(comandaId) {
   });
 }
 
-export function solicitarContaApi(comandaId) {
-  return requisicao(`/api/garcom/comandas/${comandaId}/conta`, { metodo: 'POST', autenticacao: 'garcom' });
-}
 

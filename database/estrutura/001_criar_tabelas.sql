@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS estabelecimentos (
   slug VARCHAR(100) NOT NULL,
   dominio_personalizado VARCHAR(253),
   status VARCHAR(30) NOT NULL DEFAULT 'ativo',
+  -- Token do QR Code único da equipe: um por estabelecimento, criado sob
+  -- demanda pelo painel e trocado quando o administrador quiser invalidar os
+  -- códigos já impressos.
+  token_acesso_garcom VARCHAR(160) NULL,
   plano VARCHAR(50) NOT NULL DEFAULT 'basico',
   status_assinatura VARCHAR(30) NOT NULL DEFAULT 'ativa',
   vencimento_assinatura_em DATETIME,
@@ -29,6 +33,7 @@ CREATE TABLE IF NOT EXISTS estabelecimentos (
   atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_estabelecimentos_slug (slug),
   UNIQUE KEY uk_estabelecimentos_dominio (dominio_personalizado),
+  UNIQUE KEY uk_estabelecimentos_token_garcom (token_acesso_garcom),
   CONSTRAINT chk_estabelecimentos_slug_preenchido
     CHECK (CHAR_LENGTH(TRIM(slug)) > 0),
   CONSTRAINT chk_estabelecimentos_dominio_preenchido
@@ -162,9 +167,13 @@ CREATE TABLE IF NOT EXISTS categorias (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   id_estabelecimento BIGINT UNSIGNED,
   nome VARCHAR(100) NOT NULL,
+  -- Onde a categoria aparece: 'ambos', 'online' (só o cardápio do site) ou
+  -- 'salao' (só o app do garçom e as comandas de mesa).
+  canal VARCHAR(10) NOT NULL DEFAULT 'ambos',
   ordem INT NOT NULL DEFAULT 0,
   ativo TINYINT(1) NOT NULL DEFAULT 1,
-  UNIQUE KEY uk_categorias_estabelecimento_nome (id_estabelecimento, nome)
+  UNIQUE KEY uk_categorias_estabelecimento_nome (id_estabelecimento, nome),
+  CONSTRAINT chk_categorias_canal CHECK (canal IN ('ambos', 'online', 'salao'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS adicionais (
@@ -182,6 +191,9 @@ CREATE TABLE IF NOT EXISTS produtos (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   id_estabelecimento BIGINT UNSIGNED,
   categoria_id BIGINT UNSIGNED NOT NULL,
+  -- Mesmo vocabulário da categoria. A visibilidade real é a interseção das
+  -- duas: produto 'ambos' em categoria 'salao' não aparece no site.
+  canal VARCHAR(10) NOT NULL DEFAULT 'ambos',
   nome VARCHAR(160) NOT NULL,
   descricao TEXT NOT NULL,
   preco_centavos INT UNSIGNED NOT NULL,
@@ -190,7 +202,8 @@ CREATE TABLE IF NOT EXISTS produtos (
   ativo TINYINT(1) NOT NULL DEFAULT 1,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_produtos_categoria (categoria_id)
+  INDEX idx_produtos_categoria (categoria_id),
+  CONSTRAINT chk_produtos_canal CHECK (canal IN ('ambos', 'online', 'salao'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS produto_adicionais (
@@ -227,15 +240,21 @@ CREATE TABLE IF NOT EXISTS funcionarios (
   nome VARCHAR(160) NOT NULL,
   cargo VARCHAR(80) NOT NULL,
   usuario VARCHAR(60) NOT NULL,
-  -- Sem senha até o primeiro acesso pelo QR Code, quando o próprio
-  -- funcionário a define; `senha_definida_em` é o que consome o link.
+  -- Sem senha até o administrador definir uma; `senha_definida_em` marca esse
+  -- momento e é o que separa um cadastro pronto de um cadastro pendente.
   pin_hash VARCHAR(255) NULL,
+  -- Índice determinístico da senha: o garçom entra digitando só a senha, e é
+  -- por aqui que o login encontra o cadastro sem testar o hash de toda a
+  -- equipe. Único por estabelecimento, porque a senha sozinha identifica a
+  -- pessoa. Quem autentica de fato continua sendo `pin_hash`.
+  senha_busca CHAR(64) NULL,
   token_acesso VARCHAR(160) NOT NULL UNIQUE,
   senha_definida_em DATETIME NULL,
   ativo TINYINT(1) NOT NULL DEFAULT 1,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_funcionarios_estabelecimento_usuario (id_estabelecimento, usuario)
+  UNIQUE KEY uk_funcionarios_estabelecimento_usuario (id_estabelecimento, usuario),
+  UNIQUE KEY uk_funcionarios_estabelecimento_senha (id_estabelecimento, senha_busca)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS sessoes_garcom (

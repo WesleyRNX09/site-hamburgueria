@@ -1,48 +1,87 @@
-import { ArrowRight, KeyRound, ShieldCheck } from 'lucide-react';
+import { ArrowRight, QrCode, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { useApp } from '../../context/appContext';
 import LogoEstabelecimento from '../../components/LogoEstabelecimento';
-import { consultarPrimeiroAcessoGarcom } from '../../services/api';
+import { validarAcessoGarcom } from '../../services/api';
 import styles from './garcom.module.css';
 
-/*
-  Duas entradas na mesma tela:
+/* O QR Code da equipe é o mesmo para todos, então o aparelho pode guardá-lo: o
+   garçom lê o código uma vez e nos próximos turnos abre direto na senha. Quando
+   o gerente troca o QR, o token guardado deixa de valer e a tela volta a pedir
+   a leitura. */
+const CHAVE_ACESSO = 'hamburgueria_garcom_acesso';
 
-  - `/garcom/acesso` é o dia a dia: usuário e senha, sem depender do QR Code
-    para começar o turno;
-  - `/garcom/acesso/:token` é o primeiro acesso, aberto pelo QR que o gerente
-    entrega no cadastro. Ali o garçom escolhe a própria senha e já entra —
-    o link não vale mais depois disso.
+function lerAcessoSalvo() {
+  try {
+    return localStorage.getItem(CHAVE_ACESSO) || '';
+  } catch {
+    return '';
+  }
+}
+
+function guardarAcesso(token) {
+  try {
+    localStorage.setItem(CHAVE_ACESSO, token);
+  } catch {
+    // Navegador sem armazenamento: o acesso continua funcionando pelo QR Code.
+  }
+}
+
+function esquecerAcesso() {
+  try {
+    localStorage.removeItem(CHAVE_ACESSO);
+  } catch {
+    // Nada a limpar.
+  }
+}
+
+/*
+  Uma tela só, com o QR Code da equipe como porta de entrada:
+
+  - `/garcom/acesso/:token` chega da leitura do QR e guarda o código no
+    aparelho;
+  - `/garcom/acesso` reaproveita o código já guardado.
+
+  Em qualquer um dos casos o garçom digita apenas a senha que o administrador
+  cadastrou para ele — é ela que identifica quem está entrando.
 */
 function AcessoGarcom() {
   const { token } = useParams();
-  const { entrarGarcom, definirSenhaGarcom, configuracao, sessaoExpirada } = useApp();
+  const { entrarGarcom, configuracao, sessaoExpirada } = useApp();
   const navigate = useNavigate();
-  const [usuario, setUsuario] = useState('');
   const [senha, setSenha] = useState('');
-  const [confirmacao, setConfirmacao] = useState('');
   const [erro, setErro] = useState('');
   const [processando, setProcessando] = useState(false);
-  const [cadastro, setCadastro] = useState(null);
-  const [validandoQr, setValidandoQr] = useState(Boolean(token));
+  const [acesso, setAcesso] = useState('');
+  /* O código guardado é lido uma vez: depois disso quem manda é o resultado da
+     validação, não o que estiver no armazenamento do navegador. */
+  const [acessoSalvo] = useState(lerAcessoSalvo);
+  const candidato = token || acessoSalvo;
+  const [validando, setValidando] = useState(Boolean(candidato));
 
   useEffect(() => {
-    if (!token) return undefined;
+    if (!candidato) return undefined;
     let ativo = true;
-    consultarPrimeiroAcessoGarcom(token)
-      .then(({ funcionario }) => {
-        if (ativo) setCadastro(funcionario);
+    validarAcessoGarcom(candidato)
+      .then(() => {
+        if (!ativo) return;
+        guardarAcesso(candidato);
+        setAcesso(candidato);
+        setErro('');
       })
       .catch((falha) => {
-        if (ativo) setErro(falha.message);
+        if (!ativo) return;
+        esquecerAcesso();
+        setAcesso('');
+        setErro(falha.message);
       })
       .finally(() => {
-        if (ativo) setValidandoQr(false);
+        if (ativo) setValidando(false);
       });
     return () => { ativo = false; };
-  }, [token]);
+  }, [candidato]);
 
   async function entrar(event) {
     event.preventDefault();
@@ -50,8 +89,8 @@ function AcessoGarcom() {
     setErro('');
     setProcessando(true);
     try {
-      if (!await entrarGarcom(usuario, senha)) {
-        setErro('Não foi possível autenticar com os dados informados.');
+      if (!await entrarGarcom(acesso, senha)) {
+        setErro('Senha não encontrada. Confira com o gerente.');
         return;
       }
       navigate('/garcom/mesas');
@@ -62,128 +101,51 @@ function AcessoGarcom() {
     }
   }
 
-  async function criarSenha(event) {
-    event.preventDefault();
-    if (processando) return;
-    setErro('');
-    if (!/^\d{6,12}$/.test(senha)) {
-      setErro('A senha deve ter de 6 a 12 dígitos numéricos.');
-      return;
-    }
-    if (senha !== confirmacao) {
-      setErro('A confirmação não confere com a senha digitada.');
-      return;
-    }
-    setProcessando(true);
-    try {
-      await definirSenhaGarcom(token, senha);
-      navigate('/garcom/mesas');
-    } catch (falha) {
-      setErro(falha.message);
-    } finally {
-      setProcessando(false);
-    }
-  }
-
-  const primeiroAcesso = Boolean(token);
-
   return (
     <main className={styles.acessoPagina}>
       <section className={styles.acessoCard}>
         <div className={styles.marcaAcesso}>
           <LogoEstabelecimento configuracao={configuracao} alternativa={configuracao.nomeLoja || 'Atendimento'} />
         </div>
-        <div className={styles.iconeAcesso}>{primeiroAcesso ? <KeyRound size={30} /> : <ShieldCheck size={30} />}</div>
-        <h1>{primeiroAcesso ? 'Primeiro acesso' : 'Acesso do garçom'}</h1>
+        <div className={styles.iconeAcesso}>{acesso ? <ShieldCheck size={30} /> : <QrCode size={30} />}</div>
+        <h1>Acesso do garçom</h1>
         <p>
-          {primeiroAcesso
-            ? 'Crie a sua senha para entrar no atendimento. Nos próximos turnos você entra direto com usuário e senha, sem o QR Code.'
-            : 'Digite seu usuário e sua senha para entrar no atendimento.'}
+          {acesso
+            ? 'Digite a sua senha para entrar no atendimento.'
+            : 'Leia o QR Code da equipe, no balcão, para abrir o atendimento neste aparelho.'}
         </p>
 
-        {/* Fica fora do formulário: o motivo do retorno precisa aparecer
-            mesmo enquanto o QR Code ainda está sendo validado. */}
+        {/* Fica fora do formulário: o motivo do retorno precisa aparecer mesmo
+            enquanto o QR Code ainda está sendo validado. */}
         {!erro && sessaoExpirada && <div className={styles.erro} role="alert">{sessaoExpirada}</div>}
 
-        {primeiroAcesso && validandoQr && (
-          <div className={styles.identificado} role="status"><span>…</span><div><strong>Validando o QR Code</strong><small>Só um instante.</small></div></div>
+        {validando && (
+          <div className={styles.identificado} role="status"><span>…</span><div><strong>Validando o acesso</strong><small>Só um instante.</small></div></div>
         )}
 
-        {primeiroAcesso && !validandoQr && !cadastro && (
+        {!validando && !acesso && (
           <>
             {erro && <div className={styles.erro} role="alert">{erro}</div>}
-            <div className={styles.linksDemo}>
-              <Link className={styles.linkDemo} to="/garcom/acesso">
-                <div><strong>Entrar com usuário e senha</strong><small>Se você já criou a sua senha</small></div>
-                <ArrowRight size={17} />
-              </Link>
-            </div>
+            <p className={styles.ajudaAcesso}>
+              O mesmo QR Code serve para toda a equipe. Se ele foi trocado, peça o código atual ao gerente.
+            </p>
           </>
         )}
 
-        {primeiroAcesso && cadastro && (
-          <form className={styles.formAcesso} onSubmit={criarSenha}>
-            <div className={styles.identificado}>
-              <span>{cadastro.nome.trim().charAt(0).toUpperCase()}</span>
-              <div><strong>{cadastro.nome}</strong><small>{cadastro.cargo} • usuário <strong>{cadastro.usuario}</strong></small></div>
-            </div>
-            <div className={styles.campo}>
-              <label htmlFor="novaSenha">Crie sua senha</label>
-              <input
-                id="novaSenha"
-                type="password"
-                inputMode="numeric"
-                maxLength="12"
-                autoFocus
-                autoComplete="new-password"
-                value={senha}
-                onChange={(event) => setSenha(event.target.value.replace(/\D/g, ''))}
-                placeholder="6 a 12 dígitos"
-              />
-            </div>
-            <div className={styles.campo}>
-              <label htmlFor="confirmarSenha">Repita a senha</label>
-              <input
-                id="confirmarSenha"
-                type="password"
-                inputMode="numeric"
-                maxLength="12"
-                autoComplete="new-password"
-                value={confirmacao}
-                onChange={(event) => setConfirmacao(event.target.value.replace(/\D/g, ''))}
-                placeholder="Digite novamente"
-              />
-            </div>
-            {erro && <div className={styles.erro} role="alert">{erro}</div>}
-            <button type="submit" className={styles.botaoPrincipal} disabled={processando}>
-              {processando ? 'Salvando…' : 'Salvar senha e entrar'} <ArrowRight size={17} />
-            </button>
-          </form>
-        )}
-
-        {!primeiroAcesso && (
+        {!validando && acesso && (
           <form className={styles.formAcesso} onSubmit={entrar}>
             <div className={styles.campo}>
-              <label htmlFor="usuarioGarcom">Usuário</label>
-              <input
-                id="usuarioGarcom"
-                autoFocus
-                autoComplete="username"
-                value={usuario}
-                onChange={(event) => setUsuario(event.target.value)}
-                placeholder="Seu usuário de acesso"
-              />
-            </div>
-            <div className={styles.campo}>
-              <label htmlFor="senhaGarcom">Senha</label>
+              <label htmlFor="senhaGarcom">Sua senha</label>
               <input
                 id="senhaGarcom"
                 type="password"
-                inputMode="numeric"
-                maxLength="12"
+                autoFocus
+                maxLength="32"
                 autoComplete="current-password"
+                autoCapitalize="none"
+                spellCheck="false"
                 value={senha}
-                onChange={(event) => setSenha(event.target.value.replace(/\D/g, ''))}
+                onChange={(event) => setSenha(event.target.value)}
                 placeholder="Digite sua senha"
               />
             </div>
@@ -192,7 +154,7 @@ function AcessoGarcom() {
               {processando ? 'Entrando…' : 'Entrar no atendimento'} <ArrowRight size={17} />
             </button>
             <p className={styles.ajudaAcesso}>
-              Esqueceu a senha? Peça ao gerente um novo QR Code de acesso.
+              Esqueceu a senha? Peça ao gerente para cadastrar uma nova.
             </p>
           </form>
         )}
