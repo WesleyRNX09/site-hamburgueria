@@ -19,6 +19,7 @@ import {
   salvarConfiguracao
 } from './operations.js';
 import { aguardarServidor, fecharServidor } from './runtime.js';
+import { adicionaisSeed, mesasSeed, pedidosSeed, produtosSeed } from './seed.js';
 import { criarHashSenha, criarJwt, verificarJwt } from './security.js';
 import {
   criarEstabelecimentoGerencial,
@@ -1194,8 +1195,16 @@ if (!executarIntegracao) {
 
     const publico = await chamar('/api/publico/inicial');
     assert.equal(publico.status, 200);
-    assert.equal(publico.corpo.produtos.length, 7);
-    assert.equal(publico.corpo.adicionais.length, 6);
+    // O cardápio público mostra o que está ativo no seed; a contagem sai
+    // dele para que ampliar a demonstração não quebre o teste.
+    assert.equal(
+      publico.corpo.produtos.length,
+      produtosSeed.filter((produto) => produto.ativo !== false).length
+    );
+    assert.equal(
+      publico.corpo.adicionais.length,
+      adicionaisSeed.filter((adicional) => adicional.ativo !== false).length
+    );
     assert.equal(publico.corpo.promocoes.length, 5);
     assert.equal('funcionarios' in publico.corpo, false);
   });
@@ -1233,8 +1242,8 @@ if (!executarIntegracao) {
 
     const dados = await chamar('/api/admin/dados', { token: login.corpo.token });
     assert.equal(dados.status, 200);
-    assert.equal(dados.corpo.pedidos.length, 4);
-    assert.equal(dados.corpo.mesas.length, 12);
+    assert.equal(dados.corpo.pedidos.length, pedidosSeed.length);
+    assert.equal(dados.corpo.mesas.length, mesasSeed.length);
     tokenGarcomDemonstracao = dados.corpo.funcionarios.find((item) => item.nome === 'Carlos Silva').token;
     tokenGarcomAna = dados.corpo.funcionarios.find((item) => item.nome === 'Ana Souza').token;
     tokenAdmin = login.corpo.token;
@@ -1726,18 +1735,21 @@ if (!executarIntegracao) {
   });
 
   test('administrador cria mesas, edita itens e finaliza comandas', async () => {
+    // Número derivado do seed: acrescentar mesas à demonstração não pode
+    // transformar a criação legítima em conflito de número repetido.
+    const numeroNovaMesa = String(mesasSeed.length + 1).padStart(2, '0');
     const criada = await chamar('/api/admin/mesas', {
       metodo: 'POST',
       token: tokenAdmin,
-      dados: { numero: '13' }
+      dados: { numero: numeroNovaMesa }
     });
     assert.equal(criada.status, 201);
-    assert.equal(criada.corpo.mesa.numero, '13');
+    assert.equal(criada.corpo.mesa.numero, numeroNovaMesa);
 
     const duplicada = await chamar('/api/admin/mesas', {
       metodo: 'POST',
       token: tokenAdmin,
-      dados: { numero: '13' }
+      dados: { numero: numeroNovaMesa }
     });
     assert.equal(duplicada.status, 409);
 
