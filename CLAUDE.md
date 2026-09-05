@@ -99,7 +99,12 @@ Este projeto não usa pastas `/frontend` e `/backend` separadas: é um único
 ## Ambiente de desenvolvimento
 
 - Subir frontend e backend juntos: `npm run dev` (frontend em
-  `http://localhost:5173`, API em `http://localhost:3001`).
+  `http://localhost:5173`, API em `http://localhost:3001`). O `server/dev.js`
+  mantém o Vite no processo principal e sobe a API como processo separado com
+  `--watch-path=./server`: alterações em `server/` reiniciam o backend
+  sozinhas, sem derrubar o Vite. Não coloque o Vite dentro de um processo em
+  modo watch — o cache que ele grava em `node_modules` provoca reinício em
+  ciclo e conflito de porta na API.
 - Somente frontend: `npm run dev:web`.
 - Somente backend: `npm run dev:api`.
 - Variáveis de ambiente obrigatórias: ver `env.example` (o projeto não usa o

@@ -25,6 +25,13 @@ function moeda(valor) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
 }
 
+/* Administrador e garçom aparecem com o mesmo peso na comanda; o prefixo
+   evita confundir quem abriu no caixa com quem atende a mesa. */
+function rotuloAutor(autor) {
+  if (!autor) return null;
+  return autor.tipo === 'admin' ? `Admin ${autor.nome}` : autor.nome;
+}
+
 /*
   O painel não distingue "Na cozinha": para quem opera o caixa a mesa está
   em atendimento até a conta ser pedida. O status continua existindo no
@@ -40,7 +47,6 @@ function MesasAdmin() {
     mesas,
     comandas,
     produtos,
-    funcionarios,
     configuracao,
     numeroPreco,
     criarMesaAdmin,
@@ -56,7 +62,6 @@ function MesasAdmin() {
   const [mesaSelecionadaId, setMesaSelecionadaId] = useState(null);
   const [formularioMesaAberto, setFormularioMesaAberto] = useState(false);
   const [numeroMesa, setNumeroMesa] = useState('');
-  const [responsavelId, setResponsavelId] = useState('');
   const [pagamento, setPagamento] = useState('Cartão');
   const [processando, setProcessando] = useState('');
   const [erro, setErro] = useState('');
@@ -83,6 +88,11 @@ function MesasAdmin() {
     (soma, item) => soma + Number(item.preco) * item.quantidade,
     0
   );
+  const abertaPor = rotuloAutor(comandaSelecionada?.abertaPor);
+  // Quem lançou pedido nesta comanda, na ordem em que apareceram, sem repetir.
+  const autoresLancamento = [...new Set(
+    itens.map((item) => rotuloAutor(item.enviadoPor)).filter(Boolean)
+  )];
   const subtotal = itens.reduce((soma, item) => soma + Number(item.preco) * item.quantidade, 0);
   const quantidadeItens = itens.reduce((soma, item) => soma + item.quantidade, 0);
 
@@ -94,10 +104,6 @@ function MesasAdmin() {
   const produtosDoCardapio = produtosAtivos.filter(
     (produto) => categoriaCardapio === 'Todos' || produto.categoria === categoriaCardapio
   );
-  const garconsAtivos = funcionarios.filter((funcionario) => funcionario.status === 'Ativo');
-  const responsavelSelecionado = garconsAtivos.some((item) => item.id === responsavelId)
-    ? responsavelId
-    : (garconsAtivos[0]?.id ?? '');
   const formasPagamento = [
     configuracao.pixChave && configuracao.pixBeneficiario && configuracao.pixCidade ? 'Pix' : null,
     configuracao.aceitaCartao !== false ? 'Cartão' : null,
@@ -194,9 +200,20 @@ function MesasAdmin() {
     }
   }
 
+  /* A comanda abre no próprio clique da mesa: o caixa não precisa escolher
+     garçom antes de lançar. Quem atender a mesa assume no app do garçom. */
+  async function selecionarMesa(mesa) {
+    setMesaSelecionadaId(mesa.id);
+    fecharModais();
+    setErro('');
+    setMensagem('');
+    if (comandasAbertas.some((comanda) => comanda.mesaId === mesa.id)) return;
+    await executar('abrir', () => abrirComandaAdmin(mesa.id));
+  }
+
   async function abrirComanda() {
-    if (!mesaSelecionada || !responsavelSelecionado) return;
-    await executar('abrir', () => abrirComandaAdmin(mesaSelecionada.id, responsavelSelecionado));
+    if (!mesaSelecionada) return;
+    await executar('abrir', () => abrirComandaAdmin(mesaSelecionada.id));
   }
 
   function abrirCardapio() {
@@ -361,12 +378,7 @@ function MesasAdmin() {
                 mesa,
                 comandasAbertas.find((comanda) => comanda.mesaId === mesa.id)
               )}
-              aoSelecionar={(mesa) => {
-                setMesaSelecionadaId(mesa.id);
-                fecharModais();
-                setErro('');
-                setMensagem('');
-              }}
+              aoSelecionar={selecionarMesa}
             />
           )}
         </section>
@@ -390,37 +402,21 @@ function MesasAdmin() {
               </header>
               <div className={styles.vazio}>
                 <ReceiptText size={32} />
-                <h3>Nenhuma comanda aberta</h3>
-                <p>Escolha o funcionário responsável para começar o atendimento.</p>
+                <h3>{processando === 'abrir' ? 'Abrindo comanda…' : 'Nenhuma comanda aberta'}</h3>
+                <p>
+                  A comanda abre sozinha ao escolher a mesa e fica registrada em seu nome.
+                  O garçom que atender a mesa assume o atendimento no app dele.
+                </p>
               </div>
               <div className={styles.abrirComanda}>
-                <label className={compartilhado.campo}>
-                  <span>Responsável pela comanda</span>
-                  <select
-                    value={responsavelSelecionado}
-                    disabled={garconsAtivos.length === 0}
-                    onChange={(evento) => setResponsavelId(evento.target.value)}
-                  >
-                    {garconsAtivos.map((funcionario) => (
-                      <option key={funcionario.id} value={funcionario.id}>
-                        {funcionario.nome} — {funcionario.cargo}
-                      </option>
-                    ))}
-                  </select>
-                </label>
                 <button
                   type="button"
                   className={compartilhado.botaoPrimario}
-                  disabled={Boolean(processando) || garconsAtivos.length === 0}
+                  disabled={Boolean(processando)}
                   onClick={abrirComanda}
                 >
                   <UserRound size={17} /> {processando === 'abrir' ? 'Abrindo…' : 'Abrir comanda'}
                 </button>
-                {garconsAtivos.length === 0 && (
-                  <p className={styles.aviso}>
-                    Cadastre um funcionário ativo para abrir comandas pelo painel.
-                  </p>
-                )}
               </div>
             </>
           )}
@@ -430,7 +426,11 @@ function MesasAdmin() {
               <header className={styles.cabecalhoColuna}>
                 <div>
                   <h2>Mesa {mesaSelecionada.numero}</h2>
-                  <p>{comandaSelecionada.garcom} • aberta às {comandaSelecionada.abertaEm}</p>
+                  <p>
+                    {abertaPor ?? 'Sem responsável'} • aberta às {comandaSelecionada.abertaEm}
+                    {comandaSelecionada.abertaPor?.tipo === 'admin' && comandaSelecionada.garcom
+                      && ` • garçom ${comandaSelecionada.garcom}`}
+                  </p>
                 </div>
                 <span className={`${styles.selo} ${styles[statusNoPainel(mesaSelecionada, comandaSelecionada)]}`}>
                   Em atendimento
@@ -524,7 +524,9 @@ function MesasAdmin() {
                     <span role="cell" className={styles.descricao}>
                       <strong>{item.nome}</strong>
                       <small className={item.enviado ? styles.marcaLancado : styles.marcaPendente}>
-                        {item.enviado ? `Lançado às ${item.enviadoEm}` : 'Aguardando lançamento'}
+                        {item.enviado
+                          ? `Lançado às ${item.enviadoEm}${rotuloAutor(item.enviadoPor) ? ` por ${rotuloAutor(item.enviadoPor)}` : ''}`
+                          : 'Aguardando lançamento'}
                       </small>
                       {item.adicionais?.length > 0 && <small>+ {item.adicionais.map((adicional) => adicional.nome).join(', ')}</small>}
                       {item.observacao && <small>{item.observacao}</small>}
@@ -592,9 +594,13 @@ function MesasAdmin() {
         <section className={styles.cupom} aria-hidden="true">
           <h1>{configuracao.nomeLoja ?? 'Conta'}</h1>
           <p>
-            Mesa {mesaSelecionada.numero} • {comandaSelecionada.garcom}
-            {' '}• aberta às {comandaSelecionada.abertaEm}
+            Mesa {mesaSelecionada.numero} • aberta às {comandaSelecionada.abertaEm}
+            {abertaPor ? ` por ${abertaPor}` : ''}
+            {comandaSelecionada.garcom ? ` • atendimento: ${comandaSelecionada.garcom}` : ''}
           </p>
+          {autoresLancamento.length > 0 && (
+            <p>Pedido lançado por: {autoresLancamento.join(', ')}</p>
+          )}
           <table>
             <thead>
               <tr><th>Qtde</th><th>Item</th><th>Unit.</th><th>Valor</th></tr>

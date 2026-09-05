@@ -44,4 +44,8 @@ A pasta `legado/` preserva o histórico anterior e não é executada pelo runner
   recebido, o troco calculado no servidor e a origem da confirmação
   (`provedor` e `referencia_externa`), abrindo espaço para integração futura
   com gateway sem mudar o esquema de novo.
+- `011_registrar_autoria_da_comanda.sql`: torna `funcionario_id` opcional em
+  `comandas` (o painel abre a comanda direto, sem escolher garçom), guarda o
+  administrador que abriu e registra em cada item de comanda quem o lançou
+  para a cozinha, com backfill pelo responsável atual da comanda.
 - `legado/20260824_operacao_comercial.sql`: histórico anterior, fora do runner.

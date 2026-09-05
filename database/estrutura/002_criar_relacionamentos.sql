@@ -94,7 +94,9 @@ ALTER TABLE comandas
   ADD CONSTRAINT fk_comandas_mesa
     FOREIGN KEY (mesa_id) REFERENCES mesas(id),
   ADD CONSTRAINT fk_comandas_funcionario
-    FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id);
+    FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id),
+  ADD CONSTRAINT fk_comandas_aberta_por_admin
+    FOREIGN KEY (aberta_por_admin_id) REFERENCES administradores(id) ON DELETE SET NULL;
 
 ALTER TABLE comanda_itens
   ADD CONSTRAINT fk_comanda_itens_estabelecimento
@@ -102,6 +104,10 @@ ALTER TABLE comanda_itens
     REFERENCES estabelecimentos(id_estabelecimento) ON DELETE RESTRICT,
   ADD CONSTRAINT fk_comanda_itens_comanda
     FOREIGN KEY (comanda_id) REFERENCES comandas(id) ON DELETE CASCADE,
+  ADD CONSTRAINT fk_comanda_itens_enviado_funcionario
+    FOREIGN KEY (enviado_por_funcionario_id) REFERENCES funcionarios(id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_comanda_itens_enviado_admin
+    FOREIGN KEY (enviado_por_admin_id) REFERENCES administradores(id) ON DELETE SET NULL,
   ADD CONSTRAINT fk_comanda_itens_produto
     FOREIGN KEY (produto_id) REFERENCES produtos(id) ON DELETE SET NULL;
 

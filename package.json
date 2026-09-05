@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env server/dev.js",
     "dev:web": "vite",
-    "dev:api": "node --env-file-if-exists=.env server/index.js",
+    "dev:api": "node --watch-path=./server --env-file-if-exists=.env server/index.js",
     "build": "vite build && node --env-file-if-exists=.env scripts/generate-seo-files.js",
     "db:check": "node --env-file-if-exists=.env server/db/check.js",
     "db:migrate": "node --env-file-if-exists=.env server/db/migrate.js",

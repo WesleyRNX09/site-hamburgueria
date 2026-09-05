@@ -740,7 +740,7 @@ async function rotaAdmin({
           banco,
           idEstabelecimento,
           dados.mesaId,
-          dados.funcionarioId,
+          dados.funcionarioId ?? null,
           administradorAutenticado.id
         )
       });

@@ -643,7 +643,7 @@ export function AppProvider({ children }) {
     await recarregarAdmin();
   }
 
-  async function abrirComandaAdmin(mesaId, funcionarioId) {
+  async function abrirComandaAdmin(mesaId, funcionarioId = null) {
     const { comanda } = await abrirComandaAdminApi(mesaId, funcionarioId);
     await recarregarAdmin();
     return comanda;

@@ -256,14 +256,16 @@ CREATE TABLE IF NOT EXISTS comandas (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   id_estabelecimento BIGINT UNSIGNED,
   mesa_id BIGINT UNSIGNED NOT NULL,
-  funcionario_id BIGINT UNSIGNED NOT NULL,
+  funcionario_id BIGINT UNSIGNED,
+  aberta_por_admin_id BIGINT UNSIGNED,
   status VARCHAR(40) NOT NULL DEFAULT 'Aberta',
   pagamento VARCHAR(40),
   aberta_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   encerrada_em DATETIME,
   atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_comandas_mesa_status (mesa_id, status),
-  INDEX idx_comandas_funcionario (funcionario_id)
+  INDEX idx_comandas_funcionario (funcionario_id),
+  INDEX idx_comandas_aberta_por_admin (aberta_por_admin_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS comanda_itens (
@@ -277,8 +279,12 @@ CREATE TABLE IF NOT EXISTS comanda_itens (
   observacao TEXT,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   enviado_em DATETIME,
+  enviado_por_funcionario_id BIGINT UNSIGNED,
+  enviado_por_admin_id BIGINT UNSIGNED,
   INDEX idx_comanda_itens_comanda (comanda_id),
-  INDEX idx_comanda_itens_produto (produto_id)
+  INDEX idx_comanda_itens_produto (produto_id),
+  INDEX idx_comanda_itens_enviado_funcionario (enviado_por_funcionario_id),
+  INDEX idx_comanda_itens_enviado_admin (enviado_por_admin_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS comanda_item_adicionais (

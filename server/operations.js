@@ -897,18 +897,26 @@ async function listarAdicionaisDeItens(banco, idEstabelecimento, tabela, campo, 
 
 export async function listarComandas(banco, idEstabelecimento, { funcionarioId = null } = {}) {
   const parametros = [idEstabelecimento];
-  const filtroFuncionario = funcionarioId == null ? '' : 'AND c.funcionario_id = ?';
+  /* Comanda aberta no caixa nasce sem responsável: ela precisa aparecer para
+     qualquer garçom, porque o primeiro que atender a mesa é quem assume. */
+  const filtroFuncionario = funcionarioId == null
+    ? ''
+    : 'AND (c.funcionario_id = ? OR c.funcionario_id IS NULL)';
   if (funcionarioId != null) parametros.push(funcionarioId);
   const [comandas] = await banco.execute(`
-    SELECT c.id, c.mesa_id, c.funcionario_id, c.status, c.pagamento, c.aberta_em,
-      m.numero AS mesa_numero, f.nome AS garcom
+    SELECT c.id, c.mesa_id, c.funcionario_id, c.aberta_por_admin_id, c.status,
+      c.pagamento, c.aberta_em, m.numero AS mesa_numero, f.nome AS garcom,
+      a.nome AS aberta_por_admin
     FROM comandas c
     INNER JOIN mesas m
       ON m.id = c.mesa_id
       AND m.id_estabelecimento = c.id_estabelecimento
-    INNER JOIN funcionarios f
+    LEFT JOIN funcionarios f
       ON f.id = c.funcionario_id
       AND f.id_estabelecimento = c.id_estabelecimento
+    LEFT JOIN administradores a
+      ON a.id = c.aberta_por_admin_id
+      AND a.id_estabelecimento = c.id_estabelecimento
     WHERE c.id_estabelecimento = ? AND c.status NOT IN ('Encerrada', 'Cancelada')
       ${filtroFuncionario}
     ORDER BY c.aberta_em DESC
@@ -919,11 +927,18 @@ export async function listarComandas(banco, idEstabelecimento, { funcionarioId =
   const [itens] = await banco.execute(`
     SELECT ci.id, ci.comanda_id, ci.produto_id, ci.nome_produto,
       ci.preco_unitario_centavos, ci.quantidade, ci.observacao, ci.criado_em,
-      ci.enviado_em, p.descricao, p.imagem_url, p.categoria_id
+      ci.enviado_em, fe.nome AS enviado_por_funcionario,
+      ae.nome AS enviado_por_admin, p.descricao, p.imagem_url, p.categoria_id
     FROM comanda_itens ci
     LEFT JOIN produtos p
       ON p.id = ci.produto_id
       AND p.id_estabelecimento = ci.id_estabelecimento
+    LEFT JOIN funcionarios fe
+      ON fe.id = ci.enviado_por_funcionario_id
+      AND fe.id_estabelecimento = ci.id_estabelecimento
+    LEFT JOIN administradores ae
+      ON ae.id = ci.enviado_por_admin_id
+      AND ae.id_estabelecimento = ci.id_estabelecimento
     WHERE ci.id_estabelecimento = ? AND ci.comanda_id IN (${marcadores})
     ORDER BY ci.id
   `, [idEstabelecimento, ...ids]);
@@ -950,14 +965,24 @@ export async function listarComandas(banco, idEstabelecimento, { funcionarioId =
       observacao: item.observacao ?? '',
       lancadoEm: horaPtBr(item.criado_em),
       enviado: Boolean(item.enviado_em),
-      enviadoEm: item.enviado_em ? horaPtBr(item.enviado_em) : null
+      enviadoEm: item.enviado_em ? horaPtBr(item.enviado_em) : null,
+      enviadoPor: item.enviado_por_admin
+        ? { nome: item.enviado_por_admin, tipo: 'admin' }
+        : (item.enviado_por_funcionario
+          ? { nome: item.enviado_por_funcionario, tipo: 'funcionario' }
+          : null)
     });
   }
   return comandas.map((comanda) => ({
     id: String(comanda.id),
     mesaId: Number(comanda.mesa_id),
-    funcionarioId: String(comanda.funcionario_id),
-    garcom: comanda.garcom,
+    funcionarioId: comanda.funcionario_id == null ? null : String(comanda.funcionario_id),
+    garcom: comanda.garcom ?? null,
+    // Quem abriu a comanda continua registrado mesmo depois de um garçom
+    // assumir o atendimento: é a autoria da abertura, não o responsável.
+    abertaPor: comanda.aberta_por_admin
+      ? { nome: comanda.aberta_por_admin, tipo: 'admin' }
+      : (comanda.garcom ? { nome: comanda.garcom, tipo: 'funcionario' } : null),
     status: comanda.status,
     pagamento: comanda.pagamento ?? null,
     abertaEm: horaPtBr(comanda.aberta_em),
@@ -1787,7 +1812,15 @@ async function obterComandaDoGarcom(
   `, [comandaId, idEstabelecimento]);
   const comanda = linhas[0];
   if (!comanda) throw erroDominio('Comanda não encontrada.', 404);
-  if (Number(comanda.funcionario_id) !== Number(funcionarioId)) {
+  if (comanda.funcionario_id == null) {
+    /* Comanda aberta no caixa e ainda sem garçom: o primeiro que atende
+       assume o atendimento e passa a responder por ela. */
+    await conexao.execute(`
+      UPDATE comandas SET funcionario_id = ?
+      WHERE id = ? AND id_estabelecimento = ? AND funcionario_id IS NULL
+    `, [funcionarioId, comandaId, idEstabelecimento]);
+    comanda.funcionario_id = funcionarioId;
+  } else if (Number(comanda.funcionario_id) !== Number(funcionarioId)) {
     throw erroDominio('Esta comanda pertence a outro funcionário.', 403);
   }
   if (COMANDAS_FECHADAS.has(comanda.status)) {
@@ -1859,7 +1892,13 @@ export async function abrirComanda(banco, idEstabelecimento, mesaId, funcionario
       FOR UPDATE
     `, [mesaId, idEstabelecimento]);
     if (existentes[0]) {
-      if (Number(existentes[0].funcionario_id) !== Number(funcionarioId)) {
+      if (existentes[0].funcionario_id == null) {
+        // Aberta no caixa: este garçom assume o atendimento da mesa.
+        await conexao.execute(`
+          UPDATE comandas SET funcionario_id = ?
+          WHERE id = ? AND id_estabelecimento = ? AND funcionario_id IS NULL
+        `, [funcionarioId, existentes[0].id, idEstabelecimento]);
+      } else if (Number(existentes[0].funcionario_id) !== Number(funcionarioId)) {
         throw erroDominio('Esta mesa já está sendo atendida por outro garçom.', 409);
       }
       return Number(existentes[0].id);
@@ -1872,6 +1911,43 @@ export async function abrirComanda(banco, idEstabelecimento, mesaId, funcionario
   });
   const comandas = await listarComandas(banco, idEstabelecimento);
   return comandas.find((comanda) => comanda.id === String(id));
+}
+
+/*
+  Núcleo do lançamento de item, compartilhado pelo app do garçom e pelo
+  painel. Quem chama já resolveu quem pode mexer na comanda: aqui só entra
+  a comanda validada.
+*/
+async function inserirItemNaComanda(conexao, idEstabelecimento, comandaId, comanda, dados) {
+  const [item] = await buscarItensValidados(conexao, idEstabelecimento, [{
+    id: dados.produtoId,
+    quantidade: dados.quantidade,
+    adicionais: dados.adicionais,
+    observacao: dados.observacao
+  }]);
+  const [[totais]] = await conexao.execute(`
+    SELECT COUNT(*) AS linhas, COALESCE(SUM(quantidade), 0) AS unidades
+    FROM comanda_itens
+    WHERE comanda_id = ? AND id_estabelecimento = ?
+  `, [comandaId, idEstabelecimento]);
+  if (Number(totais.linhas) >= MAX_LINHAS_PEDIDO
+      || Number(totais.unidades) + item.quantidade > MAX_UNIDADES_PEDIDO) {
+    throw erroDominio('A comanda atingiu o limite de itens permitido.');
+  }
+  const [resultado] = await conexao.execute(`
+    INSERT INTO comanda_itens
+      (id_estabelecimento, comanda_id, produto_id, nome_produto,
+       preco_unitario_centavos, quantidade, observacao)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `, [idEstabelecimento, comandaId, item.produtoId, item.nome, item.precoCentavos, item.quantidade, item.observacao]);
+  for (const adicional of item.adicionais) {
+    await conexao.execute(`
+      INSERT INTO comanda_item_adicionais
+        (id_estabelecimento, comanda_item_id, adicional_id, nome_adicional, preco_centavos)
+      VALUES (?, ?, ?, ?, ?)
+    `, [idEstabelecimento, resultado.insertId, adicional.id, adicional.nome, adicional.precoCentavos]);
+  }
+  await sincronizarStatusComanda(conexao, idEstabelecimento, comandaId, comanda.status);
 }
 
 export async function adicionarItemComanda(
@@ -1889,35 +1965,7 @@ export async function adicionarItemComanda(
       funcionarioId,
       { bloquear: true }
     );
-    const [item] = await buscarItensValidados(conexao, idEstabelecimento, [{
-      id: dados.produtoId,
-      quantidade: dados.quantidade,
-      adicionais: dados.adicionais,
-      observacao: dados.observacao
-    }]);
-    const [[totais]] = await conexao.execute(`
-      SELECT COUNT(*) AS linhas, COALESCE(SUM(quantidade), 0) AS unidades
-      FROM comanda_itens
-      WHERE comanda_id = ? AND id_estabelecimento = ?
-    `, [comandaId, idEstabelecimento]);
-    if (Number(totais.linhas) >= MAX_LINHAS_PEDIDO
-        || Number(totais.unidades) + item.quantidade > MAX_UNIDADES_PEDIDO) {
-      throw erroDominio('A comanda atingiu o limite de itens permitido.');
-    }
-    const [resultado] = await conexao.execute(`
-      INSERT INTO comanda_itens
-        (id_estabelecimento, comanda_id, produto_id, nome_produto,
-         preco_unitario_centavos, quantidade, observacao)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [idEstabelecimento, comandaId, item.produtoId, item.nome, item.precoCentavos, item.quantidade, item.observacao]);
-    for (const adicional of item.adicionais) {
-      await conexao.execute(`
-        INSERT INTO comanda_item_adicionais
-          (id_estabelecimento, comanda_item_id, adicional_id, nome_adicional, preco_centavos)
-        VALUES (?, ?, ?, ?, ?)
-      `, [idEstabelecimento, resultado.insertId, adicional.id, adicional.nome, adicional.precoCentavos]);
-    }
-    await sincronizarStatusComanda(conexao, idEstabelecimento, comandaId, comanda.status);
+    await inserirItemNaComanda(conexao, idEstabelecimento, comandaId, comanda, dados);
   });
 }
 
@@ -1926,6 +1974,44 @@ export async function adicionarItemComanda(
   que ainda não foi para a cozinha (o clique errado), enquanto o painel
   administrativo continua podendo corrigir um item já lançado.
 */
+async function excluirItemDaComanda(
+  conexao,
+  idEstabelecimento,
+  comandaId,
+  itemId,
+  comanda,
+  { somenteNaoLancados = false } = {}
+) {
+  if (somenteNaoLancados) {
+    const [itens] = await conexao.execute(`
+      SELECT enviado_em FROM comanda_itens
+      WHERE id = ? AND comanda_id = ? AND id_estabelecimento = ?
+    `, [itemId, comandaId, idEstabelecimento]);
+    if (!itens[0]) throw erroDominio('Item da comanda não encontrado.', 404);
+    if (itens[0].enviado_em) {
+      throw erroDominio('Item já lançado para a cozinha: peça ao administrador para removê-lo.', 403);
+    }
+  }
+  const [[totais]] = await conexao.execute(`
+    SELECT COUNT(*) AS linhas,
+      EXISTS(
+        SELECT 1 FROM pedidos
+        WHERE comanda_id = ? AND id_estabelecimento = ?
+      ) AS possui_pedido
+    FROM comanda_itens
+    WHERE comanda_id = ? AND id_estabelecimento = ?
+  `, [comandaId, idEstabelecimento, comandaId, idEstabelecimento]);
+  if (Number(totais.possui_pedido) && Number(totais.linhas) <= 1) {
+    throw erroDominio('Não é possível remover o último item depois do envio à cozinha.', 409);
+  }
+  const [resultado] = await conexao.execute(`
+    DELETE FROM comanda_itens
+    WHERE id = ? AND comanda_id = ? AND id_estabelecimento = ?
+  `, [itemId, comandaId, idEstabelecimento]);
+  if (!resultado.affectedRows) throw erroDominio('Item da comanda não encontrado.', 404);
+  await sincronizarStatusComanda(conexao, idEstabelecimento, comandaId, comanda.status);
+}
+
 export async function removerItemComanda(
   banco,
   idEstabelecimento,
@@ -1942,34 +2028,14 @@ export async function removerItemComanda(
       funcionarioId,
       { bloquear: true }
     );
-    if (somenteNaoLancados) {
-      const [itens] = await conexao.execute(`
-        SELECT enviado_em FROM comanda_itens
-        WHERE id = ? AND comanda_id = ? AND id_estabelecimento = ?
-      `, [itemId, comandaId, idEstabelecimento]);
-      if (!itens[0]) throw erroDominio('Item da comanda não encontrado.', 404);
-      if (itens[0].enviado_em) {
-        throw erroDominio('Item já lançado para a cozinha: peça ao administrador para removê-lo.', 403);
-      }
-    }
-    const [[totais]] = await conexao.execute(`
-      SELECT COUNT(*) AS linhas,
-        EXISTS(
-          SELECT 1 FROM pedidos
-          WHERE comanda_id = ? AND id_estabelecimento = ?
-        ) AS possui_pedido
-      FROM comanda_itens
-      WHERE comanda_id = ? AND id_estabelecimento = ?
-    `, [comandaId, idEstabelecimento, comandaId, idEstabelecimento]);
-    if (Number(totais.possui_pedido) && Number(totais.linhas) <= 1) {
-      throw erroDominio('Não é possível remover o último item depois do envio à cozinha.', 409);
-    }
-    const [resultado] = await conexao.execute(`
-      DELETE FROM comanda_itens
-      WHERE id = ? AND comanda_id = ? AND id_estabelecimento = ?
-    `, [itemId, comandaId, idEstabelecimento]);
-    if (!resultado.affectedRows) throw erroDominio('Item da comanda não encontrado.', 404);
-    await sincronizarStatusComanda(conexao, idEstabelecimento, comandaId, comanda.status);
+    await excluirItemDaComanda(
+      conexao,
+      idEstabelecimento,
+      comandaId,
+      itemId,
+      comanda,
+      { somenteNaoLancados }
+    );
   });
 }
 
@@ -2007,62 +2073,91 @@ export async function limparItensNaoLancados(
   });
 }
 
-async function buscarResponsavelComanda(banco, idEstabelecimento, comandaId) {
-  const [linhas] = await banco.execute(`
-    SELECT funcionario_id FROM comandas
-    WHERE id = ? AND id_estabelecimento = ?
-  `, [comandaId, idEstabelecimento]);
-  if (!linhas[0]) throw erroDominio('Comanda não encontrada.', 404);
-  return Number(linhas[0].funcionario_id);
-}
-
-// O administrador pode abrir a comanda de uma mesa livre, mas a comanda
-// continua pertencendo a um funcionario: quem responde pelo atendimento e o
-// mesmo registro usado no envio, na conta, no fechamento e nos relatorios.
-// Por isso o responsavel e obrigatorio e e validado dentro do proprio
-// estabelecimento, nunca aceito como veio do navegador.
+/*
+  Abertura pelo painel: o caixa abre a comanda no próprio clique da mesa, sem
+  escolher um garçom. A comanda nasce sem responsável e guarda quem a abriu —
+  o primeiro garçom que atender a mesa assume o atendimento. Informar um
+  funcionário continua sendo possível, e nesse caso ele é validado dentro do
+  próprio estabelecimento, nunca aceito como veio do navegador.
+  Se a mesa já tiver comanda ativa, ela é devolvida em vez de recusada: o
+  clique repetido no painel não pode virar erro.
+*/
 export async function abrirComandaAdmin(
   banco,
   idEstabelecimento,
   mesaId,
-  funcionarioId,
+  funcionarioId = null,
   administradorId = null
 ) {
   const mesa = Number(mesaId);
-  const funcionario = Number(funcionarioId);
   if (!Number.isInteger(mesa) || mesa < 1) throw erroDominio('Mesa não encontrada.', 404);
-  if (!Number.isInteger(funcionario) || funcionario < 1) {
-    throw erroDominio('Selecione o funcionário responsável pela comanda.');
+
+  let funcionario = null;
+  if (funcionarioId !== null && funcionarioId !== undefined && funcionarioId !== '') {
+    funcionario = Number(funcionarioId);
+    if (!Number.isInteger(funcionario) || funcionario < 1) {
+      throw erroDominio('Funcionário não encontrado ou inativo neste estabelecimento.', 404);
+    }
+    const [funcionarios] = await banco.execute(`
+      SELECT id FROM funcionarios
+      WHERE id = ? AND id_estabelecimento = ? AND ativo = 1
+      LIMIT 1
+    `, [funcionario, idEstabelecimento]);
+    if (!funcionarios[0]) {
+      throw erroDominio('Funcionário não encontrado ou inativo neste estabelecimento.', 404);
+    }
   }
-  const [funcionarios] = await banco.execute(`
-    SELECT id FROM funcionarios
-    WHERE id = ? AND id_estabelecimento = ? AND ativo = 1
-    LIMIT 1
-  `, [funcionario, idEstabelecimento]);
-  if (!funcionarios[0]) {
-    throw erroDominio('Funcionário não encontrado ou inativo neste estabelecimento.', 404);
-  }
-  const comanda = await abrirComanda(banco, idEstabelecimento, mesa, funcionario);
-  await registrarAuditoria(
-    banco,
-    idEstabelecimento,
-    administradorId,
-    'comanda.aberta',
-    'comanda',
-    comanda?.id ?? null,
-    { mesaId: mesa, funcionarioId: funcionario }
-  );
-  return comanda;
+
+  const id = await executarTransacao(banco, async (conexao) => {
+    const [mesas] = await conexao.execute(`
+      SELECT id FROM mesas
+      WHERE id = ? AND id_estabelecimento = ? AND ativo = 1 FOR UPDATE
+    `, [mesa, idEstabelecimento]);
+    if (!mesas[0]) throw erroDominio('Mesa não encontrada.', 404);
+    const [existentes] = await conexao.execute(`
+      SELECT id FROM comandas
+      WHERE mesa_id = ? AND id_estabelecimento = ?
+        AND status NOT IN ('Encerrada', 'Cancelada')
+      FOR UPDATE
+    `, [mesa, idEstabelecimento]);
+    if (existentes[0]) return Number(existentes[0].id);
+    const [resultado] = await conexao.execute(`
+      INSERT INTO comandas
+        (id_estabelecimento, mesa_id, funcionario_id, aberta_por_admin_id, status)
+      VALUES (?, ?, ?, ?, 'Aberta')
+    `, [idEstabelecimento, mesa, funcionario, administradorId]);
+    await registrarAuditoria(
+      conexao,
+      idEstabelecimento,
+      administradorId,
+      'comanda.aberta',
+      'comanda',
+      Number(resultado.insertId),
+      { mesaId: mesa, funcionarioId: funcionario }
+    );
+    return Number(resultado.insertId);
+  });
+
+  const comandas = await listarComandas(banco, idEstabelecimento);
+  return comandas.find((comanda) => comanda.id === String(id));
 }
 
+/*
+  O painel age pela mesa, não pelo garçom: valida a comanda do próprio
+  estabelecimento e segue, sem depender de haver um responsável definido.
+*/
 export async function adicionarItemComandaAdmin(banco, idEstabelecimento, comandaId, dados) {
-  const funcionarioId = await buscarResponsavelComanda(banco, idEstabelecimento, comandaId);
-  await adicionarItemComanda(banco, idEstabelecimento, comandaId, funcionarioId, dados);
+  await executarTransacao(banco, async (conexao) => {
+    const comanda = await obterComandaAtiva(conexao, idEstabelecimento, comandaId);
+    await inserirItemNaComanda(conexao, idEstabelecimento, comandaId, comanda, dados);
+  });
 }
 
 export async function removerItemComandaAdmin(banco, idEstabelecimento, comandaId, itemId) {
-  const funcionarioId = await buscarResponsavelComanda(banco, idEstabelecimento, comandaId);
-  await removerItemComanda(banco, idEstabelecimento, comandaId, itemId, funcionarioId);
+  await executarTransacao(banco, async (conexao) => {
+    const comanda = await obterComandaAtiva(conexao, idEstabelecimento, comandaId);
+    await excluirItemDaComanda(conexao, idEstabelecimento, comandaId, itemId, comanda);
+  });
 }
 
 export async function limparItensNaoLancadosAdmin(
@@ -2184,6 +2279,75 @@ async function copiarItensComandaParaPedido(conexao, idEstabelecimento, comandaI
   return total;
 }
 
+/*
+  Lançamento para a cozinha. `autor` guarda quem apertou o botão — garçom ou
+  administrador —, item a item, para que a conta impressa mostre quem
+  registrou cada pedido do cliente.
+*/
+async function lancarComandaNaCozinha(
+  conexao,
+  idEstabelecimento,
+  comandaId,
+  comanda,
+  { funcionarioId = null, administradorId = null }
+) {
+  const [[pendentes]] = await conexao.execute(`
+    SELECT COUNT(*) AS total FROM comanda_itens
+    WHERE comanda_id = ? AND id_estabelecimento = ? AND enviado_em IS NULL
+  `, [comandaId, idEstabelecimento]);
+  if (Number(pendentes.total) === 0) {
+    throw erroDominio('Não há item pendente para lançar na cozinha.', 409);
+  }
+  const [pedidos] = await conexao.execute(`
+    SELECT id FROM pedidos
+    WHERE comanda_id = ? AND id_estabelecimento = ? FOR UPDATE
+  `, [comandaId, idEstabelecimento]);
+  let pedidoId = pedidos[0] ? Number(pedidos[0].id) : null;
+  if (!pedidoId) {
+    const [resultado] = await conexao.execute(`
+      INSERT INTO pedidos
+        (id_estabelecimento, origem, cliente, telefone, status, pagamento, taxa_entrega_centavos,
+         total_centavos, comanda_id, mesa_id, funcionario_id)
+      VALUES (?, 'mesa', ?, 'Atendimento presencial', 'Recebido', 'A definir', 0, 0, ?, ?, ?)
+    `, [
+      idEstabelecimento,
+      `Mesa ${comanda.mesa_numero}`,
+      comandaId,
+      comanda.mesa_id,
+      // O pedido fica com o responsável da comanda; lançado pelo painel sem
+      // garçom definido, ele nasce sem funcionário, como o delivery.
+      funcionarioId ?? (comanda.funcionario_id == null ? null : Number(comanda.funcionario_id))
+    ]);
+    pedidoId = Number(resultado.insertId);
+  } else {
+    await conexao.execute(`
+      DELETE FROM pedido_itens
+      WHERE pedido_id = ? AND id_estabelecimento = ?
+    `, [pedidoId, idEstabelecimento]);
+  }
+  const total = await copiarItensComandaParaPedido(
+    conexao,
+    idEstabelecimento,
+    comandaId,
+    pedidoId
+  );
+  await conexao.execute(`
+    UPDATE pedidos SET total_centavos = ?, status = 'Em preparo'
+    WHERE id = ? AND id_estabelecimento = ?
+  `, [total, pedidoId, idEstabelecimento]);
+  await conexao.execute(`
+    UPDATE comanda_itens
+    SET enviado_em = CURRENT_TIMESTAMP,
+      enviado_por_funcionario_id = ?,
+      enviado_por_admin_id = ?
+    WHERE comanda_id = ? AND id_estabelecimento = ? AND enviado_em IS NULL
+  `, [funcionarioId, administradorId, comandaId, idEstabelecimento]);
+  await conexao.execute(`
+    UPDATE comandas SET status = 'Na cozinha'
+    WHERE id = ? AND id_estabelecimento = ?
+  `, [comandaId, idEstabelecimento]);
+}
+
 export async function enviarComanda(banco, idEstabelecimento, comandaId, funcionarioId) {
   await executarTransacao(banco, async (conexao) => {
     const comanda = await obterComandaDoGarcom(
@@ -2193,50 +2357,9 @@ export async function enviarComanda(banco, idEstabelecimento, comandaId, funcion
       funcionarioId,
       { bloquear: true }
     );
-    const [[pendentes]] = await conexao.execute(`
-      SELECT COUNT(*) AS total FROM comanda_itens
-      WHERE comanda_id = ? AND id_estabelecimento = ? AND enviado_em IS NULL
-    `, [comandaId, idEstabelecimento]);
-    if (Number(pendentes.total) === 0) {
-      throw erroDominio('Não há item pendente para lançar na cozinha.', 409);
-    }
-    const [pedidos] = await conexao.execute(`
-      SELECT id FROM pedidos
-      WHERE comanda_id = ? AND id_estabelecimento = ? FOR UPDATE
-    `, [comandaId, idEstabelecimento]);
-    let pedidoId = pedidos[0] ? Number(pedidos[0].id) : null;
-    if (!pedidoId) {
-      const [resultado] = await conexao.execute(`
-        INSERT INTO pedidos
-          (id_estabelecimento, origem, cliente, telefone, status, pagamento, taxa_entrega_centavos,
-           total_centavos, comanda_id, mesa_id, funcionario_id)
-        VALUES (?, 'mesa', ?, 'Atendimento presencial', 'Recebido', 'A definir', 0, 0, ?, ?, ?)
-      `, [idEstabelecimento, `Mesa ${comanda.mesa_numero}`, comandaId, comanda.mesa_id, funcionarioId]);
-      pedidoId = Number(resultado.insertId);
-    } else {
-      await conexao.execute(`
-        DELETE FROM pedido_itens
-        WHERE pedido_id = ? AND id_estabelecimento = ?
-      `, [pedidoId, idEstabelecimento]);
-    }
-    const total = await copiarItensComandaParaPedido(
-      conexao,
-      idEstabelecimento,
-      comandaId,
-      pedidoId
-    );
-    await conexao.execute(`
-      UPDATE pedidos SET total_centavos = ?, status = 'Em preparo'
-      WHERE id = ? AND id_estabelecimento = ?
-    `, [total, pedidoId, idEstabelecimento]);
-    await conexao.execute(`
-      UPDATE comanda_itens SET enviado_em = CURRENT_TIMESTAMP
-      WHERE comanda_id = ? AND id_estabelecimento = ? AND enviado_em IS NULL
-    `, [comandaId, idEstabelecimento]);
-    await conexao.execute(`
-      UPDATE comandas SET status = 'Na cozinha'
-      WHERE id = ? AND id_estabelecimento = ?
-    `, [comandaId, idEstabelecimento]);
+    await lancarComandaNaCozinha(conexao, idEstabelecimento, comandaId, comanda, {
+      funcionarioId
+    });
   });
 }
 
@@ -2251,17 +2374,21 @@ export async function enviarComandaAdmin(
   comandaId,
   administradorId = null
 ) {
-  const funcionarioId = await buscarResponsavelComanda(banco, idEstabelecimento, comandaId);
-  await enviarComanda(banco, idEstabelecimento, comandaId, funcionarioId);
-  await registrarAuditoria(
-    banco,
-    idEstabelecimento,
-    administradorId,
-    'comanda.lancada',
-    'comanda',
-    Number(comandaId),
-    { funcionarioId }
-  );
+  await executarTransacao(banco, async (conexao) => {
+    const comanda = await obterComandaAtiva(conexao, idEstabelecimento, comandaId);
+    await lancarComandaNaCozinha(conexao, idEstabelecimento, comandaId, comanda, {
+      administradorId
+    });
+    await registrarAuditoria(
+      conexao,
+      idEstabelecimento,
+      administradorId,
+      'comanda.lancada',
+      'comanda',
+      Number(comandaId),
+      { funcionarioId: comanda.funcionario_id == null ? null : Number(comanda.funcionario_id) }
+    );
+  });
 }
 
 /*

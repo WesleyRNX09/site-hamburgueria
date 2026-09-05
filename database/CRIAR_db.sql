@@ -261,14 +261,16 @@ CREATE TABLE IF NOT EXISTS comandas (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   id_estabelecimento BIGINT UNSIGNED,
   mesa_id BIGINT UNSIGNED NOT NULL,
-  funcionario_id BIGINT UNSIGNED NOT NULL,
+  funcionario_id BIGINT UNSIGNED,
+  aberta_por_admin_id BIGINT UNSIGNED,
   status VARCHAR(40) NOT NULL DEFAULT 'Aberta',
   pagamento VARCHAR(40),
   aberta_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   encerrada_em DATETIME,
   atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_comandas_mesa_status (mesa_id, status),
-  INDEX idx_comandas_funcionario (funcionario_id)
+  INDEX idx_comandas_funcionario (funcionario_id),
+  INDEX idx_comandas_aberta_por_admin (aberta_por_admin_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS comanda_itens (
@@ -282,8 +284,12 @@ CREATE TABLE IF NOT EXISTS comanda_itens (
   observacao TEXT,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   enviado_em DATETIME,
+  enviado_por_funcionario_id BIGINT UNSIGNED,
+  enviado_por_admin_id BIGINT UNSIGNED,
   INDEX idx_comanda_itens_comanda (comanda_id),
-  INDEX idx_comanda_itens_produto (produto_id)
+  INDEX idx_comanda_itens_produto (produto_id),
+  INDEX idx_comanda_itens_enviado_funcionario (enviado_por_funcionario_id),
+  INDEX idx_comanda_itens_enviado_admin (enviado_por_admin_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS comanda_item_adicionais (
@@ -549,7 +555,9 @@ ALTER TABLE comandas
   ADD CONSTRAINT fk_comandas_mesa
     FOREIGN KEY (mesa_id) REFERENCES mesas(id),
   ADD CONSTRAINT fk_comandas_funcionario
-    FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id);
+    FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id),
+  ADD CONSTRAINT fk_comandas_aberta_por_admin
+    FOREIGN KEY (aberta_por_admin_id) REFERENCES administradores(id) ON DELETE SET NULL;
 
 ALTER TABLE comanda_itens
   ADD CONSTRAINT fk_comanda_itens_estabelecimento
@@ -557,6 +565,10 @@ ALTER TABLE comanda_itens
     REFERENCES estabelecimentos(id_estabelecimento) ON DELETE RESTRICT,
   ADD CONSTRAINT fk_comanda_itens_comanda
     FOREIGN KEY (comanda_id) REFERENCES comandas(id) ON DELETE CASCADE,
+  ADD CONSTRAINT fk_comanda_itens_enviado_funcionario
+    FOREIGN KEY (enviado_por_funcionario_id) REFERENCES funcionarios(id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_comanda_itens_enviado_admin
+    FOREIGN KEY (enviado_por_admin_id) REFERENCES administradores(id) ON DELETE SET NULL,
   ADD CONSTRAINT fk_comanda_itens_produto
     FOREIGN KEY (produto_id) REFERENCES produtos(id) ON DELETE SET NULL;
 
@@ -634,7 +646,8 @@ INSERT INTO schema_migrations (versao, checksum) VALUES
   ('007_adicionar_superadministradores.sql', '59cd72293045658157f4dc217736d384791fe5ad6a047681c2539c373221812d'),
   ('008_adicionar_textos_publicos.sql', 'effc5d8a2688e354f1a12eb537aa323eb3c7698be9e46fa36316893f48559ae7'),
   ('009_marcar_lancamento_itens_comanda.sql', 'cc107471dbcf63037db6f3fc0105643e0a3d25f68bfd6d3aa350c828b4e6ccbf'),
-  ('010_preparar_pagamento_no_caixa.sql', 'e7b38e1fa95226662015d800496e4bee069693c8d6abb4e302897bd563128005')
+  ('010_preparar_pagamento_no_caixa.sql', 'e7b38e1fa95226662015d800496e4bee069693c8d6abb4e302897bd563128005'),
+  ('011_registrar_autoria_da_comanda.sql', 'f327fbf669bb69e4e95f636e66289e34feda5852772151a0c11f306f1f26dcc4')
 ON DUPLICATE KEY UPDATE versao = VALUES(versao);
 
 INSERT INTO estabelecimentos

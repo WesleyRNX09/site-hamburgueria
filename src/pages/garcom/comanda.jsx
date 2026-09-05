@@ -11,6 +11,13 @@ function moeda(valor) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
 }
 
+/* A comanda pode ter sido aberta no caixa: mostrar quem abriu evita o garçom
+   achar que a mesa é dele quando ainda não assumiu o atendimento. */
+function rotuloAutor(autor) {
+  if (!autor) return null;
+  return autor.tipo === 'admin' ? `Admin ${autor.nome}` : autor.nome;
+}
+
 function ComandaGarcom() {
   const { mesaId } = useParams();
   const {
@@ -113,7 +120,8 @@ function ComandaGarcom() {
     return <WaiterLayout titulo={`Mesa ${mesa.numero}`} subtitulo="A comanda ainda não foi aberta."><button disabled={processando === 'abrir'} type="button" className={styles.botaoPrincipal} onClick={() => executarAcao('abrir', () => abrirComanda(mesa.id))}>{processando === 'abrir' ? 'Abrindo…' : 'Abrir comanda'}</button>{mensagem && <div className={styles.erro} role="alert">{mensagem}</div>}</WaiterLayout>;
   }
 
-  if (comanda.funcionarioId !== garcomSessao.id) {
+  // Comanda aberta no caixa chega sem responsável: o garçom pode assumir.
+  if (comanda.funcionarioId !== null && comanda.funcionarioId !== garcomSessao.id) {
     return <WaiterLayout titulo={`Mesa ${mesa.numero} em atendimento`} subtitulo="Esta comanda pertence a outro funcionário."><button type="button" className={styles.botaoSecundario} onClick={() => navigate('/garcom/mesas')}><ArrowLeft size={17} /> Voltar</button></WaiterLayout>;
   }
 
@@ -222,7 +230,10 @@ function ComandaGarcom() {
       };
 
   return (
-    <WaiterLayout titulo={`Mesa ${mesa.numero}`} subtitulo={`${comanda.status} • aberta às ${comanda.abertaEm} • ${comanda.garcom}`}>
+    <WaiterLayout
+      titulo={`Mesa ${mesa.numero}`}
+      subtitulo={`${comanda.status} • aberta às ${comanda.abertaEm}${rotuloAutor(comanda.abertaPor) ? ` • ${rotuloAutor(comanda.abertaPor)}` : ''}`}
+    >
       {mensagem && <div className={styles.identificado} role="status" aria-live="polite"><span><Check size={18} /></span><div><strong>{mensagem}</strong><small>Status atual: {comanda.status}</small></div></div>}
 
       <div className={styles.comandaFluxo}>
@@ -309,7 +320,9 @@ function ComandaGarcom() {
                     {item.adicionais?.length > 0 && <small>+ {item.adicionais.map((extra) => extra.nome ?? extra).join(', ')}</small>}
                     {item.observacao && <small>{item.observacao}</small>}
                     <small className={item.enviado ? styles.marcaLancado : styles.marcaPendente}>
-                      {item.enviado ? `Lançado às ${item.enviadoEm}` : 'Aguardando lançamento'}
+                      {item.enviado
+                        ? `Lançado às ${item.enviadoEm}${rotuloAutor(item.enviadoPor) ? ` por ${rotuloAutor(item.enviadoPor)}` : ''}`
+                        : 'Aguardando lançamento'}
                     </small>
                   </span>
                   <span className={styles.itemQuantidade}>{item.quantidade}</span>

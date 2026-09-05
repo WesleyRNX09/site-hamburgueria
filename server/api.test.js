@@ -1646,7 +1646,9 @@ if (!executarIntegracao) {
     const dados = await chamar('/api/garcom/dados', { token: tokenSessaoGarcom });
     assert.equal(dados.status, 200);
     assert.ok(dados.corpo.comandas.length > 0);
-    assert.ok(dados.corpo.comandas.every((comanda) => comanda.funcionarioId === idGarcomDemonstracao));
+    assert.ok(dados.corpo.comandas.every(
+      (comanda) => comanda.funcionarioId === idGarcomDemonstracao || comanda.funcionarioId === null
+    ));
     assert.equal(dados.corpo.comandas.some((comanda) => comanda.garcom === 'Ana Souza'), false);
 
     const comanda = dados.corpo.comandas.find((item) => item.mesaId === 1);
@@ -1683,6 +1685,8 @@ if (!executarIntegracao) {
     const atualizado = await chamar('/api/garcom/dados', { token: tokenSessaoGarcom });
     const comandaAtualizada = atualizado.corpo.comandas.find((item) => item.id === comanda.id);
     assert.ok(comandaAtualizada.itens.every((linha) => linha.enviado));
+    assert.equal(comandaAtualizada.itens.at(-1).enviadoPor.tipo, 'funcionario');
+    assert.equal(comandaAtualizada.itens.at(-1).enviadoPor.nome, 'Carlos Silva');
     const ultimoItem = comandaAtualizada.itens.at(-1);
     const remocaoLancada = await chamar(`/api/garcom/comandas/${comanda.id}/itens/${ultimoItem.linhaId}`, {
       metodo: 'DELETE',
@@ -1784,6 +1788,11 @@ if (!executarIntegracao) {
     const comandaLancada = aposLancar.corpo.comandas.find((item) => item.id === comanda.id);
     assert.ok(comandaLancada.itens.every((linha) => linha.enviado));
     assert.equal(comandaLancada.status, 'Na cozinha');
+    // O item que o painel acabou de lançar fica com a autoria do administrador;
+    // o que o garçom já tinha lançado antes mantém a autoria dele.
+    const linhaDoAdmin = comandaLancada.itens.find((linha) => linha.linhaId === itemNovo.linhaId);
+    assert.equal(linhaDoAdmin.enviadoPor.tipo, 'admin');
+    assert.equal(linhaDoAdmin.enviadoPor.nome, 'Administrador de teste');
 
     const semPendente = await chamar(`/api/admin/comandas/${comanda.id}/lancar`, {
       metodo: 'POST',
@@ -1825,10 +1834,22 @@ if (!executarIntegracao) {
     const aberta = await chamar('/api/admin/comandas', {
       metodo: 'POST',
       token: tokenAdmin,
-      dados: { mesaId: mesaLivre.id, funcionarioId: funcionario.id }
+      dados: { mesaId: mesaLivre.id }
     });
     assert.equal(aberta.status, 201);
+    assert.equal(aberta.corpo.comanda.funcionarioId, null);
+    assert.equal(aberta.corpo.comanda.abertaPor.tipo, 'admin');
+    assert.equal(aberta.corpo.comanda.abertaPor.nome, 'Administrador de teste');
     const comandaId = aberta.corpo.comanda.id;
+
+    // Clicar de novo na mesma mesa devolve a comanda aberta em vez de erro.
+    const repetida = await chamar('/api/admin/comandas', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { mesaId: mesaLivre.id }
+    });
+    assert.equal(repetida.status, 201);
+    assert.equal(repetida.corpo.comanda.id, comandaId);
 
     for (let vez = 0; vez < 2; vez += 1) {
       const adicionado = await chamar(`/api/admin/comandas/${comandaId}/itens`, {

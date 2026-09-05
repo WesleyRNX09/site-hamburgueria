@@ -274,13 +274,31 @@ async function criarCatalogoInicial(banco, idEstabelecimento, incluirDadosDemons
   });
 }
 
-async function inserirItemComanda(conexao, idEstabelecimento, comandaId, item) {
+/*
+  Demonstração coerente: item de comanda que já foi para a cozinha nasce
+  marcado como lançado, com o próprio garçom da comanda como autor. Sem isso
+  a instalação de demonstração mostraria "aguardando lançamento" em mesas que
+  já estão em preparo.
+*/
+async function inserirItemComanda(
+  conexao,
+  idEstabelecimento,
+  comandaId,
+  item,
+  { lancadoPorFuncionarioId = null } = {}
+) {
   const [resultado] = await conexao.execute(`
     INSERT INTO comanda_itens
       (id_estabelecimento, comanda_id, produto_id, nome_produto,
-       preco_unitario_centavos, quantidade, observacao)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `, [idEstabelecimento, comandaId, item.produtoId, item.nome, item.precoCentavos, item.quantidade, item.observacao ?? null]);
+       preco_unitario_centavos, quantidade, observacao,
+       enviado_em, enviado_por_funcionario_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    idEstabelecimento, comandaId, item.produtoId, item.nome, item.precoCentavos,
+    item.quantidade, item.observacao ?? null,
+    lancadoPorFuncionarioId == null ? null : dataMySql(new Date()),
+    lancadoPorFuncionarioId
+  ]);
   for (const adicional of item.adicionais ?? []) {
     await conexao.execute(`
       INSERT INTO comanda_item_adicionais
@@ -391,8 +409,11 @@ async function criarOperacaoInicial(
           comanda.status,
           dataMySql(new Date(comanda.abertaEm))
         ]);
+        const jaLancada = comanda.status === 'Na cozinha' || comanda.status === 'Conta solicitada';
         for (const item of comanda.itens) {
-          await inserirItemComanda(conexao, idEstabelecimento, comanda.id, item);
+          await inserirItemComanda(conexao, idEstabelecimento, comanda.id, item, {
+            lancadoPorFuncionarioId: jaLancada ? comanda.funcionarioId : null
+          });
         }
       }
 
