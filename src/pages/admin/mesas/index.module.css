@@ -111,11 +111,19 @@
   padding: 10px 8px;
 }
 
-/* O item recém-lançado: confirmação visual do que acabou de entrar. */
-.linhaRecente {
-  background: rgb(from var(--cor-principal) r g b / 0.09);
+/* Item ainda não lançado para a cozinha: fundo destacado para que ninguém
+   feche a conta achando que o pedido já foi enviado. */
+.linhaPendente {
+  background: rgb(from var(--cor-principal) r g b / 0.12);
   box-shadow: inset 3px 0 0 var(--cor-principal);
 }
+
+.marcaPendente {
+  color: var(--cor-principal);
+  font-weight: 700;
+}
+
+.marcaLancado { color: #7d7d7d; }
 
 .hora {
   color: #8d8d8d;
@@ -245,9 +253,8 @@
 
 .acoesComanda {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: end;
+  gap: 10px;
+  justify-items: stretch;
 }
 
 .acoesComanda button { min-height: 46px; }
@@ -296,6 +303,326 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* Barra que substitui o antigo select: o cardápio inteiro passou a morar em
+   um modal, aberto sem sair da tela de mesas. */
+.barraCardapio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #2d2d2d;
+  border-radius: 12px;
+  background: #111;
+  padding: 14px;
+}
+
+.barraCardapio strong {
+  color: var(--cor-texto);
+  font-size: 14px;
+}
+
+.barraCardapio p {
+  margin: 5px 0 0;
+  color: #8d8d8d;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.modalFundo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.78);
+  padding: 18px;
+}
+
+.modal {
+  display: flex;
+  width: min(100%, 760px);
+  max-height: min(92vh, calc(100dvh - 36px));
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.35);
+  border-radius: 18px;
+  background: var(--cor-card);
+  padding: 20px;
+}
+
+.modalTopo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.modalTopo h2 {
+  margin: 0;
+  color: var(--cor-texto);
+  font-size: 18px;
+}
+
+.modalTopo p {
+  margin: 6px 0 0;
+  color: #8d8d8d;
+  font-size: 12px;
+}
+
+.fecharModal {
+  border: 0;
+  background: transparent;
+  color: #999;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.fecharModal:hover { color: var(--cor-texto); }
+
+.categoriasCardapio {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.categoriaCardapio {
+  border: 1px solid #303030;
+  border-radius: 999px;
+  background: #151515;
+  padding: 7px 14px;
+  color: #b5b5b5;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.categoriaAtiva {
+  border-color: var(--cor-principal);
+  background: rgb(from var(--cor-principal) r g b / 0.14);
+  color: var(--cor-principal);
+}
+
+.gradeCardapio {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.cardProduto {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  border: 1px solid #2d2d2d;
+  border-radius: 12px;
+  background: #131313;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cardProduto:hover:not(:disabled) {
+  border-color: var(--cor-principal);
+  background: #181818;
+}
+
+.cardProduto:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.cardProduto img {
+  width: 54px;
+  height: 54px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.cardProdutoTexto {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.cardProdutoTexto strong {
+  color: var(--cor-texto);
+  font-size: 13px;
+}
+
+.cardProdutoTexto small {
+  overflow: hidden;
+  color: #8d8d8d;
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardProdutoPreco {
+  grid-column: 2;
+  color: var(--cor-principal);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.modalRodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid #303030;
+  padding-top: 14px;
+}
+
+.resumoCardapio {
+  margin: 0;
+  color: #b5b5b5;
+  font-size: 12px;
+}
+
+/* Ações do pedido da mesa: lançar, limpar o que não foi lançado, imprimir a
+   conta e cancelar a comanda ficam juntas, logo abaixo dos itens. */
+.acoesPedido {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.acoesPedido button { min-height: 44px; }
+
+.listaConfirmacao {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.listaConfirmacao li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #2d2d2d;
+  border-radius: 10px;
+  background: rgb(from var(--cor-principal) r g b / 0.08);
+  padding: 10px 12px;
+}
+
+.listaConfirmacao strong { color: var(--cor-texto); font-size: 13px; }
+.listaConfirmacao small { display: block; margin-top: 3px; color: #8d8d8d; font-size: 11px; }
+
+.acoesConfirmacao { display: flex; gap: 10px; }
+
+/* O cupom só existe para a impressão: fica fora da tela e, na hora de
+   imprimir, é o único conteúdo visível da página. */
+.cupom { display: none; }
+
+@media print {
+  :global(body) { background: #fff; }
+  :global(body) * { visibility: hidden !important; }
+
+  .cupom,
+  .cupom * { visibility: visible !important; }
+
+  .cupom {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 0 4mm;
+    color: #000;
+    font-size: 12px;
+  }
+
+  .cupom h1 { margin: 0 0 4px; font-size: 15px; }
+  .cupom p { margin: 0 0 8px; }
+  .cupom table { width: 100%; border-collapse: collapse; }
+  .cupom th,
+  .cupom td { border-bottom: 1px solid #ccc; padding: 4px 2px; text-align: left; }
+  .cupom th:last-child,
+  .cupom td:last-child { text-align: right; }
+  .cupomTotal { margin-top: 8px; font-size: 14px; font-weight: 800; }
+}
+
+/* Modal de pagamento: total em destaque, formas em botões grandes e, no
+   dinheiro, o troco calculado enquanto o caixa digita. */
+.totalPagamento {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.3);
+  border-radius: 12px;
+  background: rgb(from var(--cor-principal) r g b / 0.08);
+  padding: 14px 16px;
+}
+
+.totalPagamento span {
+  color: #8d8d8d;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.totalPagamento strong {
+  color: var(--cor-principal);
+  font-size: 26px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.formasPagamento {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 9px;
+}
+
+.formaPagamento {
+  min-height: 46px;
+  border: 1px solid #333;
+  border-radius: 11px;
+  background: #131313;
+  color: #cfcfcf;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.formaPagamento:hover { border-color: var(--cor-principal); }
+
+.formaAtiva {
+  border-color: var(--cor-principal);
+  background: rgb(from var(--cor-principal) r g b / 0.14);
+  color: var(--cor-principal);
+}
+
+.blocoTroco {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.blocoTroco .campo { margin: 0; }
+
+.troco,
+.trocoInvalido {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.troco { color: var(--cor-principal); }
+.trocoInvalido { color: #ff8e8e; }
 
 @media (max-width: 900px) {
   .area {
@@ -351,4 +678,18 @@
   }
 
   .totalPrincipal { grid-column: 1 / -1; }
+}
+
+@media (max-width: 620px) {
+  .barraCardapio { grid-template-columns: minmax(0, 1fr); }
+  .modal { padding: 16px; }
+  .gradeCardapio { grid-template-columns: minmax(0, 1fr); }
+  .modalRodape { align-items: stretch; flex-direction: column; }
+}
+
+@media (max-width: 620px) {
+  .acoesPedido { grid-template-columns: minmax(0, 1fr); }
+  .blocoTroco { grid-template-columns: minmax(0, 1fr); }
+  .acoesConfirmacao { flex-direction: column; }
+  .acoesConfirmacao button { width: 100%; }
 }

@@ -19,13 +19,12 @@ function ComandaGarcom() {
     mesas,
     comandas,
     garcomSessao,
-    configuracao,
     abrirComanda,
     adicionarItemComanda,
     removerItemComanda,
     enviarComanda,
     solicitarConta,
-    fecharComanda,
+    limparItensPendentes,
     recarregarGarcom,
     numeroPreco
   } = useApp();
@@ -34,17 +33,24 @@ function ComandaGarcom() {
   const comanda = comandas.find((item) => item.mesaId === Number(mesaId) && item.status !== 'Encerrada');
   const [categoria, setCategoria] = useState('Todos');
   const [produtoSelecionado, setProdutoSelecionado] = useState(null);
+  const [confirmacaoAberta, setConfirmacaoAberta] = useState(false);
   const [quantidade, setQuantidade] = useState(1);
   const [extras, setExtras] = useState([]);
   const [observacao, setObservacao] = useState('');
-  const [pagamento, setPagamento] = useState('Cartão');
   const [mensagem, setMensagem] = useState('');
   const [processando, setProcessando] = useState(null);
   const modalRef = useRef(null);
   const fecharModalRef = useRef(null);
 
+  const modalAberto = Boolean(produtoSelecionado) || confirmacaoAberta;
+
+  function fecharModais() {
+    setProdutoSelecionado(null);
+    setConfirmacaoAberta(false);
+  }
+
   useEffect(() => {
-    if (!produtoSelecionado) return undefined;
+    if (!modalAberto) return undefined;
 
     const focoAnterior = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const overflowAnterior = document.body.style.overflow;
@@ -53,7 +59,7 @@ function ComandaGarcom() {
 
     function tratarTeclado(evento) {
       if (evento.key === 'Escape') {
-        setProdutoSelecionado(null);
+        fecharModais();
         return;
       }
 
@@ -80,7 +86,7 @@ function ComandaGarcom() {
       document.body.style.overflow = overflowAnterior;
       focoAnterior?.focus();
     };
-  }, [produtoSelecionado]);
+  }, [modalAberto]);
 
   async function executarAcao(chave, acao) {
     if (processando) return null;
@@ -121,12 +127,13 @@ function ComandaGarcom() {
     if (!Array.isArray(produtoSelecionado?.adicionaisIds)) return true;
     return produtoSelecionado.adicionaisIds.some((id) => String(id) === String(adicional.id));
   });
-  const pagamentosDisponiveis = [
-    configuracao.pixChave ? 'Pix' : null,
-    configuracao.aceitaCartao ? 'Cartão' : null,
-    configuracao.aceitaDinheiro ? 'Dinheiro' : null
-  ].filter(Boolean);
-  const pagamentoValido = pagamentosDisponiveis.includes(pagamento) ? pagamento : (pagamentosDisponiveis[0] ?? '');
+  /* O garçom só mexe no que ainda não foi para a cozinha: item já lançado
+     fica visível, mas sem remover nem alterar — isso é do painel. */
+  const pendentes = comanda.itens.filter((item) => !item.enviado);
+  const totalPendente = pendentes.reduce(
+    (soma, item) => soma + Number(item.preco) * item.quantidade,
+    0
+  );
 
   function abrirProduto(produto) {
     setProdutoSelecionado(produto);
@@ -149,14 +156,16 @@ function ComandaGarcom() {
 
   async function enviar() {
     const resultado = await executarAcao('enviar', () => enviarComanda(comanda.id));
-    if (resultado) setMensagem('Pedido enviado para a cozinha.');
+    if (resultado) {
+      setConfirmacaoAberta(false);
+      setMensagem('Pedido lançado para a cozinha.');
+    }
   }
 
-  async function encerrar() {
-    const resultado = await executarAcao('encerrar', () => fecharComanda(comanda.id, pagamentoValido));
-    if (resultado !== null) {
-      navigate('/garcom/mesas');
-    }
+  async function limparPendentes() {
+    if (pendentes.length === 0) return;
+    const resultado = await executarAcao('limpar', () => limparItensPendentes(comanda.id));
+    if (resultado !== null) setMensagem('Itens não lançados removidos.');
   }
 
   async function pedirConta() {
@@ -171,6 +180,8 @@ function ComandaGarcom() {
   }
 
   async function removerItem(itemId) {
+    // Segurança de duas pontas: o backend recusa a remoção de item já
+    // lançado; aqui a lixeira nem aparece nesse caso.
     const resultado = await executarAcao(`remover-${itemId}`, () => removerItemComanda(comanda.id, itemId));
     if (resultado !== null) {
       setMensagem('Item removido da comanda.');
@@ -182,31 +193,31 @@ function ComandaGarcom() {
      garçom já está olhando o total. */
   const acaoPrincipal = comanda.status === 'Conta solicitada'
     ? {
-      chave: 'encerrar',
-      rotulo: 'Confirmar pagamento',
-      carregando: 'Finalizando…',
-      executar: encerrar,
-      classe: styles.botaoPerigo,
-      icone: <Check size={17} />,
-      bloqueada: pagamentosDisponiveis.length === 0
+      chave: 'aguardando',
+      rotulo: 'Conta com o caixa',
+      carregando: 'Aguardando…',
+      executar: () => {},
+      classe: styles.botaoSecundario,
+      icone: null,
+      bloqueada: true
     }
-    : comanda.status === 'Na cozinha'
+    : pendentes.length > 0
       ? {
+        chave: 'enviar',
+        rotulo: `Lançar para a cozinha (${pendentes.length})`,
+        carregando: 'Lançando…',
+        executar: () => setConfirmacaoAberta(true),
+        classe: styles.botaoPrincipal,
+        icone: <Send size={17} />,
+        bloqueada: false
+      }
+      : {
         chave: 'conta',
         rotulo: 'Solicitar conta',
         carregando: 'Solicitando…',
         executar: pedirConta,
         classe: styles.botaoPrincipal,
         icone: null,
-        bloqueada: comanda.itens.length === 0
-      }
-      : {
-        chave: 'enviar',
-        rotulo: 'Enviar para cozinha',
-        carregando: 'Enviando…',
-        executar: enviar,
-        classe: styles.botaoPrincipal,
-        icone: <Send size={17} />,
         bloqueada: comanda.itens.length === 0
       };
 
@@ -261,7 +272,23 @@ function ComandaGarcom() {
 
         <section className={styles.painel}>
           <div className={styles.topoPainel}>
-            <div><h2>Consumo da mesa</h2><p>{comanda.itens.length} lançamentos</p></div>
+            <div>
+              <h2>Consumo da mesa</h2>
+              <p>
+                {comanda.itens.length} {comanda.itens.length === 1 ? 'lançamento' : 'lançamentos'}
+                {pendentes.length > 0 && ` • ${pendentes.length} aguardando lançamento`}
+              </p>
+            </div>
+            {pendentes.length > 0 && (
+              <button
+                type="button"
+                className={styles.botaoSecundario}
+                disabled={Boolean(processando)}
+                onClick={limparPendentes}
+              >
+                <Trash2 size={16} /> {processando === 'limpar' ? 'Excluindo…' : 'Excluir não lançados'}
+              </button>
+            )}
           </div>
 
           {comanda.itens.length === 0 ? (
@@ -273,7 +300,7 @@ function ComandaGarcom() {
               </div>
               {comanda.itens.map((item, indice) => (
                 <div
-                  className={`${styles.itemComanda} ${indice === comanda.itens.length - 1 ? styles.itemRecente : ''}`}
+                  className={`${styles.itemComanda} ${item.enviado ? '' : styles.itemPendente}`}
                   key={item.linhaId ?? `${item.id}-${indice}`}
                 >
                   <span className={styles.itemHora}>{item.lancadoEm ?? '—'}</span>
@@ -281,31 +308,32 @@ function ComandaGarcom() {
                     <strong>{item.nome}</strong>
                     {item.adicionais?.length > 0 && <small>+ {item.adicionais.map((extra) => extra.nome ?? extra).join(', ')}</small>}
                     {item.observacao && <small>{item.observacao}</small>}
+                    <small className={item.enviado ? styles.marcaLancado : styles.marcaPendente}>
+                      {item.enviado ? `Lançado às ${item.enviadoEm}` : 'Aguardando lançamento'}
+                    </small>
                   </span>
                   <span className={styles.itemQuantidade}>{item.quantidade}</span>
                   <span className={styles.itemValor}>{moeda(Number(item.preco) * item.quantidade)}</span>
-                  <button
-                    disabled={Boolean(processando)}
-                    type="button"
-                    className={styles.itemRemover}
-                    aria-label={`Remover ${item.nome}`}
-                    onClick={() => removerItem(item.linhaId ?? item.id)}
-                  ><Trash2 size={15} /></button>
+                  {item.enviado ? (
+                    <span className={styles.itemBloqueado} title="Item já lançado: só o painel pode remover">—</span>
+                  ) : (
+                    <button
+                      disabled={Boolean(processando)}
+                      type="button"
+                      className={styles.itemRemover}
+                      aria-label={`Remover ${item.nome}`}
+                      onClick={() => removerItem(item.linhaId ?? item.id)}
+                    ><Trash2 size={15} /></button>
+                  )}
                 </div>
               ))}
             </div>
           )}
 
           {comanda.status === 'Conta solicitada' && (
-            <>
-              <div className={styles.campo}>
-                <label htmlFor="pagamentoComanda">Forma de pagamento confirmada</label>
-                <select disabled={Boolean(processando)} id="pagamentoComanda" value={pagamentoValido} onChange={(evento) => setPagamento(evento.target.value)}>
-                  {pagamentosDisponiveis.map((forma) => <option key={forma}>{forma}</option>)}
-                </select>
-              </div>
-              {pagamentosDisponiveis.length === 0 && <div className={styles.erro} role="alert">Nenhuma forma de pagamento está habilitada nas configurações.</div>}
-            </>
+            <div className={styles.vazio} role="status">
+              Conta solicitada. O pagamento e o fechamento da comanda são feitos no caixa.
+            </div>
           )}
         </section>
       </div>
@@ -325,6 +353,50 @@ function ComandaGarcom() {
           {processando === acaoPrincipal.chave ? acaoPrincipal.carregando : acaoPrincipal.rotulo}
         </button>
       </div>
+
+      {confirmacaoAberta && (
+        <div className={styles.modalFundo} onClick={() => setConfirmacaoAberta(false)}>
+          <div
+            className={styles.modal}
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-confirmar-lancamento-garcom"
+            onClick={(evento) => evento.stopPropagation()}
+          >
+            <div className={styles.modalTopo}>
+              <div>
+                <h2 id="titulo-confirmar-lancamento-garcom">Confirmar lançamento</h2>
+                <p>Revise antes de enviar para a cozinha da mesa {mesa.numero}.</p>
+              </div>
+              <button type="button" ref={fecharModalRef} aria-label="Fechar confirmação" onClick={() => setConfirmacaoAberta(false)}><X size={21} /></button>
+            </div>
+            <div className={styles.listaConfirmacao}>
+              {pendentes.map((item) => (
+                <div className={styles.itemConfirmacao} key={`pendente-${item.linhaId ?? item.id}`}>
+                  <span>
+                    <strong>{item.quantidade}× {item.nome}</strong>
+                    {item.observacao && <small>{item.observacao}</small>}
+                  </span>
+                  <strong>{moeda(Number(item.preco) * item.quantidade)}</strong>
+                </div>
+              ))}
+              {pendentes.length === 0 && <div className={styles.vazio}>Nenhum item pendente de lançamento.</div>}
+            </div>
+            <div className={styles.modalRodape}>
+              <span>{pendentes.length} {pendentes.length === 1 ? 'item' : 'itens'} • {moeda(totalPendente)}</span>
+              <button
+                type="button"
+                className={styles.botaoPrincipal}
+                disabled={Boolean(processando) || pendentes.length === 0}
+                onClick={enviar}
+              >
+                {processando === 'enviar' ? 'Lançando…' : 'Confirmar e lançar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {produtoSelecionado && (
         <div className={styles.modalFundo} onClick={() => setProdutoSelecionado(null)}>

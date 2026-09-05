@@ -281,6 +281,7 @@ CREATE TABLE IF NOT EXISTS comanda_itens (
   quantidade INT UNSIGNED NOT NULL,
   observacao TEXT,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  enviado_em DATETIME,
   INDEX idx_comanda_itens_comanda (comanda_id),
   INDEX idx_comanda_itens_produto (produto_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -360,6 +361,10 @@ CREATE TABLE IF NOT EXISTS pagamentos (
   forma VARCHAR(40) NOT NULL,
   status VARCHAR(30) NOT NULL DEFAULT 'Aguardando pagamento',
   valor_centavos INT UNSIGNED NOT NULL,
+  valor_recebido_centavos INT UNSIGNED,
+  troco_centavos INT UNSIGNED,
+  provedor VARCHAR(40) NOT NULL DEFAULT 'manual',
+  referencia_externa VARCHAR(120),
   pix_chave VARCHAR(180),
   pix_beneficiario VARCHAR(160),
   sem_troco TINYINT(1),
@@ -372,6 +377,7 @@ CREATE TABLE IF NOT EXISTS pagamentos (
   estornado_em DATETIME,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_pagamentos_pedido (pedido_id),
+  INDEX idx_pagamentos_referencia_externa (referencia_externa),
   INDEX idx_pagamentos_comanda (comanda_id),
   INDEX idx_pagamentos_confirmado_por (confirmado_por),
   INDEX idx_pagamentos_estornado_por (estornado_por)
@@ -626,7 +632,9 @@ INSERT INTO schema_migrations (versao, checksum) VALUES
   ('005_preservar_redes_configuracao.sql', '456ca8ceeb39b4693e26e3e8fff02cc113adc9e820f47844aea30b81f2a23c44'),
   ('006_ajustar_unicidade_por_estabelecimento.sql', '3908bf4e8d0ab04225077d2fb829e27544cd1d0e30f40634b172b821627a4cb4'),
   ('007_adicionar_superadministradores.sql', '59cd72293045658157f4dc217736d384791fe5ad6a047681c2539c373221812d'),
-  ('008_adicionar_textos_publicos.sql', 'effc5d8a2688e354f1a12eb537aa323eb3c7698be9e46fa36316893f48559ae7')
+  ('008_adicionar_textos_publicos.sql', 'effc5d8a2688e354f1a12eb537aa323eb3c7698be9e46fa36316893f48559ae7'),
+  ('009_marcar_lancamento_itens_comanda.sql', 'cc107471dbcf63037db6f3fc0105643e0a3d25f68bfd6d3aa350c828b4e6ccbf'),
+  ('010_preparar_pagamento_no_caixa.sql', 'e7b38e1fa95226662015d800496e4bee069693c8d6abb4e302897bd563128005')
 ON DUPLICATE KEY UPDATE versao = VALUES(versao);
 
 INSERT INTO estabelecimentos

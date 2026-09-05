@@ -1,16 +1,22 @@
 import {
+  BookOpen,
   Minus,
   Plus,
+  Printer,
   ReceiptText,
+  Banknote,
+  Send,
   Store,
   Trash2,
-  UserRound
+  UserRound,
+  X
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import AdminLayout from '../../../components/AdminLayout';
 import GradeMesas from '../../../components/GradeMesas';
 import { useApp } from '../../../context/appContext';
+import { usarPlaceholderProduto } from '../../../utils/productImage';
 import { rotuloDoStatus, statusDaMesa } from '../../../utils/statusMesa';
 import compartilhado from '../shared.module.css';
 import styles from './index.module.css';
@@ -42,16 +48,27 @@ function MesasAdmin() {
     adicionarItemComandaAdmin,
     atualizarItemComandaAdmin,
     removerItemComandaAdmin,
+    lancarComandaAdmin,
+    limparItensPendentesAdmin,
+    cancelarComandaAdmin,
     finalizarComandaAdmin
   } = useApp();
   const [mesaSelecionadaId, setMesaSelecionadaId] = useState(null);
   const [formularioMesaAberto, setFormularioMesaAberto] = useState(false);
   const [numeroMesa, setNumeroMesa] = useState('');
-  const [produtoId, setProdutoId] = useState('');
   const [responsavelId, setResponsavelId] = useState('');
   const [pagamento, setPagamento] = useState('Cartão');
   const [processando, setProcessando] = useState('');
   const [erro, setErro] = useState('');
+  const [cardapioAberto, setCardapioAberto] = useState(false);
+  const [confirmacaoAberta, setConfirmacaoAberta] = useState(false);
+  const [pagamentoAberto, setPagamentoAberto] = useState(false);
+  const [valorRecebido, setValorRecebido] = useState('');
+  const [mensagem, setMensagem] = useState('');
+  const [categoriaCardapio, setCategoriaCardapio] = useState('Todos');
+  const [ultimoAdicionado, setUltimoAdicionado] = useState('');
+  const modalRef = useRef(null);
+  const fecharModalRef = useRef(null);
 
   const comandasAbertas = comandas.filter((comanda) => comanda.status !== 'Encerrada');
   const mesaSelecionada = mesas.find((mesa) => mesa.id === mesaSelecionadaId) ?? null;
@@ -59,10 +76,24 @@ function MesasAdmin() {
     ? comandasAbertas.find((comanda) => comanda.mesaId === mesaSelecionada.id) ?? null
     : null;
   const itens = comandaSelecionada?.itens ?? [];
+  // O que ainda não foi para a cozinha: destacado na tabela e único conteúdo
+  // do lançamento, para que nenhum clique errado vire pedido sem revisão.
+  const pendentes = itens.filter((item) => !item.enviado);
+  const totalPendente = pendentes.reduce(
+    (soma, item) => soma + Number(item.preco) * item.quantidade,
+    0
+  );
   const subtotal = itens.reduce((soma, item) => soma + Number(item.preco) * item.quantidade, 0);
   const quantidadeItens = itens.reduce((soma, item) => soma + item.quantidade, 0);
 
   const produtosAtivos = useMemo(() => produtos.filter((produto) => produto.ativo), [produtos]);
+  const categoriasCardapio = useMemo(
+    () => ['Todos', ...new Set(produtosAtivos.map((produto) => produto.categoria))],
+    [produtosAtivos]
+  );
+  const produtosDoCardapio = produtosAtivos.filter(
+    (produto) => categoriaCardapio === 'Todos' || produto.categoria === categoriaCardapio
+  );
   const garconsAtivos = funcionarios.filter((funcionario) => funcionario.status === 'Ativo');
   const responsavelSelecionado = garconsAtivos.some((item) => item.id === responsavelId)
     ? responsavelId
@@ -75,6 +106,62 @@ function MesasAdmin() {
   const pagamentoSelecionado = formasPagamento.includes(pagamento)
     ? pagamento
     : (formasPagamento[0] ?? '');
+
+  /* Mesmo comportamento do modal do garçom: Esc fecha, o foco fica preso no
+     diálogo e a página atrás não rola enquanto o cardápio está aberto. */
+  const modalAberto = cardapioAberto || confirmacaoAberta || pagamentoAberto;
+  /* O caixa digita "132,70" ou "132.70": as duas formas viram o mesmo
+     número aqui, e o servidor refaz a conta ao confirmar. */
+  const recebidoNumero = Number(String(valorRecebido).replace(/\./g, '').replace(',', '.'));
+  const recebidoInformado = valorRecebido.trim() !== '' && Number.isFinite(recebidoNumero);
+  const emDinheiro = pagamentoSelecionado === 'Dinheiro';
+  const recebidoInsuficiente = emDinheiro && recebidoInformado && recebidoNumero < subtotal;
+  const troco = emDinheiro && recebidoInformado ? recebidoNumero - subtotal : 0;
+
+  function fecharModais() {
+    setCardapioAberto(false);
+    setConfirmacaoAberta(false);
+    setPagamentoAberto(false);
+  }
+
+  useEffect(() => {
+    if (!modalAberto) return undefined;
+
+    const focoAnterior = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const overflowAnterior = document.body.style.overflow;
+    const animacao = window.requestAnimationFrame(() => fecharModalRef.current?.focus());
+    document.body.style.overflow = 'hidden';
+
+    function tratarTeclado(evento) {
+      if (evento.key === 'Escape') {
+        fecharModais();
+        return;
+      }
+
+      if (evento.key !== 'Tab' || !modalRef.current) return;
+      const focaveis = [...modalRef.current.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )];
+      const primeiro = focaveis[0];
+      const ultimo = focaveis[focaveis.length - 1];
+      if (!primeiro || !ultimo) return;
+      if (evento.shiftKey && document.activeElement === primeiro) {
+        evento.preventDefault();
+        ultimo.focus();
+      } else if (!evento.shiftKey && document.activeElement === ultimo) {
+        evento.preventDefault();
+        primeiro.focus();
+      }
+    }
+
+    document.addEventListener('keydown', tratarTeclado);
+    return () => {
+      window.cancelAnimationFrame(animacao);
+      document.removeEventListener('keydown', tratarTeclado);
+      document.body.style.overflow = overflowAnterior;
+      focoAnterior?.focus();
+    };
+  }, [modalAberto]);
 
   function abrirFormularioMesa() {
     const maiorNumero = Math.max(0, ...mesas.map((mesa) => Number(mesa.numero) || 0));
@@ -112,13 +199,20 @@ function MesasAdmin() {
     await executar('abrir', () => abrirComandaAdmin(mesaSelecionada.id, responsavelSelecionado));
   }
 
-  async function adicionarProduto() {
-    if (!comandaSelecionada || !produtoId) return;
+  function abrirCardapio() {
+    setCategoriaCardapio('Todos');
+    setUltimoAdicionado('');
+    setErro('');
+    setCardapioAberto(true);
+  }
+
+  async function adicionarProduto(produto) {
+    if (!comandaSelecionada) return;
     const concluiu = await executar(
-      'adicionar',
-      () => adicionarItemComandaAdmin(comandaSelecionada.id, Number(produtoId))
+      `adicionar-${produto.id}`,
+      () => adicionarItemComandaAdmin(comandaSelecionada.id, produto.id)
     );
-    if (concluiu) setProdutoId('');
+    if (concluiu) setUltimoAdicionado(produto.nome);
   }
 
   async function ajustarQuantidade(item, quantidade) {
@@ -137,14 +231,64 @@ function MesasAdmin() {
     );
   }
 
+  async function lancarPedido() {
+    if (!comandaSelecionada) return;
+    const concluiu = await executar('lancar', () => lancarComandaAdmin(comandaSelecionada.id));
+    if (concluiu) setConfirmacaoAberta(false);
+  }
+
+  async function limparPendentes() {
+    if (!comandaSelecionada || pendentes.length === 0) return;
+    const rotulo = pendentes.length === 1 ? '1 item ainda não lançado' : `${pendentes.length} itens ainda não lançados`;
+    if (!window.confirm(`Excluir ${rotulo} da mesa ${mesaSelecionada.numero}?`)) return;
+    await executar('limpar', () => limparItensPendentesAdmin(comandaSelecionada.id));
+  }
+
+  async function cancelarComanda() {
+    if (!comandaSelecionada) return;
+    if (!window.confirm(
+      `Cancelar a comanda da mesa ${mesaSelecionada.numero}? A mesa será liberada sem cobrança.`
+    )) return;
+    const concluiu = await executar('cancelar', () => cancelarComandaAdmin(comandaSelecionada.id));
+    if (concluiu) {
+      fecharModais();
+      setMesaSelecionadaId(null);
+    }
+  }
+
+  function abrirPagamento() {
+    setValorRecebido('');
+    setErro('');
+    setPagamentoAberto(true);
+  }
+
+  function imprimirConta() {
+    // O cupom já está montado na página e só fica visível na impressão:
+    // nada é enviado para fora e a conta sai igual ao que está na tela.
+    window.print();
+  }
+
   async function finalizar() {
-    if (!comandaSelecionada || !pagamentoSelecionado) return;
-    if (!window.confirm(`Finalizar a comanda da mesa ${mesaSelecionada.numero} em ${pagamentoSelecionado}?`)) return;
-    const concluiu = await executar(
-      'finalizar',
-      () => finalizarComandaAdmin(comandaSelecionada.id, pagamentoSelecionado)
-    );
-    if (concluiu) setMesaSelecionadaId(null);
+    if (!comandaSelecionada || !pagamentoSelecionado || recebidoInsuficiente) return;
+    const numeroMesaAtual = mesaSelecionada.numero;
+    let confirmado = null;
+    const concluiu = await executar('finalizar', async () => {
+      confirmado = await finalizarComandaAdmin(
+        comandaSelecionada.id,
+        pagamentoSelecionado,
+        emDinheiro && recebidoInformado ? valorRecebido : null
+      );
+    });
+    if (concluiu) {
+      const trocoConfirmado = (confirmado?.trocoCentavos ?? 0) / 100;
+      setMensagem(
+        `Comanda da mesa ${numeroMesaAtual} finalizada em ${pagamentoSelecionado}.`
+        + (trocoConfirmado > 0 ? ` Troco: ${moeda(trocoConfirmado)}.` : '')
+      );
+      fecharModais();
+      setValorRecebido('');
+      setMesaSelecionadaId(null);
+    }
   }
 
   const acao = (
@@ -189,6 +333,12 @@ function MesasAdmin() {
 
       {erro && <div className={`${compartilhado.erro} ${compartilhado.secaoComMargemInferior}`} role="alert">{erro}</div>}
 
+      {mensagem && (
+        <div className={`${compartilhado.sucesso} ${compartilhado.secaoComMargemInferior}`} role="status">
+          {mensagem}
+        </div>
+      )}
+
       <div className={styles.area}>
         <section className={styles.coluna} aria-label="Mapa do salão">
           <header className={styles.cabecalhoColuna}>
@@ -211,7 +361,12 @@ function MesasAdmin() {
                 mesa,
                 comandasAbertas.find((comanda) => comanda.mesaId === mesa.id)
               )}
-              aoSelecionar={(mesa) => { setMesaSelecionadaId(mesa.id); setErro(''); }}
+              aoSelecionar={(mesa) => {
+                setMesaSelecionadaId(mesa.id);
+                fecharModais();
+                setErro('');
+                setMensagem('');
+              }}
             />
           )}
         </section>
@@ -282,25 +437,64 @@ function MesasAdmin() {
                 </span>
               </header>
 
-              <div className={compartilhado.adicionarProdutoComanda}>
-                <label className={compartilhado.campo}>
-                  <span>Adicionar produto</span>
-                  <select value={produtoId} onChange={(evento) => setProdutoId(evento.target.value)}>
-                    <option value="">Selecione no cardápio</option>
-                    {produtosAtivos.map((produto) => (
-                      <option key={produto.id} value={produto.id}>
-                        {produto.nome} — {moeda(numeroPreco(produto.preco))}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div className={styles.acoesPedido}>
                 <button
                   type="button"
                   className={compartilhado.botaoPrimario}
-                  disabled={!produtoId || Boolean(processando)}
-                  onClick={adicionarProduto}
+                  disabled={Boolean(processando) || pendentes.length === 0}
+                  onClick={() => setConfirmacaoAberta(true)}
                 >
-                  <Plus size={17} /> {processando === 'adicionar' ? 'Adicionando…' : 'Adicionar item'}
+                  <Send size={16} />
+                  {pendentes.length === 0
+                    ? 'Lançar pedido'
+                    : `Lançar pedido (${pendentes.length})`}
+                </button>
+                <button
+                  type="button"
+                  className={compartilhado.botaoSecundario}
+                  disabled={Boolean(processando) || pendentes.length === 0}
+                  onClick={limparPendentes}
+                >
+                  <Trash2 size={16} /> {processando === 'limpar' ? 'Excluindo…' : 'Excluir não lançados'}
+                </button>
+                <button
+                  type="button"
+                  className={compartilhado.botaoSecundario}
+                  disabled={itens.length === 0}
+                  onClick={imprimirConta}
+                >
+                  <Printer size={16} /> Imprimir conta
+                </button>
+                <button
+                  type="button"
+                  className={compartilhado.botaoPerigo}
+                  disabled={Boolean(processando)}
+                  onClick={cancelarComanda}
+                >
+                  <X size={16} /> {processando === 'cancelar' ? 'Cancelando…' : 'Excluir pedido'}
+                </button>
+              </div>
+
+              {pendentes.length > 0 && (
+                <p className={styles.aviso}>
+                  {pendentes.length === 1
+                    ? '1 item ainda não foi lançado para a cozinha.'
+                    : `${pendentes.length} itens ainda não foram lançados para a cozinha.`}
+                </p>
+              )}
+
+              <div className={styles.barraCardapio}>
+                <div>
+                  <strong>Adicionar produto</strong>
+                  <p>Abra o cardápio completo e toque no item para lançar na comanda.</p>
+                </div>
+                <button
+                  type="button"
+                  className={compartilhado.botaoPrimario}
+                  disabled={Boolean(processando) || produtosAtivos.length === 0}
+                  onClick={abrirCardapio}
+                >
+                  <BookOpen size={17} /> Ver cardápio
                 </button>
               </div>
 
@@ -320,15 +514,18 @@ function MesasAdmin() {
                   </p>
                 )}
 
-                {itens.map((item, indice) => (
+                {itens.map((item) => (
                   <div
                     key={item.linhaId}
                     role="row"
-                    className={`${styles.linha} ${indice === itens.length - 1 ? styles.linhaRecente : ''}`}
+                    className={`${styles.linha} ${item.enviado ? '' : styles.linhaPendente}`}
                   >
                     <span role="cell" className={styles.hora}>{item.lancadoEm ?? '—'}</span>
                     <span role="cell" className={styles.descricao}>
                       <strong>{item.nome}</strong>
+                      <small className={item.enviado ? styles.marcaLancado : styles.marcaPendente}>
+                        {item.enviado ? `Lançado às ${item.enviadoEm}` : 'Aguardando lançamento'}
+                      </small>
                       {item.adicionais?.length > 0 && <small>+ {item.adicionais.map((adicional) => adicional.nome).join(', ')}</small>}
                       {item.observacao && <small>{item.observacao}</small>}
                     </span>
@@ -371,26 +568,324 @@ function MesasAdmin() {
                   <div className={styles.totalPrincipal}><dt>Total</dt><dd>{moeda(subtotal)}</dd></div>
                 </dl>
                 <div className={styles.acoesComanda}>
-                  <label className={compartilhado.campo}>
-                    <span>Pagamento</span>
-                    <select value={pagamentoSelecionado} onChange={(evento) => setPagamento(evento.target.value)}>
-                      {formasPagamento.map((forma) => <option key={forma} value={forma}>{forma}</option>)}
-                    </select>
-                  </label>
                   <button
                     type="button"
                     className={compartilhado.botaoPrimario}
                     disabled={Boolean(processando) || itens.length === 0 || formasPagamento.length === 0}
-                    onClick={finalizar}
+                    onClick={abrirPagamento}
                   >
-                    {processando === 'finalizar' ? 'Finalizando…' : 'Finalizar comanda'}
+                    <Banknote size={17} /> Finalizar comanda
                   </button>
+                  {formasPagamento.length === 0 && (
+                    <p className={styles.aviso}>
+                      Habilite ao menos uma forma de pagamento nas configurações.
+                    </p>
+                  )}
                 </div>
               </footer>
             </>
           )}
         </section>
       </div>
+
+      {mesaSelecionada && comandaSelecionada && (
+        <section className={styles.cupom} aria-hidden="true">
+          <h1>{configuracao.nomeLoja ?? 'Conta'}</h1>
+          <p>
+            Mesa {mesaSelecionada.numero} • {comandaSelecionada.garcom}
+            {' '}• aberta às {comandaSelecionada.abertaEm}
+          </p>
+          <table>
+            <thead>
+              <tr><th>Qtde</th><th>Item</th><th>Unit.</th><th>Valor</th></tr>
+            </thead>
+            <tbody>
+              {itens.map((item) => (
+                <tr key={`cupom-${item.linhaId}`}>
+                  <td>{item.quantidade}</td>
+                  <td>
+                    {item.nome}
+                    {item.adicionais?.length > 0 && ` (+ ${item.adicionais.map((adicional) => adicional.nome).join(', ')})`}
+                  </td>
+                  <td>{moeda(Number(item.preco))}</td>
+                  <td>{moeda(Number(item.preco) * item.quantidade)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className={styles.cupomTotal}>
+            {quantidadeItens} {quantidadeItens === 1 ? 'item' : 'itens'} • Total {moeda(subtotal)}
+          </p>
+          <p>Documento sem valor fiscal.</p>
+        </section>
+      )}
+
+      {pagamentoAberto && mesaSelecionada && comandaSelecionada && (
+        <div className={styles.modalFundo} onClick={() => setPagamentoAberto(false)}>
+          <div
+            className={styles.modal}
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-pagamento-comanda"
+            onClick={(evento) => evento.stopPropagation()}
+          >
+            <header className={styles.modalTopo}>
+              <div>
+                <h2 id="titulo-pagamento-comanda">Receber pagamento</h2>
+                <p>Mesa {mesaSelecionada.numero} • {quantidadeItens} {quantidadeItens === 1 ? 'item' : 'itens'}</p>
+              </div>
+              <button
+                type="button"
+                ref={fecharModalRef}
+                className={styles.fecharModal}
+                aria-label="Fechar pagamento"
+                onClick={() => setPagamentoAberto(false)}
+              ><X size={20} /></button>
+            </header>
+
+            <div className={styles.totalPagamento}>
+              <span>Total da conta</span>
+              <strong>{moeda(subtotal)}</strong>
+            </div>
+
+            <div className={styles.formasPagamento} role="group" aria-label="Forma de pagamento">
+              {formasPagamento.map((forma) => (
+                <button
+                  type="button"
+                  key={forma}
+                  aria-pressed={pagamentoSelecionado === forma}
+                  className={`${styles.formaPagamento} ${pagamentoSelecionado === forma ? styles.formaAtiva : ''}`}
+                  onClick={() => { setPagamento(forma); setValorRecebido(''); }}
+                >
+                  {forma}
+                </button>
+              ))}
+            </div>
+
+            {emDinheiro && (
+              <div className={styles.blocoTroco}>
+                <label className={compartilhado.campo}>
+                  <span>Valor recebido do cliente</span>
+                  <input
+                    inputMode="decimal"
+                    placeholder={moeda(subtotal)}
+                    value={valorRecebido}
+                    onChange={(evento) => setValorRecebido(evento.target.value.replace(/[^\d.,]/g, ''))}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className={compartilhado.botaoSecundario}
+                  onClick={() => setValorRecebido(subtotal.toFixed(2).replace('.', ','))}
+                >
+                  Valor exato
+                </button>
+                <p className={recebidoInsuficiente ? styles.trocoInvalido : styles.troco}>
+                  {recebidoInsuficiente
+                    ? `Faltam ${moeda(subtotal - recebidoNumero)} para fechar a conta.`
+                    : `Troco: ${moeda(troco)}`}
+                </p>
+              </div>
+            )}
+
+            {!emDinheiro && (
+              <p className={styles.resumoCardapio}>
+                Pagamento confirmado no caixa. A integração com gateway, quando existir,
+                entra por aqui sem mudar esta tela.
+              </p>
+            )}
+
+            {erro && <div className={compartilhado.erro} role="alert">{erro}</div>}
+
+            <footer className={styles.modalRodape}>
+              <p className={styles.resumoCardapio}>
+                {pagamentoSelecionado || 'Selecione a forma de pagamento'}
+              </p>
+              <div className={styles.acoesConfirmacao}>
+                <button
+                  type="button"
+                  className={compartilhado.botaoSecundario}
+                  onClick={() => setPagamentoAberto(false)}
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  className={compartilhado.botaoPrimario}
+                  disabled={
+                    Boolean(processando)
+                    || itens.length === 0
+                    || !pagamentoSelecionado
+                    || recebidoInsuficiente
+                  }
+                  onClick={finalizar}
+                >
+                  {processando === 'finalizar' ? 'Finalizando…' : 'Confirmar pagamento'}
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {confirmacaoAberta && mesaSelecionada && comandaSelecionada && (
+        <div className={styles.modalFundo} onClick={() => setConfirmacaoAberta(false)}>
+          <div
+            className={styles.modal}
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-confirmar-lancamento"
+            onClick={(evento) => evento.stopPropagation()}
+          >
+            <header className={styles.modalTopo}>
+              <div>
+                <h2 id="titulo-confirmar-lancamento">Confirmar lançamento</h2>
+                <p>Confira os itens antes de enviar para a cozinha da mesa {mesaSelecionada.numero}.</p>
+              </div>
+              <button
+                type="button"
+                ref={fecharModalRef}
+                className={styles.fecharModal}
+                aria-label="Fechar confirmação"
+                onClick={() => setConfirmacaoAberta(false)}
+              ><X size={20} /></button>
+            </header>
+
+            {pendentes.length === 0 ? (
+              <p className={styles.tabelaVazia}>Nenhum item pendente: tudo já foi lançado.</p>
+            ) : (
+              <ul className={styles.listaConfirmacao}>
+                {pendentes.map((item) => (
+                  <li key={`pendente-${item.linhaId}`}>
+                    <span>
+                      <strong>{item.quantidade}× {item.nome}</strong>
+                      {item.observacao && <small>{item.observacao}</small>}
+                    </span>
+                    <strong className={styles.valor}>
+                      {moeda(Number(item.preco) * item.quantidade)}
+                    </strong>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {erro && <div className={compartilhado.erro} role="alert">{erro}</div>}
+
+            <footer className={styles.modalRodape}>
+              <p className={styles.resumoCardapio}>
+                {pendentes.length} {pendentes.length === 1 ? 'item' : 'itens'} • {moeda(totalPendente)}
+              </p>
+              <div className={styles.acoesConfirmacao}>
+                <button
+                  type="button"
+                  className={compartilhado.botaoSecundario}
+                  onClick={() => setConfirmacaoAberta(false)}
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  className={compartilhado.botaoPrimario}
+                  disabled={Boolean(processando) || pendentes.length === 0}
+                  onClick={lancarPedido}
+                >
+                  <Send size={16} /> {processando === 'lancar' ? 'Lançando…' : 'Confirmar e lançar'}
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {cardapioAberto && mesaSelecionada && comandaSelecionada && (
+        <div className={styles.modalFundo} onClick={() => setCardapioAberto(false)}>
+          <div
+            className={styles.modal}
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-cardapio-comanda"
+            onClick={(evento) => evento.stopPropagation()}
+          >
+            <header className={styles.modalTopo}>
+              <div>
+                <h2 id="titulo-cardapio-comanda">Cardápio</h2>
+                <p>Toque em um produto para lançar na mesa {mesaSelecionada.numero}.</p>
+              </div>
+              <button
+                type="button"
+                ref={fecharModalRef}
+                className={styles.fecharModal}
+                aria-label="Fechar cardápio"
+                onClick={() => setCardapioAberto(false)}
+              ><X size={20} /></button>
+            </header>
+
+            {categoriasCardapio.length > 1 && (
+              <div className={styles.categoriasCardapio}>
+                {categoriasCardapio.map((item) => (
+                  <button
+                    type="button"
+                    key={item}
+                    aria-pressed={categoriaCardapio === item}
+                    className={`${styles.categoriaCardapio} ${categoriaCardapio === item ? styles.categoriaAtiva : ''}`}
+                    onClick={() => setCategoriaCardapio(item)}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {produtosDoCardapio.length === 0 ? (
+              <p className={styles.tabelaVazia}>Nenhum produto ativo nesta categoria.</p>
+            ) : (
+              <div className={styles.gradeCardapio}>
+                {produtosDoCardapio.map((produto) => (
+                  <button
+                    type="button"
+                    key={produto.id}
+                    className={styles.cardProduto}
+                    disabled={Boolean(processando)}
+                    aria-label={`Adicionar ${produto.nome}`}
+                    onClick={() => adicionarProduto(produto)}
+                  >
+                    <img src={produto.imagem} alt="" loading="lazy" decoding="async" onError={usarPlaceholderProduto} />
+                    <span className={styles.cardProdutoTexto}>
+                      <strong>{produto.nome}</strong>
+                      {produto.descricao && <small>{produto.descricao}</small>}
+                    </span>
+                    <span className={styles.cardProdutoPreco}>
+                      {processando === `adicionar-${produto.id}`
+                        ? 'Adicionando…'
+                        : moeda(numeroPreco(produto.preco))}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {erro && <div className={compartilhado.erro} role="alert">{erro}</div>}
+
+            <footer className={styles.modalRodape}>
+              <p className={styles.resumoCardapio} role="status" aria-live="polite">
+                {ultimoAdicionado
+                  ? `${ultimoAdicionado} lançado na comanda.`
+                  : `${quantidadeItens} ${quantidadeItens === 1 ? 'item' : 'itens'} • ${moeda(subtotal)}`}
+              </p>
+              <button
+                type="button"
+                className={compartilhado.botaoPrimario}
+                onClick={() => setCardapioAberto(false)}
+              >
+                Concluir
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

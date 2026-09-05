@@ -36,4 +36,12 @@ A pasta `legado/` preserva o histórico anterior e não é executada pelo runner
   do cardápio e da seção "sobre" (título, subtítulo, texto do botão e destino
   do banner; título e apresentação do cardápio; título e texto da seção
   sobre; mensagem de rodapé) a `configuracoes_estabelecimento`, todos opcionais.
+- `009_marcar_lancamento_itens_comanda.sql`: adiciona `enviado_em` a
+  `comanda_itens` para separar o que já foi lançado para a cozinha do que
+  ainda está pendente de confirmação, marcando como lançado o histórico das
+  comandas já enviadas.
+- `010_preparar_pagamento_no_caixa.sql`: guarda em `pagamentos` o valor
+  recebido, o troco calculado no servidor e a origem da confirmação
+  (`provedor` e `referencia_externa`), abrindo espaço para integração futura
+  com gateway sem mudar o esquema de novo.
 - `legado/20260824_operacao_comercial.sql`: histórico anterior, fora do runner.

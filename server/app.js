@@ -17,6 +17,7 @@ import {
   excluirProduto,
   listarCatalogo
 } from './catalog.js';
+import { precoParaCentavos } from './catalog.js';
 import { removerImagemLocal, salvarImagemDataUrl } from './imageStore.js';
 import { registrarErro } from './logger.js';
 import {
@@ -29,6 +30,7 @@ import {
   alternarStatusAdministrador,
   alterarSenhaAdministrador,
   atualizarQuantidadeItemComandaAdmin,
+  cancelarComandaAdmin,
   atualizarStatusPedido,
   buscarConfiguracao,
   buscarConfiguracaoPublica,
@@ -38,14 +40,16 @@ import {
   criarMesa,
   criarPedidoDelivery,
   enviarComanda,
+  enviarComandaAdmin,
   estornarPagamento,
   excluirPromocao,
-  fecharComanda,
   finalizarComandaAdmin,
   listarDadosAdmin,
   listarDadosGarcom,
   listarDadosPublicos,
   revalidarCarrinho,
+  limparItensNaoLancados,
+  limparItensNaoLancadosAdmin,
   removerItemComanda,
   removerItemComandaAdmin,
   salvarConfiguracao,
@@ -775,17 +779,59 @@ async function rotaAdmin({
     responderJson(resposta, 201, { sucesso: true });
     return true;
   }
-  const finalizarComanda = caminho.match(/^\/api\/admin\/comandas\/(\d+)\/finalizar$/);
-  if (requisicao.method === 'POST' && finalizarComanda) {
-    const dados = await lerJson(requisicao);
-    await finalizarComandaAdmin(
+  const lancarComandaAdmin = caminho.match(/^\/api\/admin\/comandas\/(\d+)\/lancar$/);
+  if (requisicao.method === 'POST' && lancarComandaAdmin) {
+    await enviarComandaAdmin(
       banco,
       idEstabelecimento,
-      finalizarComanda[1],
-      String(dados.pagamento ?? ''),
+      lancarComandaAdmin[1],
       administradorAutenticado.id
     );
     responderJson(resposta, 200, { sucesso: true });
+    return true;
+  }
+  const pendentesComandaAdmin = caminho.match(/^\/api\/admin\/comandas\/(\d+)\/itens-pendentes$/);
+  if (requisicao.method === 'DELETE' && pendentesComandaAdmin) {
+    const removidos = await limparItensNaoLancadosAdmin(
+      banco,
+      idEstabelecimento,
+      pendentesComandaAdmin[1],
+      administradorAutenticado.id
+    );
+    responderJson(resposta, 200, { sucesso: true, removidos });
+    return true;
+  }
+  const cancelarComanda = caminho.match(/^\/api\/admin\/comandas\/(\d+)\/cancelar$/);
+  if (requisicao.method === 'POST' && cancelarComanda) {
+    await cancelarComandaAdmin(
+      banco,
+      idEstabelecimento,
+      cancelarComanda[1],
+      administradorAutenticado.id
+    );
+    responderJson(resposta, 200, { sucesso: true });
+    return true;
+  }
+  const finalizarComanda = caminho.match(/^\/api\/admin\/comandas\/(\d+)\/finalizar$/);
+  if (requisicao.method === 'POST' && finalizarComanda) {
+    const dados = await lerJson(requisicao);
+    // O valor recebido chega como texto do caixa; o servidor converte,
+    // valida e é quem calcula o troco.
+    const recebidoCentavos = dados.valorRecebido === undefined || dados.valorRecebido === null || dados.valorRecebido === ''
+      ? null
+      : precoParaCentavos(dados.valorRecebido);
+    if (recebidoCentavos !== null && !Number.isSafeInteger(recebidoCentavos)) {
+      responderJson(resposta, 400, { erro: 'Informe um valor recebido válido.' });
+      return true;
+    }
+    const pagamento = await finalizarComandaAdmin(
+      banco,
+      idEstabelecimento,
+      finalizarComanda[1],
+      { forma: String(dados.pagamento ?? ''), valorRecebidoCentavos: recebidoCentavos },
+      administradorAutenticado.id
+    );
+    responderJson(resposta, 200, { sucesso: true, pagamento });
     return true;
   }
 
@@ -1137,8 +1183,26 @@ async function rotaGarcom({
 
   const itemComanda = caminho.match(/^\/api\/garcom\/comandas\/(\d+)\/itens\/(\d+)$/);
   if (requisicao.method === 'DELETE' && itemComanda) {
-    await removerItemComanda(banco, idEstabelecimento, itemComanda[1], itemComanda[2], garcom.id);
+    await removerItemComanda(
+      banco,
+      idEstabelecimento,
+      itemComanda[1],
+      itemComanda[2],
+      garcom.id,
+      { somenteNaoLancados: true }
+    );
     responderJson(resposta, 200, { sucesso: true });
+    return true;
+  }
+  const pendentesComanda = caminho.match(/^\/api\/garcom\/comandas\/(\d+)\/itens-pendentes$/);
+  if (requisicao.method === 'DELETE' && pendentesComanda) {
+    const removidos = await limparItensNaoLancados(
+      banco,
+      idEstabelecimento,
+      pendentesComanda[1],
+      { funcionarioId: garcom.id }
+    );
+    responderJson(resposta, 200, { sucesso: true, removidos });
     return true;
   }
   const itensComanda = caminho.match(/^\/api\/garcom\/comandas\/(\d+)\/itens$/);
@@ -1162,19 +1226,6 @@ async function rotaGarcom({
   const conta = caminho.match(/^\/api\/garcom\/comandas\/(\d+)\/conta$/);
   if (requisicao.method === 'POST' && conta) {
     await solicitarConta(banco, idEstabelecimento, conta[1], garcom.id);
-    responderJson(resposta, 200, { sucesso: true });
-    return true;
-  }
-  const fechar = caminho.match(/^\/api\/garcom\/comandas\/(\d+)\/fechar$/);
-  if (requisicao.method === 'POST' && fechar) {
-    const dados = await lerJson(requisicao);
-    await fecharComanda(
-      banco,
-      idEstabelecimento,
-      fechar[1],
-      garcom.id,
-      String(dados.pagamento ?? '')
-    );
     responderJson(resposta, 200, { sucesso: true });
     return true;
   }

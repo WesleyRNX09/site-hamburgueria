@@ -276,6 +276,7 @@ CREATE TABLE IF NOT EXISTS comanda_itens (
   quantidade INT UNSIGNED NOT NULL,
   observacao TEXT,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  enviado_em DATETIME,
   INDEX idx_comanda_itens_comanda (comanda_id),
   INDEX idx_comanda_itens_produto (produto_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -355,6 +356,10 @@ CREATE TABLE IF NOT EXISTS pagamentos (
   forma VARCHAR(40) NOT NULL,
   status VARCHAR(30) NOT NULL DEFAULT 'Aguardando pagamento',
   valor_centavos INT UNSIGNED NOT NULL,
+  valor_recebido_centavos INT UNSIGNED,
+  troco_centavos INT UNSIGNED,
+  provedor VARCHAR(40) NOT NULL DEFAULT 'manual',
+  referencia_externa VARCHAR(120),
   pix_chave VARCHAR(180),
   pix_beneficiario VARCHAR(160),
   sem_troco TINYINT(1),
@@ -367,6 +372,7 @@ CREATE TABLE IF NOT EXISTS pagamentos (
   estornado_em DATETIME,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_pagamentos_pedido (pedido_id),
+  INDEX idx_pagamentos_referencia_externa (referencia_externa),
   INDEX idx_pagamentos_comanda (comanda_id),
   INDEX idx_pagamentos_confirmado_por (confirmado_por),
   INDEX idx_pagamentos_estornado_por (estornado_por)

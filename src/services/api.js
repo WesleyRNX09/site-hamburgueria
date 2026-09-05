@@ -179,10 +179,31 @@ export function removerItemComandaAdminApi(comandaId, itemId) {
   return requisicao(`/api/admin/comandas/${comandaId}/itens/${itemId}`, { metodo: 'DELETE', autenticacao: 'admin' });
 }
 
-export function finalizarComandaAdminApi(comandaId, pagamento) {
+export function lancarComandaAdminApi(comandaId) {
+  return requisicao(`/api/admin/comandas/${comandaId}/lancar`, {
+    metodo: 'POST',
+    autenticacao: 'admin'
+  });
+}
+
+export function limparItensPendentesAdminApi(comandaId) {
+  return requisicao(`/api/admin/comandas/${comandaId}/itens-pendentes`, {
+    metodo: 'DELETE',
+    autenticacao: 'admin'
+  });
+}
+
+export function cancelarComandaAdminApi(comandaId) {
+  return requisicao(`/api/admin/comandas/${comandaId}/cancelar`, {
+    metodo: 'POST',
+    autenticacao: 'admin'
+  });
+}
+
+export function finalizarComandaAdminApi(comandaId, pagamento, valorRecebido = null) {
   return requisicao(`/api/admin/comandas/${comandaId}/finalizar`, {
     metodo: 'POST',
-    dados: { pagamento },
+    dados: { pagamento, valorRecebido },
     autenticacao: 'admin'
   });
 }
@@ -301,14 +322,14 @@ export function enviarComandaApi(comandaId) {
   return requisicao(`/api/garcom/comandas/${comandaId}/enviar`, { metodo: 'POST', autenticacao: 'garcom' });
 }
 
+export function limparItensPendentesApi(comandaId) {
+  return requisicao(`/api/garcom/comandas/${comandaId}/itens-pendentes`, {
+    metodo: 'DELETE',
+    autenticacao: 'garcom'
+  });
+}
+
 export function solicitarContaApi(comandaId) {
   return requisicao(`/api/garcom/comandas/${comandaId}/conta`, { metodo: 'POST', autenticacao: 'garcom' });
 }
 
-export function fecharComandaApi(comandaId, pagamento) {
-  return requisicao(`/api/garcom/comandas/${comandaId}/fechar`, {
-    metodo: 'POST',
-    dados: { pagamento },
-    autenticacao: 'garcom'
-  });
-}

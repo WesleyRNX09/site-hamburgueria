@@ -1654,21 +1654,63 @@ if (!executarIntegracao) {
       dados: { produtoId: 1, quantidade: 1, adicionais: [] }
     });
     assert.equal(item.status, 201);
+
+    const pendente = await chamar('/api/garcom/dados', { token: tokenSessaoGarcom });
+    const comandaPendente = pendente.corpo.comandas.find((item) => item.id === comanda.id);
+    assert.equal(comandaPendente.itens.at(-1).enviado, false);
+
     const envio = await chamar(`/api/garcom/comandas/${comanda.id}/enviar`, {
       metodo: 'POST',
       token: tokenSessaoGarcom
     });
     assert.equal(envio.status, 200);
 
+    const reenvio = await chamar(`/api/garcom/comandas/${comanda.id}/enviar`, {
+      metodo: 'POST',
+      token: tokenSessaoGarcom
+    });
+    assert.equal(reenvio.status, 409);
+
     const atualizado = await chamar('/api/garcom/dados', { token: tokenSessaoGarcom });
     const comandaAtualizada = atualizado.corpo.comandas.find((item) => item.id === comanda.id);
+    assert.ok(comandaAtualizada.itens.every((linha) => linha.enviado));
     const ultimoItem = comandaAtualizada.itens.at(-1);
-    const remocaoFinal = await chamar(`/api/garcom/comandas/${comanda.id}/itens/${ultimoItem.linhaId}`, {
+    const remocaoLancada = await chamar(`/api/garcom/comandas/${comanda.id}/itens/${ultimoItem.linhaId}`, {
       metodo: 'DELETE',
       token: tokenSessaoGarcom
     });
-    assert.equal(remocaoFinal.status, 409);
-    assert.match(remocaoFinal.corpo.erro, /último item/i);
+    assert.equal(remocaoLancada.status, 403);
+    assert.match(remocaoLancada.corpo.erro, /já lançado/i);
+
+    const limpezaVazia = await chamar(`/api/garcom/comandas/${comanda.id}/itens-pendentes`, {
+      metodo: 'DELETE',
+      token: tokenSessaoGarcom
+    });
+    assert.equal(limpezaVazia.status, 409);
+
+    const novoPendente = await chamar(`/api/garcom/comandas/${comanda.id}/itens`, {
+      metodo: 'POST',
+      token: tokenSessaoGarcom,
+      dados: { produtoId: 1, quantidade: 1, adicionais: [] }
+    });
+    assert.equal(novoPendente.status, 201);
+    const limpeza = await chamar(`/api/garcom/comandas/${comanda.id}/itens-pendentes`, {
+      metodo: 'DELETE',
+      token: tokenSessaoGarcom
+    });
+    assert.equal(limpeza.status, 200);
+    assert.equal(limpeza.corpo.removidos, 1);
+
+    const semPendentes = await chamar('/api/garcom/dados', { token: tokenSessaoGarcom });
+    const comandaLimpa = semPendentes.corpo.comandas.find((item) => item.id === comanda.id);
+    assert.ok(comandaLimpa.itens.every((linha) => linha.enviado));
+
+    const fechamentoProibido = await chamar(`/api/garcom/comandas/${comanda.id}/fechar`, {
+      metodo: 'POST',
+      token: tokenSessaoGarcom,
+      dados: { pagamento: 'Dinheiro' }
+    });
+    assert.equal(fechamentoProibido.status, 404);
 
     const loginAna = await chamar('/api/garcom/login', {
       metodo: 'POST',
@@ -1720,18 +1762,99 @@ if (!executarIntegracao) {
     });
     assert.equal(quantidade.status, 200);
 
+    const lancada = await chamar(`/api/admin/comandas/${comanda.id}/lancar`, {
+      metodo: 'POST',
+      token: tokenAdmin
+    });
+    assert.equal(lancada.status, 200);
+
+    const aposLancar = await chamar('/api/admin/dados', { token: tokenAdmin });
+    const comandaLancada = aposLancar.corpo.comandas.find((item) => item.id === comanda.id);
+    assert.ok(comandaLancada.itens.every((linha) => linha.enviado));
+    assert.equal(comandaLancada.status, 'Na cozinha');
+
+    const semPendente = await chamar(`/api/admin/comandas/${comanda.id}/lancar`, {
+      metodo: 'POST',
+      token: tokenAdmin
+    });
+    assert.equal(semPendente.status, 409);
+
+    const trocoInsuficiente = await chamar(`/api/admin/comandas/${comanda.id}/finalizar`, {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { pagamento: 'Dinheiro', valorRecebido: '0,50' }
+    });
+    assert.equal(trocoInsuficiente.status, 400);
+
     const finalizada = await chamar(`/api/admin/comandas/${comanda.id}/finalizar`, {
       metodo: 'POST',
       token: tokenAdmin,
       dados: { pagamento: 'Cartão' }
     });
     assert.equal(finalizada.status, 200);
+    assert.equal(finalizada.corpo.pagamento.provedor, 'manual');
+    assert.equal(finalizada.corpo.pagamento.trocoCentavos, null);
 
     const depois = await chamar('/api/admin/dados', { token: tokenAdmin });
     assert.equal(depois.corpo.comandas.some((item) => item.id === comanda.id), false);
     const pedido = depois.corpo.pedidos.find((item) => item.comandaId === comanda.id);
     assert.equal(pedido.status, 'Entregue na mesa');
     assert.equal(pedido.pagamentoStatus, 'Pago');
+  });
+
+  test('administrador limpa itens pendentes e cancela a comanda liberando a mesa', async () => {
+    const mesaLivre = (await chamar('/api/admin/dados', { token: tokenAdmin }))
+      .corpo.mesas.find((mesa) => mesa.status === 'Livre');
+    assert.ok(mesaLivre);
+    const funcionario = (await chamar('/api/admin/dados', { token: tokenAdmin }))
+      .corpo.funcionarios.find((item) => item.status === 'Ativo');
+    assert.ok(funcionario);
+
+    const aberta = await chamar('/api/admin/comandas', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { mesaId: mesaLivre.id, funcionarioId: funcionario.id }
+    });
+    assert.equal(aberta.status, 201);
+    const comandaId = aberta.corpo.comanda.id;
+
+    for (let vez = 0; vez < 2; vez += 1) {
+      const adicionado = await chamar(`/api/admin/comandas/${comandaId}/itens`, {
+        metodo: 'POST',
+        token: tokenAdmin,
+        dados: { produtoId: 1, quantidade: 1, adicionais: [] }
+      });
+      assert.equal(adicionado.status, 201);
+    }
+
+    const limpeza = await chamar(`/api/admin/comandas/${comandaId}/itens-pendentes`, {
+      metodo: 'DELETE',
+      token: tokenAdmin
+    });
+    assert.equal(limpeza.status, 200);
+    assert.equal(limpeza.corpo.removidos, 2);
+
+    const semItens = await chamar('/api/admin/dados', { token: tokenAdmin });
+    assert.equal(semItens.corpo.comandas.find((item) => item.id === comandaId).itens.length, 0);
+
+    const cancelada = await chamar(`/api/admin/comandas/${comandaId}/cancelar`, {
+      metodo: 'POST',
+      token: tokenAdmin
+    });
+    assert.equal(cancelada.status, 200);
+
+    const depois = await chamar('/api/admin/dados', { token: tokenAdmin });
+    assert.equal(depois.corpo.comandas.some((item) => item.id === comandaId), false);
+    assert.equal(
+      depois.corpo.mesas.find((mesa) => mesa.id === mesaLivre.id).status,
+      'Livre'
+    );
+
+    const recancelar = await chamar(`/api/admin/comandas/${comandaId}/cancelar`, {
+      metodo: 'POST',
+      token: tokenAdmin
+    });
+    assert.equal(recancelar.status, 409);
   });
 
   test('bloqueia novas tentativas após repetidos PINs inválidos', async () => {

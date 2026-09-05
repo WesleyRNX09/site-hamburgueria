@@ -33,12 +33,15 @@ import {
   criarProdutoApi,
   criarPromocaoApi,
   ErroApi,
+  cancelarComandaAdminApi,
   enviarComandaApi,
+  lancarComandaAdminApi,
+  limparItensPendentesApi,
+  limparItensPendentesAdminApi,
   estornarPagamentoPedidoApi,
   excluirAdicionalApi,
   excluirProdutoApi,
   excluirPromocaoApi,
-  fecharComandaApi,
   finalizarComandaAdminApi,
   loginAdmin,
   loginGarcom,
@@ -665,9 +668,32 @@ export function AppProvider({ children }) {
     await recarregarAdmin();
   }
 
-  async function finalizarComandaAdmin(comandaId, pagamento) {
-    await finalizarComandaAdminApi(comandaId, pagamento);
+  async function lancarComandaAdmin(comandaId) {
+    await lancarComandaAdminApi(comandaId);
     await recarregarAdmin();
+  }
+
+  async function limparItensPendentesAdmin(comandaId) {
+    const { removidos } = await limparItensPendentesAdminApi(comandaId);
+    await recarregarAdmin();
+    return removidos;
+  }
+
+  async function cancelarComandaAdmin(comandaId) {
+    await cancelarComandaAdminApi(comandaId);
+    await recarregarAdmin();
+  }
+
+  async function finalizarComandaAdmin(comandaId, pagamento, valorRecebido = null) {
+    // O troco vem calculado pelo servidor: a tela só exibe o que foi
+    // confirmado no fechamento.
+    const { pagamento: confirmado } = await finalizarComandaAdminApi(
+      comandaId,
+      pagamento,
+      valorRecebido
+    );
+    await recarregarAdmin();
+    return confirmado;
   }
 
   async function adicionarItemComanda(comandaId, produto, quantidade, extras, observacao) {
@@ -685,6 +711,12 @@ export function AppProvider({ children }) {
     await recarregarGarcom();
   }
 
+  async function limparItensPendentes(comandaId) {
+    const { removidos } = await limparItensPendentesApi(comandaId);
+    await recarregarGarcom();
+    return removidos;
+  }
+
   async function enviarComanda(comandaId) {
     await enviarComandaApi(comandaId);
     await recarregarGarcom();
@@ -693,11 +725,6 @@ export function AppProvider({ children }) {
 
   async function solicitarConta(comandaId) {
     await solicitarContaApi(comandaId);
-    await recarregarGarcom();
-  }
-
-  async function fecharComanda(comandaId, pagamento) {
-    await fecharComandaApi(comandaId, pagamento);
     await recarregarGarcom();
   }
 
@@ -766,10 +793,13 @@ export function AppProvider({ children }) {
     removerItemComanda,
     enviarComanda,
     solicitarConta,
-    fecharComanda,
+    limparItensPendentes,
     adicionarItemComandaAdmin,
     atualizarItemComandaAdmin,
     removerItemComandaAdmin,
+    lancarComandaAdmin,
+    limparItensPendentesAdmin,
+    cancelarComandaAdmin,
     finalizarComandaAdmin,
     recarregarCatalogo,
     recarregarAdmin,

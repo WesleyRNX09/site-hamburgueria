@@ -85,7 +85,15 @@
 .itemCabecalho span:nth-child(4) { text-align: right; }
 .itemComanda { border-bottom: 1px solid #232323; border-radius: 8px; padding: 11px 6px; }
 /* Último lançamento em destaque: confirma o que acabou de ser pedido. */
-.itemRecente { background: rgb(from var(--cor-principal) r g b / 0.09); box-shadow: inset 3px 0 0 var(--cor-principal); }
+/* Item ainda não lançado para a cozinha: fundo destacado até a confirmação. */
+.itemPendente { background: rgb(from var(--cor-principal) r g b / 0.12); box-shadow: inset 3px 0 0 var(--cor-principal); }
+.marcaPendente { color: var(--cor-principal); font-weight: 700; }
+.marcaLancado { color: #7d7d7d; }
+.itemBloqueado { color: #4d4d4d; text-align: center; }
+.listaConfirmacao { display: grid; gap: 8px; margin-top: 16px; }
+.itemConfirmacao { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #2d2d2d; border-radius: 10px; background: rgb(from var(--cor-principal) r g b / 0.08); padding: 10px 12px; }
+.itemConfirmacao strong { font-size: 13px; }
+.itemConfirmacao small { display: block; margin-top: 3px; color: #929292; font-size: 11px; }
 .itemHora { color: #8d8d8d; font-size: 12px; font-variant-numeric: tabular-nums; }
 .itemDescricao { display: grid; min-width: 0; gap: 3px; }
 .itemDescricao strong { font-size: 13px; font-weight: 700; }
