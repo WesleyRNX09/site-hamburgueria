@@ -755,17 +755,31 @@ function mapearFuncionario(linha) {
     id: String(linha.id),
     nome: linha.nome,
     cargo: linha.cargo,
-    pin: '',
+    usuario: linha.usuario,
     status: linha.ativo ? 'Ativo' : 'Inativo',
     token: linha.token_acesso,
+    // O painel precisa saber se o QR ainda vale: enquanto a senha não for
+    // definida, o link de primeiro acesso é a única forma de entrar.
+    acessoPendente: !linha.senha_definida_em,
     vendas: Number(linha.vendas ?? 0),
     comandas: Number(linha.comandas ?? 0)
   };
 }
 
+/* Usuário do garçom: mesmo alfabeto do login do administrador, curto o
+   bastante para ser digitado no celular durante o atendimento. */
+function normalizarUsuarioFuncionario(valor) {
+  return texto(valor, 60)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, '.');
+}
+
 export async function listarFuncionarios(banco, idEstabelecimento, { somenteAtivos = false } = {}) {
   const [linhas] = await banco.execute(`
-    SELECT f.id, f.nome, f.cargo, f.ativo, f.token_acesso,
+    SELECT f.id, f.nome, f.cargo, f.usuario, f.ativo, f.token_acesso,
+      f.senha_definida_em,
       COUNT(DISTINCT CASE WHEN c.status = 'Encerrada' THEN c.id END) AS comandas,
       COUNT(DISTINCT CASE WHEN p.status IN ('Entregue', 'Entregue na mesa') THEN p.id END) AS vendas
     FROM funcionarios f
@@ -783,41 +797,117 @@ export async function listarFuncionarios(banco, idEstabelecimento, { somenteAtiv
   return linhas.map(mapearFuncionario);
 }
 
-export async function buscarFuncionarioPorToken(banco, idEstabelecimento, token) {
+/* Credencial de primeiro acesso: o token do QR só vale enquanto a senha não
+   foi definida. Depois disso o funcionário entra por usuário e senha, e o
+   mesmo link não abre mais nada. */
+export async function buscarFuncionarioPorTokenPendente(banco, idEstabelecimento, token) {
   const [linhas] = await banco.execute(`
-    SELECT id, nome, cargo, pin_hash, token_acesso, ativo
+    SELECT id, nome, cargo, usuario, token_acesso, ativo
     FROM funcionarios
-    WHERE token_acesso = ? AND id_estabelecimento = ? AND ativo = 1
+    WHERE token_acesso = ?
+      AND id_estabelecimento = ?
+      AND ativo = 1
+      AND senha_definida_em IS NULL
     LIMIT 1
   `, [token, idEstabelecimento]);
   return linhas[0] ?? null;
 }
 
+export async function buscarFuncionarioPorUsuario(banco, idEstabelecimento, usuario) {
+  const [linhas] = await banco.execute(`
+    SELECT id, nome, cargo, usuario, pin_hash, ativo
+    FROM funcionarios
+    WHERE LOWER(usuario) = LOWER(?)
+      AND id_estabelecimento = ?
+      AND ativo = 1
+      AND pin_hash IS NOT NULL
+    LIMIT 1
+  `, [usuario, idEstabelecimento]);
+  return linhas[0] ?? null;
+}
+
+/* Senha escolhida pelo próprio garçom no primeiro acesso. O mínimo de 6
+   dígitos vale para toda senha nova: sem o QR na tela de login, ela passou a
+   ser a única proteção da conta. PINs antigos de 4 ou 5 dígitos continuam
+   entrando até serem trocados. */
+export async function definirSenhaPrimeiroAcesso(banco, idEstabelecimento, token, pin) {
+  const senha = texto(pin, 12);
+  if (!/^\d{6,12}$/.test(senha)) {
+    throw erroDominio('A senha deve ter de 6 a 12 dígitos numéricos.');
+  }
+  const funcionario = await buscarFuncionarioPorTokenPendente(banco, idEstabelecimento, token);
+  if (!funcionario) {
+    throw erroDominio('Este link de acesso não é mais válido. Peça um novo QR Code ao gerente.', 404);
+  }
+  const [resultado] = await banco.execute(`
+    UPDATE funcionarios
+    SET pin_hash = ?, senha_definida_em = CURRENT_TIMESTAMP
+    WHERE id = ?
+      AND id_estabelecimento = ?
+      AND senha_definida_em IS NULL
+  `, [criarHashSenha(senha), funcionario.id, idEstabelecimento]);
+  if (!resultado.affectedRows) {
+    throw erroDominio('Este link de acesso não é mais válido. Peça um novo QR Code ao gerente.', 404);
+  }
+  return funcionario;
+}
+
+/* Novo QR: usado quando o garçom esquece a senha ou troca de aparelho. O
+   token muda, a senha é apagada e as sessões abertas caem — o acesso antigo
+   deixa de existir no mesmo momento. */
+export async function gerarNovoAcessoFuncionario(banco, idEstabelecimento, id) {
+  const [linhas] = await banco.execute(`
+    SELECT nome FROM funcionarios WHERE id = ? AND id_estabelecimento = ? LIMIT 1
+  `, [id, idEstabelecimento]);
+  if (!linhas[0]) return null;
+  await banco.execute(`
+    UPDATE funcionarios
+    SET token_acesso = ?, pin_hash = NULL, senha_definida_em = NULL
+    WHERE id = ? AND id_estabelecimento = ?
+  `, [normalizarToken(linhas[0].nome), id, idEstabelecimento]);
+  await banco.execute(`
+    DELETE FROM sessoes_garcom
+    WHERE funcionario_id = ? AND id_estabelecimento = ?
+  `, [id, idEstabelecimento]);
+  const funcionarios = await listarFuncionarios(banco, idEstabelecimento);
+  return funcionarios.find((item) => item.id === String(id));
+}
+
+/*
+  O administrador cadastra nome, cargo e usuário. A senha não passa por aqui:
+  quem a define é o próprio garçom, no primeiro acesso pelo QR Code.
+*/
 export async function salvarFuncionario(banco, idEstabelecimento, dados, id = null) {
   const nome = texto(dados.nome, 160);
   const cargo = texto(dados.cargo, 80);
-  const pin = texto(dados.pin, 6);
-  if (!nome || !cargo || !/^\d{4,6}$/.test(pin)) {
-    throw erroDominio('Informe o nome, o cargo e um PIN numérico de 4 a 6 dígitos.');
+  const usuario = normalizarUsuarioFuncionario(dados.usuario);
+  if (!nome || !cargo || !/^[a-z0-9][a-z0-9._-]{2,59}$/.test(usuario)) {
+    throw erroDominio(
+      'Informe o nome, o cargo e um usuário de 3 a 60 caracteres (letras, números, ponto, hífen ou _).'
+    );
+  }
+  const [conflitos] = await banco.execute(`
+    SELECT id FROM funcionarios
+    WHERE LOWER(usuario) = LOWER(?) AND id_estabelecimento = ? AND id <> ?
+    LIMIT 1
+  `, [usuario, idEstabelecimento, Number(id) || 0]);
+  if (conflitos.length > 0) {
+    throw erroDominio('Já existe um funcionário com esse usuário neste estabelecimento.', 409);
   }
 
   let funcionarioId = Number(id) || null;
   if (funcionarioId) {
     const [resultado] = await banco.execute(`
-      UPDATE funcionarios SET nome = ?, cargo = ?, pin_hash = ?
+      UPDATE funcionarios SET nome = ?, cargo = ?, usuario = ?
       WHERE id = ? AND id_estabelecimento = ?
-    `, [nome, cargo, criarHashSenha(pin), funcionarioId, idEstabelecimento]);
+    `, [nome, cargo, usuario, funcionarioId, idEstabelecimento]);
     if (!resultado.affectedRows) throw erroDominio('Funcionário não encontrado.', 404);
-    await banco.execute(`
-      DELETE FROM sessoes_garcom
-      WHERE funcionario_id = ? AND id_estabelecimento = ?
-    `, [funcionarioId, idEstabelecimento]);
   } else {
     const [resultado] = await banco.execute(`
       INSERT INTO funcionarios
-        (id_estabelecimento, nome, cargo, pin_hash, token_acesso, ativo)
-      VALUES (?, ?, ?, ?, ?, 1)
-    `, [idEstabelecimento, nome, cargo, criarHashSenha(pin), normalizarToken(nome)]);
+        (id_estabelecimento, nome, cargo, usuario, pin_hash, token_acesso, ativo)
+      VALUES (?, ?, ?, ?, NULL, ?, 1)
+    `, [idEstabelecimento, nome, cargo, usuario, normalizarToken(nome)]);
     funcionarioId = Number(resultado.insertId);
   }
   const funcionarios = await listarFuncionarios(banco, idEstabelecimento);

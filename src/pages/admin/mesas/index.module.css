@@ -61,6 +61,7 @@
 
 /* Mesmo vocabulário de cor da grade de mesas. */
 .aberta { background: var(--cor-principal); color: var(--cor-sobre-principal); }
+.pendente { background: #b98cff; color: #240b45; }
 .conta { background: #ff6b5e; color: #3a0b06; }
 .livre { background: #2a2a2a; color: #b4b4b4; }
 

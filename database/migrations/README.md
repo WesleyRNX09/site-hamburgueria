@@ -48,4 +48,9 @@ A pasta `legado/` preserva o histórico anterior e não é executada pelo runner
   `comandas` (o painel abre a comanda direto, sem escolher garçom), guarda o
   administrador que abriu e registra em cada item de comanda quem o lançou
   para a cozinha, com backfill pelo responsável atual da comanda.
+- `012_adicionar_login_do_garcom.sql`: dá ao garçom login próprio (`usuario`,
+  único por estabelecimento) e transforma o QR Code em credencial de primeiro
+  acesso: `pin_hash` passa a aceitar NULL enquanto a senha não é criada e
+  `senha_definida_em` marca o link como usado. Faz backfill do usuário a
+  partir do nome e mantém quem já tinha PIN entrando com a mesma senha.
 - `legado/20260824_operacao_comercial.sql`: histórico anterior, fora do runner.

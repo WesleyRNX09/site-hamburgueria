@@ -9,11 +9,17 @@
 
   "outro" só aparece no app do garçom, que enxerga apenas as próprias
   comandas: a mesa está ocupada, mas por outro funcionário.
+
+  "pendente" não é um status novo no banco: é a comanda aberta que ainda
+  tem item sem lançar para a cozinha, derivado dos itens que o backend já
+  devolve (`item.enviado`). Ele ganha cor própria porque é a única situação
+  da grade que exige uma ação do salão.
 */
 
 export const ESTADOS_MESA = [
   { chave: 'livre', rotulo: 'Livre' },
   { chave: 'aberta', rotulo: 'Comanda aberta' },
+  { chave: 'pendente', rotulo: 'Pedido não lançado' },
   { chave: 'cozinha', rotulo: 'Na cozinha' },
   { chave: 'conta', rotulo: 'Conta solicitada' },
   { chave: 'outro', rotulo: 'Outro atendimento' }
@@ -21,9 +27,14 @@ export const ESTADOS_MESA = [
 
 const ROTULOS = Object.fromEntries(ESTADOS_MESA.map((estado) => [estado.chave, estado.rotulo]));
 
+export function temItemPendente(comanda) {
+  return Boolean(comanda?.itens?.some((item) => !item.enviado));
+}
+
 export function statusDaMesa(mesa, comanda) {
   if (comanda) {
     if (comanda.status === 'Conta solicitada') return 'conta';
+    if (temItemPendente(comanda)) return 'pendente';
     if (comanda.status === 'Na cozinha') return 'cozinha';
     return 'aberta';
   }

@@ -35,6 +35,7 @@
 .formAcesso { display: grid; gap: 14px; }
 .formAcesso .botaoPrincipal { width: 100%; margin-top: 6px; }
 .erro { border: 1px solid rgba(255, 100, 100, 0.35); border-radius: 9px; background: rgba(255, 100, 100, 0.07); padding: 10px 12px; color: #ff8585; font-size: 12px; }
+.ajudaAcesso { margin: 2px 0 0; color: #929292; font-size: 12px; line-height: 1.6; text-align: center; }
 .linksDemo { display: grid; gap: 9px; }
 .linkDemo { display: flex; align-items: center; justify-content: space-between; border: 1px solid #303030; border-radius: 11px; background: #111; padding: 13px; color: var(--cor-texto); text-decoration: none; }
 .linkDemo:hover { border-color: color-mix(in srgb, var(--cor-principal) 65%, black); }

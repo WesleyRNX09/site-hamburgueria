@@ -226,11 +226,16 @@ CREATE TABLE IF NOT EXISTS funcionarios (
   id_estabelecimento BIGINT UNSIGNED,
   nome VARCHAR(160) NOT NULL,
   cargo VARCHAR(80) NOT NULL,
-  pin_hash VARCHAR(255) NOT NULL,
+  usuario VARCHAR(60) NOT NULL,
+  -- Sem senha até o primeiro acesso pelo QR Code, quando o próprio
+  -- funcionário a define; `senha_definida_em` é o que consome o link.
+  pin_hash VARCHAR(255) NULL,
   token_acesso VARCHAR(160) NOT NULL UNIQUE,
+  senha_definida_em DATETIME NULL,
   ativo TINYINT(1) NOT NULL DEFAULT 1,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_funcionarios_estabelecimento_usuario (id_estabelecimento, usuario)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS sessoes_garcom (

@@ -9,7 +9,7 @@ function LoginAdmin() {
 
     const navigate = useNavigate();
     const location = useLocation();
-    const { entrarAdmin, configuracao } = useApp();
+    const { entrarAdmin, configuracao, sessaoExpirada } = useApp();
 
     const [usuario, setUsuario] = useState('');
     const [senha, setSenha] = useState('');
@@ -242,10 +242,13 @@ function LoginAdmin() {
 
                             {/* ERRO */}
 
-                            {erro && (
+                            {/* A sessão derrubada pelo servidor explica por si
+                                só o retorno ao login; um erro do formulário
+                                é mais recente e tem prioridade. */}
+                            {(erro || sessaoExpirada) && (
 
                                 <div className={styles.erro} role="alert">
-                                    {erro}
+                                    {erro || sessaoExpirada}
                                 </div>
 
                             )}

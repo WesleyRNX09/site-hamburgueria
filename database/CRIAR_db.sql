@@ -231,11 +231,16 @@ CREATE TABLE IF NOT EXISTS funcionarios (
   id_estabelecimento BIGINT UNSIGNED,
   nome VARCHAR(160) NOT NULL,
   cargo VARCHAR(80) NOT NULL,
-  pin_hash VARCHAR(255) NOT NULL,
+  usuario VARCHAR(60) NOT NULL,
+  -- Sem senha até o primeiro acesso pelo QR Code, quando o próprio
+  -- funcionário a define; `senha_definida_em` é o que consome o link.
+  pin_hash VARCHAR(255) NULL,
   token_acesso VARCHAR(160) NOT NULL UNIQUE,
+  senha_definida_em DATETIME NULL,
   ativo TINYINT(1) NOT NULL DEFAULT 1,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_funcionarios_estabelecimento_usuario (id_estabelecimento, usuario)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS sessoes_garcom (
@@ -647,7 +652,8 @@ INSERT INTO schema_migrations (versao, checksum) VALUES
   ('008_adicionar_textos_publicos.sql', 'effc5d8a2688e354f1a12eb537aa323eb3c7698be9e46fa36316893f48559ae7'),
   ('009_marcar_lancamento_itens_comanda.sql', 'cc107471dbcf63037db6f3fc0105643e0a3d25f68bfd6d3aa350c828b4e6ccbf'),
   ('010_preparar_pagamento_no_caixa.sql', 'e7b38e1fa95226662015d800496e4bee069693c8d6abb4e302897bd563128005'),
-  ('011_registrar_autoria_da_comanda.sql', 'f327fbf669bb69e4e95f636e66289e34feda5852772151a0c11f306f1f26dcc4')
+  ('011_registrar_autoria_da_comanda.sql', 'f327fbf669bb69e4e95f636e66289e34feda5852772151a0c11f306f1f26dcc4'),
+  ('012_adicionar_login_do_garcom.sql', '371e3d178993ed316dd67a4a321e38ee2c47dac46bce4436ead2c41764fc7fd6')
 ON DUPLICATE KEY UPDATE versao = VALUES(versao);
 
 INSERT INTO estabelecimentos

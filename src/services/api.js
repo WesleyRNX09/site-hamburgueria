@@ -10,6 +10,38 @@ export class ErroApi extends Error {
   }
 }
 
+const CHAVES_SESSAO = {
+  admin: CHAVE_SESSAO_ADMIN,
+  garcom: CHAVE_SESSAO_GARCOM,
+  superadmin: CHAVE_SESSAO_SUPERADMIN
+};
+
+/*
+  Sessão recusada pelo servidor (401 em requisição autenticada): o token
+  guardado não vale mais nada e é apagado aqui, na única camada por onde
+  todas as chamadas passam. Os providers escutam para derrubar a sessão da
+  tela — assim o usuário cai no login em vez de ficar preso a um erro dentro
+  de um modal, com um token morto em mãos.
+
+  Só vale para chamadas autenticadas: o 401 de login (senha ou PIN errados)
+  não passa por aqui, porque não envia sessão nenhuma.
+*/
+const ouvintesSessaoExpirada = new Set();
+
+export function aoExpirarSessao(ouvinte) {
+  ouvintesSessaoExpirada.add(ouvinte);
+  return () => { ouvintesSessaoExpirada.delete(ouvinte); };
+}
+
+function expirarSessao(perfil) {
+  try {
+    sessionStorage.removeItem(CHAVES_SESSAO[perfil]);
+  } catch {
+    /* sessionStorage indisponível: a sessão em memória ainda é derrubada. */
+  }
+  for (const ouvinte of ouvintesSessaoExpirada) ouvinte(perfil);
+}
+
 function obterToken(chave) {
   try {
     return JSON.parse(sessionStorage.getItem(chave))?.token ?? null;
@@ -22,14 +54,9 @@ async function requisicao(caminho, { metodo = 'GET', dados, autenticacao } = {})
   const cabecalhos = { Accept: 'application/json' };
   if (dados !== undefined) cabecalhos['Content-Type'] = 'application/json';
 
-  if (autenticacao) {
-    const chaves = {
-      admin: CHAVE_SESSAO_ADMIN,
-      garcom: CHAVE_SESSAO_GARCOM,
-      superadmin: CHAVE_SESSAO_SUPERADMIN
-    };
-    const chave = chaves[autenticacao];
-    const token = obterToken(chave);
+  const enviouSessao = Boolean(autenticacao) && Boolean(CHAVES_SESSAO[autenticacao]);
+  if (enviouSessao) {
+    const token = obterToken(CHAVES_SESSAO[autenticacao]);
     if (token) cabecalhos.Authorization = `Bearer ${token}`;
   }
 
@@ -50,6 +77,7 @@ async function requisicao(caminho, { metodo = 'GET', dados, autenticacao } = {})
   }
 
   const conteudo = await resposta.json().catch(() => ({}));
+  if (resposta.status === 401 && enviouSessao) expirarSessao(autenticacao);
   if (!resposta.ok) throw new ErroApi(conteudo.erro || 'Não foi possível concluir a operação.', resposta.status);
   return conteudo;
 }
@@ -264,6 +292,10 @@ export function alterarStatusFuncionarioApi(id, ativo) {
   return requisicao(`/api/admin/funcionarios/${id}/status`, { metodo: 'PATCH', dados: { ativo }, autenticacao: 'admin' });
 }
 
+export function gerarAcessoFuncionarioApi(id) {
+  return requisicao(`/api/admin/funcionarios/${id}/acesso`, { metodo: 'POST', autenticacao: 'admin' });
+}
+
 export function atualizarStatusPedidoApi(id, status) {
   return requisicao(`/api/admin/pedidos/${encodeURIComponent(id)}/status`, {
     metodo: 'PATCH',
@@ -290,8 +322,16 @@ export function salvarConfiguracaoApi(dados) {
   return requisicao('/api/admin/configuracao', { metodo: 'PUT', dados, autenticacao: 'admin' });
 }
 
-export function loginGarcom(token, pin) {
-  return requisicao('/api/garcom/login', { metodo: 'POST', dados: { token, pin } });
+export function loginGarcom(usuario, pin) {
+  return requisicao('/api/garcom/login', { metodo: 'POST', dados: { usuario, pin } });
+}
+
+export function consultarPrimeiroAcessoGarcom(token) {
+  return requisicao(`/api/garcom/primeiro-acesso/${encodeURIComponent(token)}`);
+}
+
+export function definirSenhaPrimeiroAcessoGarcom(token, pin) {
+  return requisicao('/api/garcom/primeiro-acesso', { metodo: 'POST', dados: { token, pin } });
 }
 
 export function validarSessaoGarcom() {

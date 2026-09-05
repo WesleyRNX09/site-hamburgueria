@@ -134,8 +134,8 @@ export const promocoesSeed = [
 ];
 
 export const funcionariosSeed = [
-  { id: 1, nome: 'Carlos Silva', cargo: 'Garçom' },
-  { id: 2, nome: 'Ana Souza', cargo: 'Garçonete' }
+  { id: 1, nome: 'Carlos Silva', cargo: 'Garçom', usuario: 'carlos.silva' },
+  { id: 2, nome: 'Ana Souza', cargo: 'Garçonete', usuario: 'ana.souza' }
 ];
 
 export const mesasSeed = Array.from({ length: 50 }, (_, indice) => ({

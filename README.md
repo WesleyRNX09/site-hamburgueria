@@ -13,7 +13,7 @@ Workbench.
 - promoções exibidas no site;
 - pedidos de delivery e retirada, itens, adicionais, pagamentos e acompanhamento;
 - confirmação manual e idempotente de pagamentos, cancelamento e estorno com autor e horário;
-- funcionários com PIN protegido por `scrypt` e token individual para QR Code;
+- funcionários com login próprio (usuário e senha protegida por `scrypt`) e QR Code individual de primeiro acesso;
 - sessões revogáveis do garçom com JWT, mesas, comandas e itens da comanda;
 - vínculo automático entre garçom, mesa, comanda e pedido do salão;
 - identidade e operação da lanchonete: nome, logo, contatos, horário, redes sociais, status, delivery, áreas, taxas, mínimo e pagamentos;
@@ -148,9 +148,9 @@ Se o `.env` ou o MySQL ainda não estiverem disponíveis, o frontend continua in
 - Administrador: `/admin/login`, com as credenciais definidas em `ADMIN_USER` e `ADMIN_PASSWORD`
 - Superadministrador: `/superadmin/login`, com as credenciais definidas em
   `SUPERADMIN_USER` e `SUPERADMIN_PASSWORD`
-- Garçom: cadastre o funcionário no painel administrativo e abra o QR Code individual por esse painel
+- Garçom: cadastre o funcionário (nome, cargo e usuário) no painel administrativo e entregue o QR Code de primeiro acesso; nele o próprio garçom cria a senha e, a partir daí, entra em `/garcom/acesso` com usuário e senha
 
-Dados demonstrativos ficam desativados por padrão em todos os ambientes: a loja nasce fechada, sem produtos, adicionais, promoções, funcionários ou pedidos fictícios. `SEED_DEMO_DATA=1` só tem efeito no comando explícito `npm run db:prepare` e deve ser usado exclusivamente em ambiente descartável. Os tokens demonstrativos são aleatórios e, sem `DEMO_WAITER_PIN`, o PIN inicial também é aleatório. PINs são armazenados como hash, e tokens de acesso só aparecem em rotas administrativas autenticadas. O QR Code identifica o funcionário, mas a sessão só é criada depois da validação do PIN.
+Dados demonstrativos ficam desativados por padrão em todos os ambientes: a loja nasce fechada, sem produtos, adicionais, promoções, funcionários ou pedidos fictícios. `SEED_DEMO_DATA=1` só tem efeito no comando explícito `npm run db:prepare` e deve ser usado exclusivamente em ambiente descartável. Os tokens demonstrativos são aleatórios e, sem `DEMO_WAITER_PIN`, a senha inicial também é aleatória. Senhas são armazenadas como hash, e tokens de acesso só aparecem em rotas administrativas autenticadas. O QR Code serve uma única vez, para o funcionário criar a própria senha (mínimo de 6 dígitos); depois disso o link deixa de valer e a sessão só nasce da validação de usuário e senha. Um novo QR só pode ser gerado pelo painel administrativo, e gerá-lo apaga a senha atual e derruba as sessões abertas do funcionário.
 
 ## Comandos
 

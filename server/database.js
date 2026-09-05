@@ -389,11 +389,23 @@ async function criarOperacaoInicial(
       for (const funcionario of funcionariosSeed) {
         const pin = pinFuncionarioDemonstracao || String(randomInt(100000, 1000000));
         const token = `garcom-${randomUUID().replaceAll('-', '')}`;
+        /* O garçom de demonstração nasce com senha para o ambiente de teste
+           entrar direto; um cadastro real começa sem senha, definida pelo
+           próprio funcionário no primeiro acesso pelo QR Code. */
         await conexao.execute(`
           INSERT INTO funcionarios
-            (id_estabelecimento, id, nome, cargo, pin_hash, token_acesso, ativo)
-          VALUES (?, ?, ?, ?, ?, ?, 1)
-        `, [idEstabelecimento, funcionario.id, funcionario.nome, funcionario.cargo, criarHashSenha(pin), token]);
+            (id_estabelecimento, id, nome, cargo, usuario, pin_hash, token_acesso,
+             senha_definida_em, ativo)
+          VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1)
+        `, [
+          idEstabelecimento,
+          funcionario.id,
+          funcionario.nome,
+          funcionario.cargo,
+          funcionario.usuario,
+          criarHashSenha(pin),
+          token
+        ]);
       }
 
       for (const comanda of comandasSeed) {
@@ -552,8 +564,8 @@ export async function prepararBanco({
   slugEstabelecimento = 'estabelecimento-padrao'
 }) {
   if (!administrador?.senha) throw new Error('Defina ADMIN_PASSWORD para preparar o banco.');
-  if (pinFuncionarioDemonstracao && !/^\d{4,6}$/.test(pinFuncionarioDemonstracao)) {
-    throw new Error('DEMO_WAITER_PIN deve conter de 4 a 6 dígitos.');
+  if (pinFuncionarioDemonstracao && !/^\d{6,12}$/.test(pinFuncionarioDemonstracao)) {
+    throw new Error('DEMO_WAITER_PIN deve conter de 6 a 12 dígitos.');
   }
   const nomeBanco = validarNomeBanco(configuracaoMySql.database);
   const configuracaoBase = await configuracaoBaseMySql(configuracaoMySql);

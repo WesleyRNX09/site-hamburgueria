@@ -1,7 +1,7 @@
 import { ESTADOS_MESA, rotuloDoStatus } from '../../utils/statusMesa';
 import styles from './index.module.css';
 
-const ESTADOS_PADRAO = ['livre', 'aberta', 'cozinha', 'conta'];
+const ESTADOS_PADRAO = ['livre', 'aberta', 'pendente', 'cozinha', 'conta'];
 
 export function LegendaMesas({ estados = ESTADOS_PADRAO }) {
   const visiveis = ESTADOS_MESA.filter((estado) => estados.includes(estado.chave));

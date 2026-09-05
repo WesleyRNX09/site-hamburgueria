@@ -32,6 +32,7 @@ import {
   criarPedidoDeliveryApi,
   criarProdutoApi,
   criarPromocaoApi,
+  aoExpirarSessao,
   ErroApi,
   cancelarComandaAdminApi,
   enviarComandaApi,
@@ -44,6 +45,8 @@ import {
   excluirPromocaoApi,
   finalizarComandaAdminApi,
   loginAdmin,
+  definirSenhaPrimeiroAcessoGarcom,
+  gerarAcessoFuncionarioApi,
   loginGarcom,
   logoutAdmin,
   logoutGarcom,
@@ -149,6 +152,7 @@ export function AppProvider({ children }) {
   const [sessaoAdminCarregando, setSessaoAdminCarregando] = useState(() => Boolean(lerSessaoComToken(CHAVES.admin)));
   const [sessaoGarcomCarregando, setSessaoGarcomCarregando] = useState(() => Boolean(lerSessaoComToken(CHAVES.garcom)));
   const [erroApi, setErroApi] = useState('');
+  const [sessaoExpirada, setSessaoExpirada] = useState('');
   const [avisosCarrinho, setAvisosCarrinho] = useState([]);
   const [alertaNovoPedido, setAlertaNovoPedido] = useState(null);
   const [pedidosNovos, setPedidosNovos] = useState([]);
@@ -267,6 +271,24 @@ export function AppProvider({ children }) {
     aplicarDados(dados);
     return dados;
   }, [aplicarDados]);
+
+  /*
+    Sessão recusada pelo servidor em qualquer chamada autenticada: derruba o
+    acesso na hora, para o guard de rota levar ao login com o motivo à vista,
+    em vez de deixar o erro preso na tela com um token que já não vale.
+  */
+  useEffect(() => aoExpirarSessao((perfil) => {
+    if (perfil === 'admin') {
+      setAdminSessao(null);
+      setSessaoAdminCarregando(false);
+    } else if (perfil === 'garcom') {
+      setGarcomSessao(null);
+      setSessaoGarcomCarregando(false);
+    } else {
+      return;
+    }
+    setSessaoExpirada('Sua sessão expirou. Entre novamente para continuar.');
+  }), []);
 
   useEffect(() => {
     if (areaSuperadmin) return undefined;
@@ -390,6 +412,7 @@ export function AppProvider({ children }) {
   async function entrarAdmin(usuario, senha) {
     try {
       const { admin, token } = await loginAdmin(usuario, senha);
+      setSessaoExpirada('');
       const sessao = { ...admin, token };
       sessionStorage.setItem(CHAVES.admin, JSON.stringify(sessao));
       setAdminSessao(sessao);
@@ -403,6 +426,7 @@ export function AppProvider({ children }) {
 
   async function sairAdmin() {
     await logoutAdmin().catch(() => {});
+    setSessaoExpirada('');
     sessionStorage.removeItem(CHAVES.admin);
     setAdminSessao(null);
     setSessaoAdminCarregando(false);
@@ -419,13 +443,17 @@ export function AppProvider({ children }) {
     await recarregarPublico().catch(() => {});
   }
 
-  async function entrarGarcom(tokenAcesso, pin) {
+  async function abrirSessaoGarcom({ garcom, token }) {
+    setSessaoExpirada('');
+    const sessao = { ...garcom, token };
+    sessionStorage.setItem(CHAVES.garcom, JSON.stringify(sessao));
+    setGarcomSessao(sessao);
+    await recarregarGarcom();
+  }
+
+  async function entrarGarcom(usuario, pin) {
     try {
-      const { garcom, token } = await loginGarcom(tokenAcesso, pin);
-      const sessao = { ...garcom, token };
-      sessionStorage.setItem(CHAVES.garcom, JSON.stringify(sessao));
-      setGarcomSessao(sessao);
-      await recarregarGarcom();
+      await abrirSessaoGarcom(await loginGarcom(usuario, pin));
       return true;
     } catch (erro) {
       if (erro instanceof ErroApi && erro.status === 401) return false;
@@ -433,8 +461,15 @@ export function AppProvider({ children }) {
     }
   }
 
+  /* Primeiro acesso: o garçom define a senha pelo link do QR e já entra no
+     atendimento, sem passar de novo pela tela de login. */
+  async function definirSenhaGarcom(tokenAcesso, pin) {
+    await abrirSessaoGarcom(await definirSenhaPrimeiroAcessoGarcom(tokenAcesso, pin));
+  }
+
   async function sairGarcom() {
     await logoutGarcom().catch(() => {});
+    setSessaoExpirada('');
     sessionStorage.removeItem(CHAVES.garcom);
     setGarcomSessao(null);
     setSessaoGarcomCarregando(false);
@@ -554,6 +589,12 @@ export function AppProvider({ children }) {
       ? atuais.map((item) => item.id === resposta.funcionario.id ? resposta.funcionario : item)
       : [...atuais, resposta.funcionario]);
     return resposta.funcionario.id;
+  }
+
+  async function gerarAcessoFuncionario(id) {
+    const { funcionario } = await gerarAcessoFuncionarioApi(id);
+    setFuncionarios((atuais) => atuais.map((item) => item.id === id ? funcionario : item));
+    return funcionario;
   }
 
   async function alternarFuncionario(id) {
@@ -755,6 +796,7 @@ export function AppProvider({ children }) {
     catalogoCarregando,
     sessaoAdminCarregando,
     sessaoGarcomCarregando,
+    sessaoExpirada,
     erroApi,
     avisosCarrinho,
     alertaNovoPedido,
@@ -764,6 +806,7 @@ export function AppProvider({ children }) {
     entrarAdmin,
     sairAdmin,
     entrarGarcom,
+    definirSenhaGarcom,
     sairGarcom,
     salvarProduto,
     salvarCategoria,
@@ -776,6 +819,7 @@ export function AppProvider({ children }) {
     salvarPromocao,
     removerPromocao,
     salvarFuncionario,
+    gerarAcessoFuncionario,
     alternarFuncionario,
     atualizarStatusPedido,
     confirmarPagamentoPedido,

@@ -7,7 +7,7 @@ import { useApp } from '../../context/appContext';
 import { statusDaMesa } from '../../utils/statusMesa';
 import styles from './garcom.module.css';
 
-const ESTADOS_GARCOM = ['livre', 'aberta', 'cozinha', 'conta', 'outro'];
+const ESTADOS_GARCOM = ['livre', 'aberta', 'pendente', 'cozinha', 'conta', 'outro'];
 
 function MesasGarcom() {
   const { mesas, comandas, abrirComanda } = useApp();

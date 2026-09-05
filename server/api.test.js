@@ -1040,8 +1040,8 @@ if (!executarIntegracao) {
   let pastaUploads;
   let urlBase;
   let urlBaseTenantB;
-  let tokenGarcomDemonstracao;
-  let tokenGarcomAna;
+  let usuarioGarcomDemonstracao;
+  let usuarioGarcomAna;
   let tokenSessaoGarcom;
   let idGarcomDemonstracao;
   let tokenAdmin;
@@ -1244,8 +1244,8 @@ if (!executarIntegracao) {
     assert.equal(dados.status, 200);
     assert.equal(dados.corpo.pedidos.length, pedidosSeed.length);
     assert.equal(dados.corpo.mesas.length, mesasSeed.length);
-    tokenGarcomDemonstracao = dados.corpo.funcionarios.find((item) => item.nome === 'Carlos Silva').token;
-    tokenGarcomAna = dados.corpo.funcionarios.find((item) => item.nome === 'Ana Souza').token;
+    usuarioGarcomDemonstracao = dados.corpo.funcionarios.find((item) => item.nome === 'Carlos Silva').usuario;
+    usuarioGarcomAna = dados.corpo.funcionarios.find((item) => item.nome === 'Ana Souza').usuario;
     tokenAdmin = login.corpo.token;
 
     const configurada = await salvarConfiguracaoTeste();
@@ -1616,7 +1616,7 @@ if (!executarIntegracao) {
   test('autentica garçom e abre comanda vinculada automaticamente', async () => {
     const login = await chamar('/api/garcom/login', {
       metodo: 'POST',
-      dados: { token: tokenGarcomDemonstracao, pin: '246810' }
+      dados: { usuario: usuarioGarcomDemonstracao, pin: '246810' }
     });
     assert.equal(login.status, 200);
     assert.equal(login.corpo.garcom.nome, 'Carlos Silva');
@@ -1727,7 +1727,7 @@ if (!executarIntegracao) {
 
     const loginAna = await chamar('/api/garcom/login', {
       metodo: 'POST',
-      dados: { token: tokenGarcomAna, pin: '246810' }
+      dados: { usuario: usuarioGarcomAna, pin: '246810' }
     });
     assert.equal(loginAna.status, 200);
     const tentativaIdor = await chamar(`/api/garcom/comandas/${comanda.id}/itens`, {
@@ -1890,17 +1890,107 @@ if (!executarIntegracao) {
     assert.equal(recancelar.status, 409);
   });
 
-  test('bloqueia novas tentativas após repetidos PINs inválidos', async () => {
+  test('primeiro acesso cria a senha uma única vez e o QR deixa de valer', async () => {
+    const cadastrado = await chamar('/api/admin/funcionarios', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { nome: 'Bruno Lima', cargo: 'Garçom', usuario: 'bruno.lima' }
+    });
+    assert.equal(cadastrado.status, 201);
+    assert.equal(cadastrado.corpo.funcionario.acessoPendente, true);
+    const tokenQr = cadastrado.corpo.funcionario.token;
+
+    // Sem senha definida, o login por usuário ainda não abre nada.
+    const antesDaSenha = await chamar('/api/garcom/login', {
+      metodo: 'POST',
+      dados: { usuario: 'bruno.lima', pin: '654321' }
+    });
+    assert.equal(antesDaSenha.status, 401);
+
+    const convite = await chamar(`/api/garcom/primeiro-acesso/${tokenQr}`);
+    assert.equal(convite.status, 200);
+    assert.equal(convite.corpo.funcionario.usuario, 'bruno.lima');
+    assert.equal('token' in convite.corpo.funcionario, false);
+
+    const curta = await chamar('/api/garcom/primeiro-acesso', {
+      metodo: 'POST',
+      dados: { token: tokenQr, pin: '1234' }
+    });
+    assert.equal(curta.status, 400);
+
+    const definida = await chamar('/api/garcom/primeiro-acesso', {
+      metodo: 'POST',
+      dados: { token: tokenQr, pin: '654321' }
+    });
+    assert.equal(definida.status, 201);
+    assert.ok(definida.corpo.token);
+
+    // O mesmo link não serve para uma segunda troca de senha.
+    const repetido = await chamar('/api/garcom/primeiro-acesso', {
+      metodo: 'POST',
+      dados: { token: tokenQr, pin: '999999' }
+    });
+    assert.equal(repetido.status, 404);
+    const conviteUsado = await chamar(`/api/garcom/primeiro-acesso/${tokenQr}`);
+    assert.equal(conviteUsado.status, 404);
+
+    const login = await chamar('/api/garcom/login', {
+      metodo: 'POST',
+      dados: { usuario: 'bruno.lima', pin: '654321' }
+    });
+    assert.equal(login.status, 200);
+    assert.equal(login.corpo.garcom.nome, 'Bruno Lima');
+
+    // Novo QR do painel: a senha anterior morre junto com a sessão aberta.
+    const renovado = await chamar(`/api/admin/funcionarios/${cadastrado.corpo.funcionario.id}/acesso`, {
+      metodo: 'POST',
+      token: tokenAdmin
+    });
+    assert.equal(renovado.status, 200);
+    assert.equal(renovado.corpo.funcionario.acessoPendente, true);
+    assert.notEqual(renovado.corpo.funcionario.token, tokenQr);
+
+    const senhaAntiga = await chamar('/api/garcom/login', {
+      metodo: 'POST',
+      dados: { usuario: 'bruno.lima', pin: '654321' }
+    });
+    assert.equal(senhaAntiga.status, 401);
+    const sessaoDerrubada = await chamar('/api/garcom/sessao', { token: login.corpo.token });
+    assert.equal(sessaoDerrubada.status, 401);
+
+    // O QR novo recomeça o ciclo: outra senha, mesmo usuário.
+    const segundaSenha = await chamar('/api/garcom/primeiro-acesso', {
+      metodo: 'POST',
+      dados: { token: renovado.corpo.funcionario.token, pin: '112233' }
+    });
+    assert.equal(segundaSenha.status, 201);
+    const loginFinal = await chamar('/api/garcom/login', {
+      metodo: 'POST',
+      dados: { usuario: 'bruno.lima', pin: '112233' }
+    });
+    assert.equal(loginFinal.status, 200);
+  });
+
+  test('recusa usuário repetido no mesmo estabelecimento', async () => {
+    const repetido = await chamar('/api/admin/funcionarios', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { nome: 'Outro Bruno', cargo: 'Garçom', usuario: 'bruno.lima' }
+    });
+    assert.equal(repetido.status, 409);
+  });
+
+  test('bloqueia novas tentativas após repetidas senhas inválidas', async () => {
     for (let tentativa = 0; tentativa < 5; tentativa += 1) {
       const resposta = await chamar('/api/garcom/login', {
         metodo: 'POST',
-        dados: { token: 'acesso-invalido', pin: '0000' }
+        dados: { usuario: 'usuario-invalido', pin: '000000' }
       });
       assert.equal(resposta.status, 401);
     }
     const bloqueado = await chamar('/api/garcom/login', {
       metodo: 'POST',
-      dados: { token: 'acesso-invalido', pin: '0000' }
+      dados: { usuario: 'usuario-invalido', pin: '000000' }
     });
     assert.equal(bloqueado.status, 429);
   });

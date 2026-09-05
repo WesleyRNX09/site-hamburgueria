@@ -51,6 +51,13 @@
   color: var(--cor-sobre-principal);
 }
 
+/* Item ainda não lançado: cor própria, fora da paleta da marca, para que
+   o salão enxergue de longe onde falta enviar o pedido para a cozinha. */
+.pendente {
+  background: #b98cff;
+  color: #240b45;
+}
+
 .cozinha {
   background: #4fa3f7;
   color: #06213d;

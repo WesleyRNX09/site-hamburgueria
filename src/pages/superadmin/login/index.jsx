@@ -6,7 +6,7 @@ import { useSuperadmin } from '../../../context/superadminContext';
 import styles from './index.module.css';
 
 function LoginSuperadmin() {
-  const { sessao, sessaoCarregando, entrar } = useSuperadmin();
+  const { sessao, sessaoCarregando, entrar, sessaoExpirada } = useSuperadmin();
   const navigate = useNavigate();
   const location = useLocation();
   const [usuario, setUsuario] = useState('');
@@ -108,10 +108,10 @@ function LoginSuperadmin() {
               </div>
             </label>
 
-            {erro && (
+            {(erro || sessaoExpirada) && (
               <div className={styles.erro} role="alert">
                 <AlertCircle size={16} />
-                <span>{erro}</span>
+                <span>{erro || sessaoExpirada}</span>
               </div>
             )}
 

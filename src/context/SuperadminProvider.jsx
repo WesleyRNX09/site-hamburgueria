@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import {
+  aoExpirarSessao,
   atualizarEstabelecimentoSuperadmin,
   criarEstabelecimentoSuperadmin,
   ErroApi,
@@ -33,6 +34,7 @@ export function SuperadminProvider({ children }) {
     fontes: ['Poppins', 'Arial', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Georgia']
   });
   const [dadosCarregando, setDadosCarregando] = useState(false);
+  const [sessaoExpirada, setSessaoExpirada] = useState('');
 
   const limparSessao = useCallback(() => {
     sessionStorage.removeItem(CHAVE_SESSAO);
@@ -40,6 +42,14 @@ export function SuperadminProvider({ children }) {
     setSessaoCarregando(false);
     setEstabelecimentos([]);
   }, []);
+
+  /* Mesmo tratamento do painel do estabelecimento: 401 em chamada
+     autenticada derruba a sessão e o guard leva ao login com o motivo. */
+  useEffect(() => aoExpirarSessao((perfil) => {
+    if (perfil !== 'superadmin') return;
+    limparSessao();
+    setSessaoExpirada('Sua sessão expirou. Entre novamente para continuar.');
+  }), [limparSessao]);
 
   const carregarEstabelecimentos = useCallback(async (filtros = {}) => {
     setDadosCarregando(true);
@@ -81,6 +91,7 @@ export function SuperadminProvider({ children }) {
   async function entrar(usuario, senha) {
     try {
       const { superadmin, token } = await loginSuperadmin(usuario, senha);
+      setSessaoExpirada('');
       const novaSessao = { ...superadmin, token };
       sessionStorage.setItem(CHAVE_SESSAO, JSON.stringify(novaSessao));
       setSessaoCarregando(true);
@@ -94,6 +105,7 @@ export function SuperadminProvider({ children }) {
 
   async function sair() {
     await logoutSuperadmin().catch(() => {});
+    setSessaoExpirada('');
     limparSessao();
   }
 
@@ -113,6 +125,7 @@ export function SuperadminProvider({ children }) {
     <SuperadminContext.Provider value={{
       sessao,
       sessaoCarregando,
+      sessaoExpirada,
       estabelecimentos,
       opcoes,
       dadosCarregando,
