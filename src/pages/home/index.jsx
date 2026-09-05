@@ -981,14 +981,18 @@ function Home() {
                   decoding="async"
                 />
 
+                {/* No mobile a linha inteira e o alvo de toque; este "+"
+                    e apenas o indicativo visual de que da para adicionar. */}
+                <span className={styles.indicadorAdicionar} aria-hidden="true">+</span>
+              </div>
+
+              <div className={styles.informacoesProduto}>
                 {produto.destaque && (
                   <span className={styles.seloProduto}>
                     🔥 {produto.destaque}
                   </span>
                 )}
-              </div>
 
-              <div className={styles.informacoesProduto}>
                 <div>
                   <h3 className={styles.informacoesProdutoTitulo}>{produto.nome}</h3>
                   <p className={styles.informacoesProdutoDescrição}>{produto.descricao}</p>
@@ -1010,6 +1014,15 @@ function Home() {
 
                 </div>
               </div>
+
+              {/* Mobile: alvo de toque cobrindo a linha toda (o botao
+                  "Adicionar" fica oculto nesse breakpoint). */}
+              <button
+                type="button"
+                className={styles.aberturaCardProduto}
+                onClick={() => abrirModalProduto(produto)}
+                aria-label={`Ver detalhes de ${produto.nome}`}
+              />
             </article>
           ))}
           {produtosFiltrados.length === 0 && (

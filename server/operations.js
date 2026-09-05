@@ -913,7 +913,7 @@ export async function listarComandas(banco, idEstabelecimento, { funcionarioId =
   const marcadores = ids.map(() => '?').join(', ');
   const [itens] = await banco.execute(`
     SELECT ci.id, ci.comanda_id, ci.produto_id, ci.nome_produto,
-      ci.preco_unitario_centavos, ci.quantidade, ci.observacao,
+      ci.preco_unitario_centavos, ci.quantidade, ci.observacao, ci.criado_em,
       p.descricao, p.imagem_url, p.categoria_id
     FROM comanda_itens ci
     LEFT JOIN produtos p
@@ -942,7 +942,8 @@ export async function listarComandas(banco, idEstabelecimento, { funcionarioId =
       preco: Number(item.preco_unitario_centavos) / 100,
       quantidade: Number(item.quantidade),
       adicionais: adicionais.get(Number(item.id)) ?? [],
-      observacao: item.observacao ?? ''
+      observacao: item.observacao ?? '',
+      lancadoEm: horaPtBr(item.criado_em)
     });
   }
   return comandas.map((comanda) => ({
@@ -1910,6 +1911,45 @@ async function buscarResponsavelComanda(banco, idEstabelecimento, comandaId) {
   `, [comandaId, idEstabelecimento]);
   if (!linhas[0]) throw erroDominio('Comanda não encontrada.', 404);
   return Number(linhas[0].funcionario_id);
+}
+
+// O administrador pode abrir a comanda de uma mesa livre, mas a comanda
+// continua pertencendo a um funcionario: quem responde pelo atendimento e o
+// mesmo registro usado no envio, na conta, no fechamento e nos relatorios.
+// Por isso o responsavel e obrigatorio e e validado dentro do proprio
+// estabelecimento, nunca aceito como veio do navegador.
+export async function abrirComandaAdmin(
+  banco,
+  idEstabelecimento,
+  mesaId,
+  funcionarioId,
+  administradorId = null
+) {
+  const mesa = Number(mesaId);
+  const funcionario = Number(funcionarioId);
+  if (!Number.isInteger(mesa) || mesa < 1) throw erroDominio('Mesa não encontrada.', 404);
+  if (!Number.isInteger(funcionario) || funcionario < 1) {
+    throw erroDominio('Selecione o funcionário responsável pela comanda.');
+  }
+  const [funcionarios] = await banco.execute(`
+    SELECT id FROM funcionarios
+    WHERE id = ? AND id_estabelecimento = ? AND ativo = 1
+    LIMIT 1
+  `, [funcionario, idEstabelecimento]);
+  if (!funcionarios[0]) {
+    throw erroDominio('Funcionário não encontrado ou inativo neste estabelecimento.', 404);
+  }
+  const comanda = await abrirComanda(banco, idEstabelecimento, mesa, funcionario);
+  await registrarAuditoria(
+    banco,
+    idEstabelecimento,
+    administradorId,
+    'comanda.aberta',
+    'comanda',
+    comanda?.id ?? null,
+    { mesaId: mesa, funcionarioId: funcionario }
+  );
+  return comanda;
 }
 
 export async function adicionarItemComandaAdmin(banco, idEstabelecimento, comandaId, dados) {

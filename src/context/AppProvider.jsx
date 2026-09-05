@@ -5,6 +5,7 @@ import { aplicarTema, normalizarConfiguracaoPublica } from '../utils/theme';
 import {
   acompanharPedidoApi,
   adicionarItemComandaApi,
+  abrirComandaAdminApi,
   adicionarItemComandaAdminApi,
   alterarStatusAdicionalApi,
   alterarStatusAdministradorApi,
@@ -639,6 +640,12 @@ export function AppProvider({ children }) {
     await recarregarAdmin();
   }
 
+  async function abrirComandaAdmin(mesaId, funcionarioId) {
+    const { comanda } = await abrirComandaAdminApi(mesaId, funcionarioId);
+    await recarregarAdmin();
+    return comanda;
+  }
+
   async function adicionarItemComandaAdmin(comandaId, produtoId) {
     await adicionarItemComandaAdminApi(comandaId, {
       produtoId,
@@ -754,6 +761,7 @@ export function AppProvider({ children }) {
     dispensarAlertaNovoPedido: () => setAlertaNovoPedido(null),
     criarMesaAdmin,
     abrirComanda,
+    abrirComandaAdmin,
     adicionarItemComanda,
     removerItemComanda,
     enviarComanda,
@@ -764,6 +772,8 @@ export function AppProvider({ children }) {
     removerItemComandaAdmin,
     finalizarComandaAdmin,
     recarregarCatalogo,
+    recarregarAdmin,
+    recarregarGarcom,
     numeroPreco
   };
 

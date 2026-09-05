@@ -1,0 +1,354 @@
+/*
+  Tela de comandas em duas colunas de mesma largura: à esquerda o mapa do
+  salão, à direita a comanda da mesa escolhida. Abaixo de 900px as colunas
+  empilham na ordem de uso (mesa → comanda).
+*/
+
+.area {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.coluna {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+
+  border: 1px solid rgb(from var(--cor-principal) r g b / 0.2);
+  border-radius: 14px;
+  background: var(--cor-card-profundo);
+  padding: 18px;
+}
+
+/* A comanda é a coluna de trabalho: mantém altura para que o rodapé com o
+   total fique sempre no mesmo lugar. */
+.colunaComanda {
+  min-height: 560px;
+}
+
+.cabecalhoColuna {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cabecalhoColuna h2 {
+  margin: 0;
+  color: var(--cor-texto);
+  font-size: 17px;
+}
+
+.cabecalhoColuna p {
+  margin: 5px 0 0;
+  color: #8d8d8d;
+  font-size: 12px;
+}
+
+.selo {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 0 11px;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+/* Mesmo vocabulário de cor da grade de mesas. */
+.aberta { background: var(--cor-principal); color: var(--cor-sobre-principal); }
+.conta { background: #ff6b5e; color: #3a0b06; }
+.livre { background: #2a2a2a; color: #b4b4b4; }
+
+/* =========================
+   COMANDA
+========================= */
+
+.tabela {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid #292929;
+}
+
+.tabelaCabecalho,
+.linha {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 104px 78px 88px 40px;
+  align-items: center;
+  gap: 10px;
+}
+
+.tabelaCabecalho {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+
+  border-bottom: 1px solid #292929;
+  background: var(--cor-card-profundo);
+  padding: 10px 8px;
+
+  color: #8d8d8d;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.tabelaCabecalho span:nth-child(4),
+.tabelaCabecalho span:nth-child(5) { text-align: right; }
+.tabelaCabecalho span:nth-child(3) { text-align: center; }
+
+.linha {
+  border-bottom: 1px solid #232323;
+  border-radius: 8px;
+  padding: 10px 8px;
+}
+
+/* O item recém-lançado: confirmação visual do que acabou de entrar. */
+.linhaRecente {
+  background: rgb(from var(--cor-principal) r g b / 0.09);
+  box-shadow: inset 3px 0 0 var(--cor-principal);
+}
+
+.hora {
+  color: #8d8d8d;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.descricao {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.descricao strong {
+  color: var(--cor-texto);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.descricao small {
+  color: #8d8d8d;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.numero {
+  color: #c8c8c8;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.valor {
+  color: var(--cor-principal);
+  font-weight: 800;
+}
+
+.controleQuantidade {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.controleQuantidade strong {
+  min-width: 20px;
+  color: var(--cor-texto);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.controleQuantidade button,
+.remover {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #353535;
+  border-radius: 8px;
+  background: var(--cor-card);
+  color: #aaa;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.controleQuantidade button:hover:not(:disabled) {
+  border-color: var(--cor-principal);
+  color: var(--cor-principal);
+}
+
+.remover:hover:not(:disabled) {
+  border-color: rgba(255, 91, 91, 0.5);
+  color: #ff7777;
+}
+
+.controleQuantidade button:disabled,
+.remover:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.tabelaVazia {
+  margin: 0;
+  padding: 34px 12px;
+  color: #8d8d8d;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.rodapeComanda {
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid rgb(from var(--cor-principal) r g b / 0.22);
+  padding-top: 15px;
+}
+
+.totais {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.totais dt {
+  color: #8d8d8d;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.totais dd {
+  margin: 4px 0 0;
+  color: var(--cor-texto);
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.totalPrincipal dd {
+  color: var(--cor-principal);
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.acoesComanda {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.acoesComanda button { min-height: 46px; }
+
+.abrirComanda {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #292929;
+  padding-top: 15px;
+}
+
+.aviso {
+  margin: 0;
+  color: #ffb27a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.vazio {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 34px 14px;
+  color: #8d8d8d;
+  text-align: center;
+}
+
+.vazio h3 {
+  margin: 4px 0 0;
+  color: var(--cor-texto);
+  font-size: 15px;
+}
+
+.vazio p {
+  margin: 0;
+  max-width: 34ch;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .area {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .colunaComanda { min-height: 0; }
+
+  .tabelaCabecalho,
+  .linha {
+    grid-template-columns: 46px minmax(0, 1fr) 96px 84px 36px;
+  }
+
+  /* Sem espaço para as duas colunas de valor: fica só o total da linha. */
+  .tabelaCabecalho span:nth-child(4),
+  .linha .numero:not(.valor) {
+    display: none;
+  }
+
+  .acoesComanda {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .coluna { padding: 15px; }
+
+  /* Sem largura para uma tabela: cada item vira um bloco com descrição em
+     cima e, embaixo, quantidade, valor e remover lado a lado. */
+  .tabelaCabecalho { display: none; }
+
+  .linha {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    row-gap: 8px;
+    padding: 12px 8px;
+  }
+
+  .hora,
+  .descricao { grid-column: 1 / -1; }
+
+  .controleQuantidade { grid-column: 1; justify-content: flex-start; }
+  .valor { grid-column: 2; }
+  .celulaAcoes { grid-column: 3; }
+
+  .controleQuantidade button,
+  .remover {
+    width: 40px;
+    height: 40px;
+  }
+
+  .totais {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .totalPrincipal { grid-column: 1 / -1; }
+}

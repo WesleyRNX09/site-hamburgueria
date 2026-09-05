@@ -24,6 +24,7 @@ import {
   adicionarItemComanda,
   adicionarItemComandaAdmin,
   abrirComanda,
+  abrirComandaAdmin,
   alternarStatusFuncionario,
   alternarStatusAdministrador,
   alterarSenhaAdministrador,
@@ -720,6 +721,24 @@ async function rotaAdmin({
     try {
       responderJson(resposta, 201, {
         mesa: await criarMesa(banco, idEstabelecimento, await lerJson(requisicao))
+      });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  if (requisicao.method === 'POST' && caminho === '/api/admin/comandas') {
+    const dados = await lerJson(requisicao);
+    try {
+      responderJson(resposta, 201, {
+        comanda: await abrirComandaAdmin(
+          banco,
+          idEstabelecimento,
+          dados.mesaId,
+          dados.funcionarioId,
+          administradorAutenticado.id
+        )
       });
     } catch (erro) {
       tratarErroDados(erro);

@@ -138,7 +138,7 @@ export const funcionariosSeed = [
   { id: 2, nome: 'Ana Souza', cargo: 'Garçonete' }
 ];
 
-export const mesasSeed = Array.from({ length: 12 }, (_, indice) => ({
+export const mesasSeed = Array.from({ length: 50 }, (_, indice) => ({
   id: indice + 1,
   numero: String(indice + 1).padStart(2, '0'),
   lugares: indice % 3 === 0 ? 6 : 4

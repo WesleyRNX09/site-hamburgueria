@@ -1,46 +1,70 @@
-import { ArrowRight } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import GradeMesas, { LegendaMesas } from '../../components/GradeMesas';
 import WaiterLayout from '../../components/WaiterLayout';
 import { useApp } from '../../context/appContext';
+import { statusDaMesa } from '../../utils/statusMesa';
 import styles from './garcom.module.css';
 
+const ESTADOS_GARCOM = ['livre', 'aberta', 'cozinha', 'conta', 'outro'];
+
 function MesasGarcom() {
-  const { mesas, comandas, abrirComanda, garcomSessao } = useApp();
+  const { mesas, comandas, abrirComanda } = useApp();
   const navigate = useNavigate();
+  const [erro, setErro] = useState('');
+  const [processando, setProcessando] = useState(false);
+
+  function comandaDaMesa(mesa) {
+    return comandas.find((item) => item.mesaId === mesa.id && item.status !== 'Encerrada') ?? null;
+  }
 
   async function acessar(mesa) {
-    const comanda = comandas.find((item) => item.mesaId === mesa.id && item.status !== 'Encerrada');
-    if (mesa.status === 'Ocupada' && !comanda) return;
+    if (processando) return;
+    setErro('');
+    setProcessando(true);
     try {
       await abrirComanda(mesa.id);
       navigate(`/garcom/comanda/${mesa.id}`);
-    } catch {
-      // A atualização automática manterá a mesa ocupada e impedirá um segundo atendimento.
+    } catch (falha) {
+      setErro(falha.message);
+    } finally {
+      setProcessando(false);
     }
   }
 
+  const minhas = mesas.filter((mesa) => comandaDaMesa(mesa)).length;
+  const livres = mesas.filter((mesa) => mesa.status !== 'Ocupada').length;
+
   return (
-    <WaiterLayout titulo="Mesas do salão" subtitulo="Selecione uma mesa livre para abrir a comanda ou continue seu atendimento.">
-      <section className={styles.gradeMesas}>
-        {mesas.map((mesa) => {
-          const comanda = comandas.find((item) => item.mesaId === mesa.id && item.status !== 'Encerrada');
-          const ocupada = mesa.status === 'Ocupada';
-          const minha = Boolean(comanda && comanda.funcionarioId === garcomSessao.id);
-          const disponivel = !ocupada || minha;
-          return (
-            <article className={styles.mesa} key={mesa.id}>
-              <div className={styles.mesaTopo}><span className={styles.numeroMesa}>{mesa.numero}</span><span className={`${styles.status} ${ocupada ? styles.ocupada : styles.livre}`}>{ocupada ? 'Ocupada' : 'Livre'}</span></div>
-              <h2>Mesa {mesa.numero}</h2>
-              <div className={styles.mesaInfo}>
-                {minha ? <><span>Seu atendimento</span><span>{comanda.status}</span></> : ocupada ? <span>Comanda aberta por outro funcionário.</span> : <span>Pronta para receber clientes.</span>}
-              </div>
-              <button type="button" className={!ocupada ? styles.botaoPrincipal : styles.botaoSecundario} disabled={!disponivel} onClick={() => acessar(mesa)}>{!ocupada ? 'Abrir comanda' : 'Continuar atendimento'} {disponivel && <ArrowRight size={16} />}</button>
-            </article>
-          );
-        })}
-      </section>
-      {mesas.length === 0 && <div className={`${styles.painel} ${styles.vazio}`} role="status">Nenhuma mesa foi cadastrada para atendimento.</div>}
+    <WaiterLayout
+      titulo="Mesas do salão"
+      subtitulo="Toque no número da mesa para abrir a comanda ou continuar o atendimento."
+    >
+      {erro && <div className={styles.erro} role="alert">{erro}</div>}
+
+      {mesas.length === 0 ? (
+        <div className={`${styles.painel} ${styles.vazio}`} role="status">
+          Nenhuma mesa foi cadastrada para atendimento.
+        </div>
+      ) : (
+        <section className={`${styles.painel} ${styles.painelSalao}`}>
+          <div className={styles.resumoSalao}>
+            <div><span>Livres</span><strong>{livres}</strong></div>
+            <div><span>Comigo</span><strong>{minhas}</strong></div>
+            <div><span>Mesas</span><strong>{mesas.length}</strong></div>
+          </div>
+
+          <GradeMesas
+            mesas={mesas}
+            statusPorMesa={(mesa) => statusDaMesa(mesa, comandaDaMesa(mesa))}
+            mesaBloqueada={(mesa, status) => processando || status === 'outro'}
+            aoSelecionar={acessar}
+          />
+
+          <LegendaMesas estados={ESTADOS_GARCOM} />
+        </section>
+      )}
     </WaiterLayout>
   );
 }

@@ -155,6 +155,14 @@ export function criarMesaAdminApi(numero) {
   return requisicao('/api/admin/mesas', { metodo: 'POST', dados: { numero }, autenticacao: 'admin' });
 }
 
+export function abrirComandaAdminApi(mesaId, funcionarioId) {
+  return requisicao('/api/admin/comandas', {
+    metodo: 'POST',
+    dados: { mesaId, funcionarioId },
+    autenticacao: 'admin'
+  });
+}
+
 export function adicionarItemComandaAdminApi(comandaId, dados) {
   return requisicao(`/api/admin/comandas/${comandaId}/itens`, { metodo: 'POST', dados, autenticacao: 'admin' });
 }

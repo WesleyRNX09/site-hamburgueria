@@ -1070,7 +1070,7 @@
 }
 
 .informacoesProdutoDescrição{
-  font-size: 22rem;
+  font-size: 1.5rem;
   font-weight: 800;
 }
 
@@ -1150,6 +1150,14 @@
   transform: translateY(-2px);
 
   box-shadow: 0 7px 18px rgb(from var(--cor-principal) r g b / 0.18);
+}
+
+/* Indicador "+" e alvo de toque da linha: existem so no mobile
+   (ver o bloco @media (max-width: 650px)). */
+
+.indicadorAdicionar,
+.aberturaCardProduto {
+  display: none;
 }
 
 /* =========================
@@ -3053,8 +3061,11 @@
 ========================= */
 
 @media (max-width: 900px) {
+  /* Sem altura de tela cheia: com o conteudo alinhado ao topo, o
+     `min-height` sobrava como um vao morto entre os botoes e a secao
+     seguinte. A altura passa a ser a do proprio conteudo. */
   .banner {
-    min-height: 100svh;
+    min-height: auto;
     align-items: flex-start;
 
     /* faixa com altura proporcional ao viewport: mantem o mesmo
@@ -3064,27 +3075,30 @@
     background-position: 78% 5rem;
   }
 
+  /* Paradas em `svh` (nao em %): agora que a altura do banner varia, o
+     gradiente continua ancorado na faixa da foto, que tambem e medida
+     em svh. Em 100svh o resultado e identico ao anterior. */
   .banner::before {
     background: linear-gradient(
       to bottom,
-      rgba(0, 0, 0, 0.75) 0%,
-      rgba(0, 0, 0, 0.3) 8%,
-      rgba(0, 0, 0, 0.2) 24%,
-      rgba(0, 0, 0, 0.55) 36%,
-      rgba(0, 0, 0, 0.92) 46%,
-      var(--cor-fundo) 56%
+      rgba(0, 0, 0, 0.75) 0,
+      rgba(0, 0, 0, 0.3) 8svh,
+      rgba(0, 0, 0, 0.2) 24svh,
+      rgba(0, 0, 0, 0.55) 36svh,
+      rgba(0, 0, 0, 0.92) 46svh,
+      var(--cor-fundo) 56svh
     );
   }
 
   .banner::after {
-    height: 6rem;
+    height: 4rem;
   }
 
   /* texto comeca logo abaixo da faixa da foto, sem vazio no meio */
   .conteudoBanner {
     padding-top: calc(34vh + 7rem);
     padding-top: calc(34svh + 7rem);
-    padding-bottom: 4rem;
+    padding-bottom: 5rem;
   }
 }
 
@@ -3191,47 +3205,196 @@
   }
 }
 
+/* =========================
+   CARDAPIO NO MOBILE: LISTA EM LINHAS
+
+   Cards grandes empilhados obrigavam a rolar muito para comparar itens.
+   Abaixo de 650px cada produto vira uma linha (texto a esquerda, miniatura
+   a direita) separada por um filete, no padrao dos apps de delivery:
+   mais itens por tela e leitura em varredura vertical.
+
+   A linha inteira e o alvo de toque (.aberturaCardProduto); o botao
+   "Adicionar" sai e da lugar ao "+" sobre a miniatura.
+========================= */
+
 @media (max-width: 650px) {
-  .cardProduto {
-    height: auto;
-    grid-template-columns: 1fr;
+  .listaProdutos {
+    margin-top: 2rem;
+
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
   }
 
+  .cardProduto {
+    position: relative;
+
+    height: auto;
+    max-width: none;
+    margin: 0;
+    padding: 1.4rem 0.2rem;
+
+    grid-template-columns: minmax(0, 1fr) 8.8rem;
+    column-gap: 1.4rem;
+    align-items: center;
+
+    background: none;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0;
+
+    box-shadow: none;
+  }
+
+  /* Sem elevacao/zoom no toque: o feedback e o realce da propria linha. */
+  .cardProduto:hover {
+    transform: none;
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+  }
+
+  .cardProduto:hover .imagemProduto {
+    transform: none;
+    filter: none;
+  }
+
+  .cardProduto:has(.aberturaCardProduto:active) {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .aberturaCardProduto:focus-visible {
+    outline: 2px solid var(--cor-principal);
+    outline-offset: -2px;
+  }
+
+  /* Miniatura a direita, texto a esquerda (a imagem vem antes no DOM). */
   .areaImagemProduto {
-    height: 230px;
+    grid-column: 2;
+    grid-row: 1;
+
+    width: 8.8rem;
+    height: 8.8rem;
+
+    border-radius: 1rem;
+  }
+
+  /* O degrade lateral so fazia sentido no card largo. */
+  .areaImagemProduto::after {
+    display: none;
   }
 
   .informacoesProduto {
-    min-height: 210px;
+    grid-column: 1;
+    grid-row: 1;
+
+    min-height: 0;
+    padding: 0;
+
+    justify-content: flex-start;
+    gap: 0.5rem;
   }
 
-  /* No card empilhado o botao tinha largura fixa de 18rem e espremia o
-     preco ate quebrar em duas linhas. Aqui o preco manda: fica inteiro,
-     e o botao ocupa o que sobra. */
+  .informacoesProdutoTitulo {
+    font-size: 1.7rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  .informacoesProduto p {
+    color: #b0b0b0;
+    font-size: 1.4rem;
+    font-weight: 400;
+    line-height: 1.45;
+  }
+
+  /* O selo sai de cima da miniatura (pequena demais) e vira um chip
+     acima do nome. */
+  .cardProduto .seloProduto {
+    position: static;
+
+    width: fit-content;
+    min-width: 0;
+    max-width: 100%;
+    height: 2.4rem;
+    margin-bottom: 0.2rem;
+    padding: 0 0.9rem;
+
+    font-size: 1.2rem;
+
+    box-shadow: none;
+  }
+
   .rodapeProduto {
-    align-items: center;
-    gap: 1.2rem;
+    margin-top: 0.4rem;
+
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: 0.6rem;
   }
 
   .precoProduto {
     flex: 0 0 auto;
     min-width: 0;
+
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  .precoProduto span {
+    margin-bottom: 0;
+    font-size: 1.2rem;
   }
 
   .precoProduto strong {
-    font-size: 2.4rem;
+    color: var(--cor-principal);
+    font-size: 1.9rem;
     white-space: nowrap;
   }
 
+  /* Substituido pelo alvo de toque da linha + indicador "+". */
   .botaoAdicionar {
-    flex: 1 1 auto;
-    width: auto;
-    min-width: 0;
-    max-width: 16rem;
-    height: 4.4rem;
-    padding: 0 1.6rem;
+    display: none;
+  }
 
-    font-size: 1.5rem;
+  .indicadorAdicionar {
+    position: absolute;
+    right: 0.4rem;
+    bottom: 0.4rem;
+    z-index: 2;
+
+    width: 2.4rem;
+    height: 2.4rem;
+
+    display: grid;
+    place-items: center;
+
+    color: var(--cor-fundo);
+    font-size: 1.8rem;
+    font-weight: 800;
+    line-height: 1;
+
+    background-color: var(--cor-principal);
+    border: 2px solid var(--cor-card);
+    border-radius: 50%;
+  }
+
+  .aberturaCardProduto {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+
+    display: block;
+
+    padding: 0;
+
+    background: none;
+    border: 0;
+
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
 }
 

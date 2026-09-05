@@ -1,0 +1,113 @@
+/*
+  Cores de status: "Comanda aberta" usa a cor da marca (respeita o
+  white-label); os demais estados usam cores fixas e semânticas, porque
+  precisam continuar legíveis em qualquer identidade configurada.
+*/
+.grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 8px;
+}
+
+.mesa {
+  display: grid;
+  min-width: 44px;
+  min-height: 56px;
+  place-items: center;
+
+  border: 1px solid transparent;
+  border-radius: 12px;
+
+  font: inherit;
+  font-size: 17px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mesa:hover:not(:disabled) { transform: translateY(-2px); }
+.mesa:disabled { cursor: not-allowed; }
+
+.mesa:focus-visible {
+  outline: 2px solid var(--cor-texto);
+  outline-offset: 2px;
+}
+
+/* A mesa em foco de trabalho: anel claro, que nenhum status usa. */
+.selecionada {
+  box-shadow: 0 0 0 2px var(--cor-fundo), 0 0 0 4px var(--cor-texto);
+}
+
+.livre {
+  border-color: #3a3a3a;
+  background: #2a2a2a;
+  color: #b4b4b4;
+}
+
+.aberta {
+  background: var(--cor-principal);
+  color: var(--cor-sobre-principal);
+}
+
+.cozinha {
+  background: #4fa3f7;
+  color: #06213d;
+}
+
+.conta {
+  background: #ff6b5e;
+  color: #3a0b06;
+}
+
+/* Ocupada por outro funcionário: hachura discreta em vez de uma cor
+   própria — é uma mesa indisponível, não um estágio do atendimento. */
+.outro {
+  border-color: #3a3a3a;
+  background: repeating-linear-gradient(
+    -45deg,
+    #232323 0 6px,
+    #2c2c2c 6px 12px
+  );
+  color: #6f6f6f;
+}
+
+.legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legenda li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #9a9a9a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.marcador {
+  width: 13px;
+  height: 13px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+@media (max-width: 680px) {
+  .grade {
+    grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+    gap: 10px;
+  }
+
+  .mesa {
+    min-height: 62px;
+    font-size: 19px;
+  }
+
+  .legenda li { font-size: 13px; }
+}

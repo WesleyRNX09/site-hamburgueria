@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Minus, Plus, Send, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Check, Minus, Plus, RefreshCw, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -26,6 +26,7 @@ function ComandaGarcom() {
     enviarComanda,
     solicitarConta,
     fecharComanda,
+    recarregarGarcom,
     numeroPreco
   } = useApp();
   const navigate = useNavigate();
@@ -113,6 +114,7 @@ function ComandaGarcom() {
   const categorias = ['Todos', ...new Set(produtos.filter((produto) => produto.ativo).map((produto) => produto.categoria))];
   const filtrados = produtos.filter((produto) => produto.ativo && (categoria === 'Todos' || produto.categoria === categoria));
   const total = comanda.itens.reduce((soma, item) => soma + Number(item.preco) * item.quantidade, 0);
+  const quantidadeItens = comanda.itens.reduce((soma, item) => soma + item.quantidade, 0);
   const precoModal = produtoSelecionado ? (numeroPreco(produtoSelecionado.preco) + extras.reduce((soma, item) => soma + item.preco, 0)) * quantidade : 0;
   const adicionaisProduto = adicionais.filter((adicional) => {
     if (adicional.ativo === false) return false;
@@ -164,6 +166,10 @@ function ComandaGarcom() {
     }
   }
 
+  async function atualizar() {
+    await executarAcao('atualizar', () => recarregarGarcom());
+  }
+
   async function removerItem(itemId) {
     const resultado = await executarAcao(`remover-${itemId}`, () => removerItemComanda(comanda.id, itemId));
     if (resultado !== null) {
@@ -171,27 +177,153 @@ function ComandaGarcom() {
     }
   }
 
+  /* A ação principal muda com o estágio da comanda, mas é sempre a mesma
+     operação de antes — só passou a morar na barra fixa do rodapé, onde o
+     garçom já está olhando o total. */
+  const acaoPrincipal = comanda.status === 'Conta solicitada'
+    ? {
+      chave: 'encerrar',
+      rotulo: 'Confirmar pagamento',
+      carregando: 'Finalizando…',
+      executar: encerrar,
+      classe: styles.botaoPerigo,
+      icone: <Check size={17} />,
+      bloqueada: pagamentosDisponiveis.length === 0
+    }
+    : comanda.status === 'Na cozinha'
+      ? {
+        chave: 'conta',
+        rotulo: 'Solicitar conta',
+        carregando: 'Solicitando…',
+        executar: pedirConta,
+        classe: styles.botaoPrincipal,
+        icone: null,
+        bloqueada: comanda.itens.length === 0
+      }
+      : {
+        chave: 'enviar',
+        rotulo: 'Enviar para cozinha',
+        carregando: 'Enviando…',
+        executar: enviar,
+        classe: styles.botaoPrincipal,
+        icone: <Send size={17} />,
+        bloqueada: comanda.itens.length === 0
+      };
+
   return (
-    <WaiterLayout titulo={`Comanda • Mesa ${mesa.numero}`} subtitulo={`Garçom: ${comanda.garcom} • aberta às ${comanda.abertaEm}`}>
+    <WaiterLayout titulo={`Mesa ${mesa.numero}`} subtitulo={`${comanda.status} • aberta às ${comanda.abertaEm} • ${comanda.garcom}`}>
       {mensagem && <div className={styles.identificado} role="status" aria-live="polite"><span><Check size={18} /></span><div><strong>{mensagem}</strong><small>Status atual: {comanda.status}</small></div></div>}
-      <div className={styles.comandaLayout}>
+
+      <div className={styles.comandaFluxo}>
+        <div className={styles.acoesTopo}>
+          <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/garcom/mesas')}>
+            <ArrowLeft size={16} /> Mesas
+          </button>
+          <button type="button" className={styles.botaoSecundario} disabled={Boolean(processando)} onClick={atualizar}>
+            <RefreshCw size={16} /> {processando === 'atualizar' ? 'Atualizando…' : 'Atualizar'}
+          </button>
+        </div>
+
         <section className={styles.painel}>
-          <div className={styles.topoPainel}><div><h2>Cardápio</h2><p>Adicione itens e observações à mesma comanda.</p></div><button type="button" className={styles.botaoSecundario} onClick={() => navigate('/garcom/mesas')}><ArrowLeft size={16} /> Mesas</button></div>
-          <div className={styles.categorias}>{categorias.map((item) => <button type="button" key={item} aria-pressed={categoria === item} className={`${styles.categoria} ${categoria === item ? styles.categoriaAtiva : ''}`} onClick={() => setCategoria(item)}>{item}</button>)}</div>
-          <div className={styles.gradeProdutos}>{filtrados.map((produto) => <article className={styles.produto} key={produto.id}><img src={produto.imagem} alt={produto.nome} loading="lazy" decoding="async" onError={usarPlaceholderProduto} /><div><h3>{produto.nome}</h3><p>{produto.descricao}</p><div className={styles.produtoRodape}><strong>R$ {produto.preco}</strong><button disabled={Boolean(processando)} type="button" aria-label={`Adicionar ${produto.nome}`} onClick={() => abrirProduto(produto)}><Plus size={16} /></button></div></div></article>)}</div>
+          <div className={styles.categorias}>
+            {categorias.map((item) => (
+              <button
+                type="button"
+                key={item}
+                aria-pressed={categoria === item}
+                className={`${styles.categoria} ${categoria === item ? styles.categoriaAtiva : ''}`}
+                onClick={() => setCategoria(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+
+          <div className={styles.gradeProdutos}>
+            {filtrados.map((produto) => (
+              <button
+                type="button"
+                key={produto.id}
+                className={styles.produto}
+                disabled={Boolean(processando)}
+                aria-label={`Adicionar ${produto.nome}`}
+                onClick={() => abrirProduto(produto)}
+              >
+                <img src={produto.imagem} alt="" loading="lazy" decoding="async" onError={usarPlaceholderProduto} />
+                <strong>{produto.nome}</strong>
+                <span>{moeda(numeroPreco(produto.preco))}</span>
+              </button>
+            ))}
+          </div>
+
           {filtrados.length === 0 && <div className={styles.vazio} role="status">Nenhum produto disponível nesta categoria.</div>}
         </section>
 
-        <aside className={`${styles.painel} ${styles.resumo}`}>
-          <div className={styles.topoPainel}><div><h2>Resumo da comanda</h2><p>{comanda.status} • {comanda.itens.length} itens</p></div></div>
-          {comanda.itens.length === 0 ? <div className={styles.vazio}>A comanda está vazia.<br />Selecione um produto no cardápio.</div> : comanda.itens.map((item, indice) => <div className={styles.itemComanda} key={item.linhaId ?? `${item.id}-${indice}`}><div><h3>{item.quantidade}x {item.nome}</h3>{item.adicionais?.length > 0 && <p>+ {item.adicionais.map((extra) => extra.nome ?? extra).join(', ')}</p>}{item.observacao && <p>{item.observacao}</p>}</div><div><strong>{moeda(Number(item.preco) * item.quantidade)}</strong><button disabled={Boolean(processando)} type="button" aria-label={`Remover ${item.nome}`} onClick={() => removerItem(item.linhaId ?? item.id)}><Trash2 size={14} /></button></div></div>)}
-          <div className={styles.total}><span>Total</span><strong>{moeda(total)}</strong></div>
-          <div className={styles.acoesComanda}>
-            <button type="button" className={styles.botaoPrincipal} disabled={Boolean(processando) || comanda.itens.length === 0} onClick={enviar}><Send size={17} /> {processando === 'enviar' ? 'Enviando…' : 'Enviar para cozinha'}</button>
-            <button type="button" className={styles.botaoSecundario} disabled={Boolean(processando) || comanda.itens.length === 0 || comanda.status !== 'Na cozinha'} onClick={pedirConta}>{processando === 'conta' ? 'Solicitando…' : 'Solicitar conta'}</button>
-            {comanda.status === 'Conta solicitada' && <><div className={styles.campo}><label htmlFor="pagamentoComanda">Forma de pagamento confirmada</label><select disabled={Boolean(processando)} id="pagamentoComanda" value={pagamentoValido} onChange={(event) => setPagamento(event.target.value)}>{pagamentosDisponiveis.map((forma) => <option key={forma}>{forma}</option>)}</select></div>{pagamentosDisponiveis.length === 0 && <div className={styles.erro} role="alert">Nenhuma forma de pagamento está habilitada nas configurações.</div>}<button disabled={Boolean(processando) || pagamentosDisponiveis.length === 0} type="button" className={styles.botaoPerigo} onClick={encerrar}>{processando === 'encerrar' ? 'Finalizando…' : 'Confirmar pagamento e liberar mesa'}</button></>}
+        <section className={styles.painel}>
+          <div className={styles.topoPainel}>
+            <div><h2>Consumo da mesa</h2><p>{comanda.itens.length} lançamentos</p></div>
           </div>
-        </aside>
+
+          {comanda.itens.length === 0 ? (
+            <div className={styles.vazio}>A comanda está vazia.<br />Toque em um produto para lançar.</div>
+          ) : (
+            <div className={styles.listaItens}>
+              <div className={styles.itemCabecalho} aria-hidden="true">
+                <span>Hora</span><span>Descrição</span><span>Qtde</span><span>Valor</span><span />
+              </div>
+              {comanda.itens.map((item, indice) => (
+                <div
+                  className={`${styles.itemComanda} ${indice === comanda.itens.length - 1 ? styles.itemRecente : ''}`}
+                  key={item.linhaId ?? `${item.id}-${indice}`}
+                >
+                  <span className={styles.itemHora}>{item.lancadoEm ?? '—'}</span>
+                  <span className={styles.itemDescricao}>
+                    <strong>{item.nome}</strong>
+                    {item.adicionais?.length > 0 && <small>+ {item.adicionais.map((extra) => extra.nome ?? extra).join(', ')}</small>}
+                    {item.observacao && <small>{item.observacao}</small>}
+                  </span>
+                  <span className={styles.itemQuantidade}>{item.quantidade}</span>
+                  <span className={styles.itemValor}>{moeda(Number(item.preco) * item.quantidade)}</span>
+                  <button
+                    disabled={Boolean(processando)}
+                    type="button"
+                    className={styles.itemRemover}
+                    aria-label={`Remover ${item.nome}`}
+                    onClick={() => removerItem(item.linhaId ?? item.id)}
+                  ><Trash2 size={15} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {comanda.status === 'Conta solicitada' && (
+            <>
+              <div className={styles.campo}>
+                <label htmlFor="pagamentoComanda">Forma de pagamento confirmada</label>
+                <select disabled={Boolean(processando)} id="pagamentoComanda" value={pagamentoValido} onChange={(evento) => setPagamento(evento.target.value)}>
+                  {pagamentosDisponiveis.map((forma) => <option key={forma}>{forma}</option>)}
+                </select>
+              </div>
+              {pagamentosDisponiveis.length === 0 && <div className={styles.erro} role="alert">Nenhuma forma de pagamento está habilitada nas configurações.</div>}
+            </>
+          )}
+        </section>
+      </div>
+
+      <div className={styles.barraTotal}>
+        <div className={styles.barraValores}>
+          <span>{quantidadeItens} {quantidadeItens === 1 ? 'item' : 'itens'}</span>
+          <strong>{moeda(total)}</strong>
+        </div>
+        <button
+          type="button"
+          className={acaoPrincipal.classe}
+          disabled={Boolean(processando) || acaoPrincipal.bloqueada}
+          onClick={acaoPrincipal.executar}
+        >
+          {acaoPrincipal.icone}
+          {processando === acaoPrincipal.chave ? acaoPrincipal.carregando : acaoPrincipal.rotulo}
+        </button>
       </div>
 
       {produtoSelecionado && (
@@ -202,7 +334,7 @@ function ComandaGarcom() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="titulo-produto-garcom"
-            onClick={(event) => event.stopPropagation()}
+            onClick={(evento) => evento.stopPropagation()}
           >
             <div className={styles.modalTopo}>
               <div><h2 id="titulo-produto-garcom">{produtoSelecionado.nome}</h2><p>{produtoSelecionado.descricao}</p></div>
@@ -215,7 +347,7 @@ function ComandaGarcom() {
               })}
               {adicionaisProduto.length === 0 && <div className={styles.vazio}>Este produto não possui adicionais disponíveis.</div>}
             </div>
-            <div className={styles.campo}><label htmlFor="observacaoItem">Observação <span>(opcional)</span></label><textarea id="observacaoItem" value={observacao} onChange={(event) => setObservacao(event.target.value)} placeholder="Ex: sem cebola, ponto da carne..." /></div>
+            <div className={styles.campo}><label htmlFor="observacaoItem">Observação <span>(opcional)</span></label><textarea id="observacaoItem" value={observacao} onChange={(evento) => setObservacao(evento.target.value)} placeholder="Ex: sem cebola, ponto da carne..." /></div>
             <div className={styles.modalRodape}>
               <div className={styles.quantidade}><button disabled={Boolean(processando)} type="button" aria-label="Diminuir quantidade" onClick={() => setQuantidade((atual) => Math.max(1, atual - 1))}><Minus size={16} /></button><strong>{quantidade}</strong><button disabled={Boolean(processando) || quantidade >= 50} type="button" aria-label="Aumentar quantidade" onClick={() => setQuantidade((atual) => Math.min(50, atual + 1))}><Plus size={16} /></button></div>
               <button disabled={Boolean(processando)} type="button" className={styles.botaoPrincipal} onClick={adicionar}>{processando === 'adicionar' ? 'Adicionando…' : `Adicionar • ${moeda(precoModal)}`}</button>

@@ -29,7 +29,9 @@
 .botaoPerigo { border: 1px solid rgba(255, 100, 100, 0.4); background: rgba(255, 100, 100, 0.08); color: #ff8585; }
 .botaoPrincipal:hover { background: var(--cor-principal-clara); }
 .botaoSecundario:hover { border-color: var(--cor-principal); color: var(--cor-principal); }
-.botaoPrincipal:disabled { opacity: 0.45; cursor: not-allowed; }
+.botaoPrincipal:disabled,
+.botaoSecundario:disabled,
+.botaoPerigo:disabled { opacity: 0.45; cursor: not-allowed; }
 .formAcesso { display: grid; gap: 14px; }
 .formAcesso .botaoPrincipal { width: 100%; margin-top: 6px; }
 .erro { border: 1px solid rgba(255, 100, 100, 0.35); border-radius: 9px; background: rgba(255, 100, 100, 0.07); padding: 10px 12px; color: #ff8585; font-size: 12px; }
@@ -37,46 +39,70 @@
 .linkDemo { display: flex; align-items: center; justify-content: space-between; border: 1px solid #303030; border-radius: 11px; background: #111; padding: 13px; color: var(--cor-texto); text-decoration: none; }
 .linkDemo:hover { border-color: color-mix(in srgb, var(--cor-principal) 65%, black); }
 .linkDemo small { display: block; margin-top: 4px; color: #929292; }
-.gradeMesas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; }
-.mesa { border: 1px solid rgb(from var(--cor-principal) r g b / 0.22); border-radius: 15px; background: var(--cor-card-profundo); padding: 18px; }
-.mesaTopo { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.numeroMesa { display: grid; width: 50px; height: 50px; place-items: center; border-radius: 13px; background: #242424; color: var(--cor-principal); font-size: 20px; font-weight: 900; }
-.status { display: inline-flex; min-height: 30px; align-items: center; border: 1px solid; border-radius: 999px; padding: 0 11px; font-size: 12px; font-weight: 800; }
-.livre { border-color: rgba(52, 211, 120, 0.35); background: rgba(52, 211, 120, 0.07); color: #48d986; }
-.ocupada { border-color: rgb(from var(--cor-principal) r g b / 0.4); background: rgb(from var(--cor-principal) r g b / 0.08); color: var(--cor-principal); }
-.mesa h2 { margin: 16px 0 5px; font-size: 20px; }
-.mesa p { margin: 0; color: #929292; font-size: 12px; }
-.mesaInfo { display: grid; gap: 7px; border-top: 1px solid #292929; margin-top: 15px; padding-top: 14px; color: #aaa; font-size: 13px; }
-.mesa .botaoPrincipal,
-.mesa .botaoSecundario { width: 100%; margin-top: 15px; }
-.comandaLayout { display: grid; width: 100%; min-width: 0; grid-template-columns: minmax(0, 1.6fr) minmax(330px, 0.7fr); gap: 18px; align-items: start; }
+
 .painel { min-width: 0; border: 1px solid rgb(from var(--cor-principal) r g b / 0.2); border-radius: 15px; background: var(--cor-card-profundo); padding: 20px; }
 .topoPainel { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
 .topoPainel h2 { margin: 0; font-size: 18px; }
 .topoPainel p { margin: 5px 0 0; color: #929292; font-size: 12px; }
-.categorias { display: flex; gap: 7px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px; }
-.categoria { flex: 0 0 auto; min-height: 34px; border: 1px solid #333; border-radius: 999px; background: var(--cor-card); padding: 0 13px; color: #888; font: inherit; font-size: 11px; font-weight: 800; }
-.categoriaAtiva { border-color: var(--cor-principal); background: var(--cor-principal); color: var(--cor-sobre-principal); }
-.gradeProdutos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
-.produto { display: grid; min-width: 0; grid-template-columns: 70px minmax(0, 1fr); gap: 12px; border: 1px solid #2d2d2d; border-radius: 12px; background: #111; padding: 10px; }
-.produto > div { min-width: 0; }
-.produto img { width: 70px; height: 70px; border-radius: 9px; object-fit: cover; }
-.produto h3 { margin: 0; font-size: 14px; }
-.produto p { display: -webkit-box; overflow: hidden; margin: 5px 0; color: #929292; font-size: 11px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.produtoRodape { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.produtoRodape strong { color: var(--cor-principal); font-size: 13px; }
-.produtoRodape button { display: grid; width: 30px; height: 30px; place-items: center; border: 0; border-radius: 8px; background: var(--cor-principal); color: var(--cor-sobre-principal); cursor: pointer; }
-.resumo { position: sticky; top: 95px; }
-.itemComanda { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; border-bottom: 1px solid #2b2b2b; padding: 13px 0; }
-.itemComanda h3 { margin: 0; font-size: 13px; }
-.itemComanda p { margin: 5px 0 0; color: #929292; font-size: 11px; }
-.itemComanda strong { color: var(--cor-principal); font-size: 13px; }
-.itemComanda button { border: 0; background: transparent; color: #929292; cursor: pointer; }
-.total { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid color-mix(in srgb, var(--cor-principal) 20%, var(--cor-fundo)); margin-top: 14px; padding-top: 17px; }
-.total span { color: #888; }
-.total strong { color: var(--cor-principal); font-size: 23px; }
-.acoesComanda { display: grid; gap: 9px; margin-top: 18px; }
 .vazio { padding: 32px 10px; color: #929292; font-size: 12px; line-height: 1.6; text-align: center; }
+
+/* Resumo do salão acima da grade: os três números que o garçom precisa
+   antes de escolher a mesa. */
+.painelSalao { display: grid; gap: 16px; }
+.resumoSalao { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.resumoSalao > div { border-radius: 11px; background: var(--cor-card); padding: 10px 12px; }
+.resumoSalao span { display: block; color: #929292; font-size: 10px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; }
+.resumoSalao strong { display: block; margin-top: 3px; font-size: 21px; font-weight: 900; font-variant-numeric: tabular-nums; }
+
+/* =========================
+   COMANDA DO GARÇOM
+
+   Fluxo vertical, pensado para o celular: ações rápidas, cardápio com
+   foto, consumo lançado e, colada no rodapé, a barra com o total.
+========================= */
+
+.comandaFluxo { display: grid; gap: 14px; }
+.acoesTopo { display: flex; flex-wrap: wrap; gap: 9px; }
+.categorias { display: flex; gap: 7px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px; }
+.categoria { flex: 0 0 auto; min-height: 34px; border: 1px solid #333; border-radius: 999px; background: var(--cor-card); padding: 0 13px; color: #888; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.categoriaAtiva { border-color: var(--cor-principal); background: var(--cor-principal); color: var(--cor-sobre-principal); }
+
+/* Cards com foto: lançar um item é reconhecer a imagem e tocar, sem ler
+   nome nem digitar código. */
+.gradeProdutos { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
+.produto { display: grid; min-width: 0; gap: 6px; border: 1px solid #2d2d2d; border-radius: 12px; background: #111; padding: 8px; color: var(--cor-texto); font: inherit; text-align: left; cursor: pointer; transition: 0.2s ease; }
+.produto img { width: 100%; aspect-ratio: 4 / 3; border-radius: 9px; background: #1a1a1a; object-fit: cover; }
+.produto strong { display: -webkit-box; overflow: hidden; font-size: 12px; font-weight: 700; line-height: 1.3; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.produto span { color: var(--cor-principal); font-size: 12px; font-weight: 800; }
+.produto:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--cor-principal); }
+.produto:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.listaItens { display: grid; }
+.itemCabecalho,
+.itemComanda { display: grid; grid-template-columns: 46px minmax(0, 1fr) 34px 76px 38px; align-items: center; gap: 9px; }
+.itemCabecalho { border-bottom: 1px solid #2b2b2b; padding: 0 6px 8px; color: #7f7f7f; font-size: 10px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; }
+.itemCabecalho span:nth-child(3) { text-align: center; }
+.itemCabecalho span:nth-child(4) { text-align: right; }
+.itemComanda { border-bottom: 1px solid #232323; border-radius: 8px; padding: 11px 6px; }
+/* Último lançamento em destaque: confirma o que acabou de ser pedido. */
+.itemRecente { background: rgb(from var(--cor-principal) r g b / 0.09); box-shadow: inset 3px 0 0 var(--cor-principal); }
+.itemHora { color: #8d8d8d; font-size: 12px; font-variant-numeric: tabular-nums; }
+.itemDescricao { display: grid; min-width: 0; gap: 3px; }
+.itemDescricao strong { font-size: 13px; font-weight: 700; }
+.itemDescricao small { color: #929292; font-size: 11px; line-height: 1.4; }
+.itemQuantidade { color: var(--cor-texto); font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: center; }
+.itemValor { color: var(--cor-principal); font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+.itemRemover { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid #333; border-radius: 9px; background: var(--cor-card); color: #929292; cursor: pointer; }
+.itemRemover:hover:not(:disabled) { border-color: rgba(255, 100, 100, 0.5); color: #ff8585; }
+.itemRemover:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Barra do total colada no rodapé: o valor acumulado e a próxima ação
+   ficam sempre visíveis, sem rolar a lista. */
+.barraTotal { position: sticky; bottom: 0; z-index: 10; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; margin-top: 16px; border: 1px solid rgb(from var(--cor-principal) r g b / 0.35); border-radius: 14px; background: rgba(12, 12, 12, 0.97); padding: 13px 16px; backdrop-filter: blur(12px); box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.45); }
+.barraValores span { display: block; color: #929292; font-size: 11px; font-weight: 700; }
+.barraValores strong { display: block; margin-top: 2px; color: var(--cor-principal); font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.barraTotal button { min-height: 48px; }
+
 .modalFundo { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(0, 0, 0, 0.78); padding: 18px; }
 .modal { width: min(100%, 520px); max-height: min(92vh, calc(100dvh - 36px)); overflow-y: auto; overscroll-behavior: contain; border: 1px solid rgb(from var(--cor-principal) r g b / 0.35); border-radius: 18px; background: var(--cor-card); padding: 22px; }
 .modalTopo { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
@@ -89,15 +115,20 @@
 .modalRodape { display: flex; align-items: center; justify-content: space-between; gap: 15px; border-top: 1px solid #303030; margin-top: 18px; padding-top: 17px; }
 .quantidade { display: flex; align-items: center; gap: 12px; }
 .quantidade button { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid #3a3a3a; border-radius: 8px; background: #111; color: var(--cor-texto); cursor: pointer; }
-@media (max-width: 940px) { .gradeMesas { grid-template-columns: repeat(3, 1fr); } .comandaLayout { grid-template-columns: 1fr; } .resumo { position: static; } }
+
 @media (max-width: 650px) {
-  .gradeMesas { grid-template-columns: repeat(2, 1fr); }
-  .gradeProdutos { grid-template-columns: minmax(0, 1fr); }
+  .painel { padding: 16px; }
   .topoPainel { align-items: flex-start; flex-wrap: wrap; }
 
   .campo input,
   .campo select,
   .campo textarea { min-height: 44px; font-size: 16px; }
+
+  /* Sem espaço para a coluna de horário: ela desce para a linha de baixo,
+     junto da descrição. */
+  .itemCabecalho { display: none; }
+  .itemComanda { grid-template-columns: minmax(0, 1fr) 34px 76px 44px; row-gap: 6px; }
+  .itemHora { grid-column: 1 / -1; }
 
   .acessoCard > p,
   .campo label,
@@ -105,26 +136,23 @@
   .botaoPrincipal,
   .botaoSecundario,
   .botaoPerigo,
-  .status,
-  .mesa p,
-  .mesaInfo,
   .topoPainel p,
   .categoria,
-  .produto p,
-  .itemComanda p,
+  .itemDescricao small,
   .vazio,
   .modalTopo p,
   .adicional { font-size: 14px; }
 
   .categoria,
-  .produtoRodape button,
-  .itemComanda button,
+  .itemRemover,
   .modalTopo button,
   .quantidade button { min-width: 44px; min-height: 44px; }
+
+  .barraTotal { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .barraTotal button { width: 100%; }
 }
 
 @media (max-width: 420px) {
-  .gradeMesas { grid-template-columns: 1fr; }
   .acessoCard { padding: 23px 18px; }
   .adicionais { grid-template-columns: 1fr; }
   .modalRodape { align-items: stretch; flex-direction: column; }
