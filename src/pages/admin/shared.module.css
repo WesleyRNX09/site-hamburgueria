@@ -78,6 +78,7 @@
 }
 
 .gradeDuasColunas > .card { height: 100%; }
+.gradeDuasColunas > .card + .card { margin-top: 0; }
 
 .secaoSeparada { margin-top: 18px; }
 .secaoComMargemInferior { margin-bottom: 18px; }
