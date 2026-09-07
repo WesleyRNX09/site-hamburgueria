@@ -26,7 +26,7 @@ function idTenant(valor) {
 }
 
 function nomeImagemValido(nomeArquivo) {
-  return /^(produto|logo|banner)-[a-f0-9-]+\.(jpg|png|webp)$/.test(nomeArquivo);
+  return /^(produto|promocao|logo|banner)-[a-f0-9-]+\.(jpg|png|webp)$/.test(nomeArquivo);
 }
 
 export function pastaUploadsEstabelecimento(pastaUploads, idEstabelecimento) {
@@ -36,7 +36,7 @@ export function pastaUploadsEstabelecimento(pastaUploads, idEstabelecimento) {
 export async function salvarImagemDataUrl(imagem, pastaUploads, idEstabelecimento, prefixo = 'produto') {
   if (!imagem || !String(imagem).startsWith('data:')) return null;
   const tenantId = idTenant(idEstabelecimento);
-  if (!['produto', 'logo', 'banner'].includes(prefixo)) throw erroUpload('O tipo da imagem é inválido.');
+  if (!['produto', 'promocao', 'logo', 'banner'].includes(prefixo)) throw erroUpload('O tipo da imagem é inválido.');
 
   const correspondencia = String(imagem).match(/^data:image\/(jpeg|jpg|png|webp);base64,([a-zA-Z0-9+/=\r\n]+)$/);
   if (!correspondencia) throw erroUpload('A imagem enviada é inválida.');

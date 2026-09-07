@@ -635,6 +635,9 @@ function mapearPromocao(linha) {
     precoAntigo: formatarPreco(linha.preco_anterior_centavos),
     preco: formatarPreco(linha.preco_centavos),
     imagem: linha.imagem_url || linha.imagem_produto || null,
+    // Só a foto da própria promoção: o formulário precisa saber se ela existe,
+    // já que `imagem` acima pode ser a foto herdada do produto vinculado.
+    imagemPropria: linha.imagem_url ?? null,
     destaque: linha.destaque ?? '',
     tipo: linha.tipo ?? '',
     ativo: Boolean(linha.ativo),
@@ -674,7 +677,7 @@ export async function listarPromocoes(banco, idEstabelecimento, { somenteAtivas 
   return linhas.map(mapearPromocao);
 }
 
-async function validarPromocao(banco, idEstabelecimento, dados) {
+async function validarPromocao(banco, idEstabelecimento, dados, imagemUrl) {
   const nome = texto(dados.nome, 160);
   const descricao = texto(dados.descricao, 2000);
   const precoAnteriorCentavos = precoParaCentavos(dados.precoAntigo || 0);
@@ -717,7 +720,7 @@ async function validarPromocao(banco, idEstabelecimento, dados) {
     descricao,
     precoAnteriorCentavos,
     precoCentavos,
-    imagem: texto(dados.imagem, 500) || null,
+    imagem: texto(imagemUrl, 500) || null,
     destaque: texto(dados.destaque, 100) || null,
     tipo: texto(dados.tipo, 100) || null,
     ativo: dados.ativo === false ? 0 : 1,
@@ -726,8 +729,8 @@ async function validarPromocao(banco, idEstabelecimento, dados) {
   };
 }
 
-export async function salvarPromocao(banco, idEstabelecimento, dados, id = null) {
-  const promocao = await validarPromocao(banco, idEstabelecimento, dados);
+export async function salvarPromocao(banco, idEstabelecimento, dados, id = null, imagemUrl = null) {
+  const promocao = await validarPromocao(banco, idEstabelecimento, dados, imagemUrl);
   let promocaoId = Number(id) || null;
   if (promocaoId) {
     const [resultado] = await banco.execute(`
@@ -758,6 +761,20 @@ export async function salvarPromocao(banco, idEstabelecimento, dados, id = null)
   }
   const promocoes = await listarPromocoes(banco, idEstabelecimento);
   return promocoes.find((item) => item.id === promocaoId);
+}
+
+/*
+  Devolve só a foto que pertence à promoção, nunca a herdada do produto: é ela
+  que a rota apaga do disco ao trocar ou excluir o registro.
+*/
+export async function buscarPromocao(banco, idEstabelecimento, id) {
+  const [linhas] = await banco.execute(`
+    SELECT pr.id, pr.imagem_url
+    FROM promocoes pr
+    WHERE pr.id = ? AND pr.id_estabelecimento = ?
+  `, [id, idEstabelecimento]);
+  if (!linhas[0]) return null;
+  return { id: Number(linhas[0].id), imagem: linhas[0].imagem_url ?? null };
 }
 
 export async function excluirPromocao(banco, idEstabelecimento, id) {

@@ -1,8 +1,10 @@
-import { BadgePercent, Edit3, Plus, Save, Trash2, X } from 'lucide-react';
+import { ArrowLeft, BadgePercent, Edit3, ImagePlus, Plus, Save, Trash2, Upload, X } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
 import { useApp } from '../../../context/appContext';
+import { otimizarImagemProduto } from '../../../utils/imageUpload';
 import { usarPlaceholderProduto } from '../../../utils/productImage';
 import styles from '../shared.module.css';
 
@@ -12,6 +14,7 @@ const vazio = {
   precoAntigo: '',
   preco: '',
   destaque: '',
+  imagem: '',
   tipo: 'OFERTA ESPECIAL',
   produtoId: '',
   inicioEm: '',
@@ -21,12 +24,30 @@ const vazio = {
 
 function PromocoesAdmin() {
   const { produtos, promocoes, salvarPromocao, removerPromocao } = useApp();
+  const navigate = useNavigate();
   const [formulario, setFormulario] = useState(null);
   const [erro, setErro] = useState('');
   const [processando, setProcessando] = useState(false);
+  const [processandoImagem, setProcessandoImagem] = useState(false);
 
   function alterar(campo, valor) {
     setFormulario((atual) => ({ ...atual, [campo]: valor }));
+  }
+
+  async function selecionarImagem(event) {
+    const arquivo = event.target.files?.[0];
+    event.target.value = '';
+    if (!arquivo) return;
+
+    setProcessandoImagem(true);
+    setErro('');
+    try {
+      alterar('imagem', await otimizarImagemProduto(arquivo));
+    } catch (falha) {
+      setErro(falha.message);
+    } finally {
+      setProcessandoImagem(false);
+    }
   }
 
   async function enviar(event) {
@@ -61,7 +82,12 @@ function PromocoesAdmin() {
     }
   }
 
-  const acao = <button type="button" className={styles.botaoPrimario} onClick={() => setFormulario({ ...vazio, produtoId: produtos.find((produto) => produto.ativo)?.id ?? '' })}><Plus size={17} /> Nova promoção</button>;
+  const acao = (
+    <div className={styles.acoesCabecalho}>
+      <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/cardapio')}><ArrowLeft size={17} /> Cardápio</button>
+      <button type="button" className={styles.botaoPrimario} onClick={() => setFormulario({ ...vazio, produtoId: produtos.find((produto) => produto.ativo)?.id ?? '' })}><Plus size={17} /> Nova promoção</button>
+    </div>
+  );
 
   return (
     <AdminLayout titulo="Promoções" subtitulo="Crie ofertas que aparecem no carrossel da página inicial." acao={acao}>
@@ -72,6 +98,27 @@ function PromocoesAdmin() {
             <button type="button" className={styles.botaoIcone} aria-label="Fechar formulário" onClick={() => setFormulario(null)}><X size={17} /></button>
           </div>
           <form className={styles.formulario} onSubmit={enviar}>
+            <div className={styles.uploadImagem}>
+              <div className={styles.previaImagem}>
+                {formulario.imagem
+                  ? <img src={formulario.imagem} alt="Prévia da promoção" onError={usarPlaceholderProduto} />
+                  : <div><ImagePlus size={34} /><span>A foto da promoção aparecerá aqui</span></div>}
+              </div>
+              <div className={styles.uploadConteudo}>
+                <h2>Foto da promoção</h2>
+                <p>Envie uma imagem JPG, PNG ou WebP. Sem foto própria, a promoção continua usando a foto do produto vinculado.</p>
+                <div className={styles.acoes}>
+                  <label htmlFor="imagemPromocao" className={styles.botaoSecundario}>
+                    <Upload size={17} /> {processandoImagem ? 'Otimizando...' : formulario.imagem ? 'Trocar foto' : 'Escolher foto'}
+                  </label>
+                  {formulario.imagem && (
+                    <button type="button" className={styles.botaoPerigo} disabled={processandoImagem} onClick={() => alterar('imagem', '')}><Trash2 size={17} /> Remover foto</button>
+                  )}
+                </div>
+                <input id="imagemPromocao" className={styles.arquivoInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={processandoImagem} onChange={selecionarImagem} />
+              </div>
+            </div>
+
             <div className={styles.gridFormulario}>
               <div className={styles.campo}><label htmlFor="nomePromocao">Nome</label><input id="nomePromocao" value={formulario.nome} onChange={(event) => alterar('nome', event.target.value)} /></div>
               <div className={styles.campo}><label htmlFor="produtoPromocao">Produto vinculado</label><select id="produtoPromocao" value={formulario.produtoId ?? ''} onChange={(event) => alterar('produtoId', Number(event.target.value))}><option value="">Selecione</option>{produtos.filter((produto) => produto.ativo).map((produto) => <option key={produto.id} value={produto.id}>{produto.nome}</option>)}</select></div>
@@ -103,7 +150,7 @@ function PromocoesAdmin() {
               <div className={styles.produtoRodape}>
                 <div><span className={styles.textoSecundario}>De R$ {promocao.precoAntigo}</span><span className={styles.preco}>R$ {promocao.preco}</span></div>
                 <div className={styles.acoes}>
-                  <button disabled={processando} type="button" className={styles.botaoIcone} aria-label={`Editar ${promocao.nome}`} onClick={() => setFormulario({ ...promocao, inicioEm: promocao.inicioEm?.slice(0, 16) ?? '', fimEm: promocao.fimEm?.slice(0, 16) ?? '' })}><Edit3 size={16} /></button>
+                  <button disabled={processando} type="button" className={styles.botaoIcone} aria-label={`Editar ${promocao.nome}`} onClick={() => setFormulario({ ...promocao, imagem: promocao.imagemPropria ?? '', inicioEm: promocao.inicioEm?.slice(0, 16) ?? '', fimEm: promocao.fimEm?.slice(0, 16) ?? '' })}><Edit3 size={16} /></button>
                   <button disabled={processando} type="button" className={styles.botaoIcone} aria-label={`Remover ${promocao.nome}`} onClick={() => excluir(promocao)}><Trash2 size={16} /></button>
                 </div>
               </div>

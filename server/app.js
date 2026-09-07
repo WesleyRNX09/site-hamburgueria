@@ -35,6 +35,7 @@ import {
   buscarConfiguracao,
   buscarConfiguracaoPublica,
   buscarFuncionarioPorSenha,
+  buscarPromocao,
   confirmarPagamento,
   criarAdministrador,
   criarMesa,
@@ -956,26 +957,53 @@ async function rotaAdmin({
   }
 
   if (requisicao.method === 'POST' && caminho === '/api/admin/promocoes') {
-    const promocao = await salvarPromocao(banco, idEstabelecimento, await lerJson(requisicao));
-    responderJson(resposta, 201, { promocao });
+    const dados = await lerJson(requisicao);
+    let imagemUrl = null;
+    try {
+      imagemUrl = await processarImagemNova(dados.imagem, pastaUploads, idEstabelecimento, 'promocao');
+      const promocao = await salvarPromocao(banco, idEstabelecimento, dados, null, imagemUrl);
+      responderJson(resposta, 201, { promocao });
+    } catch (erro) {
+      if (imagemUrl) await removerImagemLocal(imagemUrl, pastaUploads, idEstabelecimento);
+      tratarErroDados(erro);
+    }
     return true;
   }
   const promocaoId = caminho.match(/^\/api\/admin\/promocoes\/(\d+)$/);
   if (requisicao.method === 'PUT' && promocaoId) {
-    responderJson(resposta, 200, {
-      promocao: await salvarPromocao(
-        banco,
+    const id = Number(promocaoId[1]);
+    const anterior = await buscarPromocao(banco, idEstabelecimento, id);
+    if (!anterior) throw new ErroHttp(404, 'Promoção não encontrada.');
+    const dados = await lerJson(requisicao);
+    let imagemUrl;
+    let novaImagem = null;
+    try {
+      imagemUrl = await processarImagemAtualizada(
+        dados.imagem,
+        anterior.imagem,
+        pastaUploads,
         idEstabelecimento,
-        await lerJson(requisicao),
-        promocaoId[1]
-      )
-    });
+        'promocao'
+      );
+      if (imagemUrl !== anterior.imagem) novaImagem = imagemUrl;
+      const promocao = await salvarPromocao(banco, idEstabelecimento, dados, id, imagemUrl);
+      if (anterior.imagem && anterior.imagem !== imagemUrl) {
+        await removerImagemLocal(anterior.imagem, pastaUploads, idEstabelecimento);
+      }
+      responderJson(resposta, 200, { promocao });
+    } catch (erro) {
+      if (novaImagem) await removerImagemLocal(novaImagem, pastaUploads, idEstabelecimento);
+      tratarErroDados(erro);
+    }
     return true;
   }
   if (requisicao.method === 'DELETE' && promocaoId) {
-    if (!await excluirPromocao(banco, idEstabelecimento, promocaoId[1])) {
+    const id = Number(promocaoId[1]);
+    const promocao = await buscarPromocao(banco, idEstabelecimento, id);
+    if (!promocao || !await excluirPromocao(banco, idEstabelecimento, id)) {
       throw new ErroHttp(404, 'Promoção não encontrada.');
     }
+    await removerImagemLocal(promocao.imagem, pastaUploads, idEstabelecimento);
     responderJson(resposta, 200, { sucesso: true });
     return true;
   }

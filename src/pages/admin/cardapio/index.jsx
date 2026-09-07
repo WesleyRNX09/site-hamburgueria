@@ -1,4 +1,4 @@
-import { Edit3, ListPlus, Package, Plus, Search, Trash2 } from 'lucide-react';
+import { BadgePercent, Edit3, Layers3, ListPlus, Package, Plus, Search, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -25,7 +25,9 @@ function CardapioAdmin() {
 
   const acao = (
     <div className={styles.acoesCabecalho}>
+      <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/categorias')}><Layers3 size={17} /> Categorias</button>
       <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/adicionais')}><ListPlus size={17} /> Adicionais</button>
+      <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/promocoes')}><BadgePercent size={17} /> Promoções</button>
       <button type="button" className={styles.botaoPrimario} onClick={() => navigate('/admin/cardapio/novo')}><Plus size={17} /> Novo produto</button>
     </div>
   );

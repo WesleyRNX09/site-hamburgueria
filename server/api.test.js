@@ -75,6 +75,13 @@ test('isola imagens por estabelecimento e não remove arquivos de outro tenant',
     await stat(join(pasta, url.slice('/uploads/'.length)));
     assert.equal(await removerImagemLocal(url, pasta, 11), true);
     await assert.rejects(stat(join(pasta, url.slice('/uploads/'.length))), { code: 'ENOENT' });
+    // A foto da promoção usa o mesmo isolamento por estabelecimento da do produto.
+    const urlPromocao = await salvarImagemDataUrl(pngMinimo, pasta, 11, 'promocao');
+    assert.match(urlPromocao, /^\/uploads\/estabelecimentos\/11\/promocao-[a-f0-9-]+\.png$/);
+    assert.equal(await removerImagemLocal(urlPromocao, pasta, 22), false);
+    await stat(join(pasta, urlPromocao.slice('/uploads/'.length)));
+    assert.equal(await removerImagemLocal(urlPromocao, pasta, 11), true);
+    await assert.rejects(stat(join(pasta, urlPromocao.slice('/uploads/'.length))), { code: 'ENOENT' });
     await assert.rejects(salvarImagemDataUrl(pngMinimo, pasta, 11, 'script'), /tipo da imagem/);
     await assert.rejects(salvarImagemDataUrl(pngMinimo, pasta, '../12', 'banner'), /estabelecimento/);
   } finally {

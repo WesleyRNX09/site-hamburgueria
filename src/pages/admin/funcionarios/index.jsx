@@ -1,4 +1,4 @@
-import { Copy, Edit3, ExternalLink, KeyRound, QrCode, RefreshCw, Save, Trash2, UserRoundPlus, Users, X } from 'lucide-react';
+import { Copy, Edit3, ExternalLink, QrCode, RefreshCw, Save, Trash2, UserRoundPlus, X } from 'lucide-react';
 import { useState } from 'react';
 
 import AdminLayout from '../../../components/AdminLayout';
@@ -115,13 +115,6 @@ function FuncionariosAdmin() {
 
   return (
     <AdminLayout titulo="Funcionários" subtitulo="Cadastre a equipe e deixe o QR Code de acesso à vista." acao={acao}>
-      <section className={styles.gradeMetricas}>
-        <div className={styles.metrica}><div className={styles.metricaIcone}><Users size={23} /></div><div><span>Funcionários</span><strong>{funcionarios.length}</strong><small>Total cadastrado</small></div></div>
-        <div className={styles.metrica}><div className={styles.metricaIcone}><Users size={23} /></div><div><span>Ativos</span><strong>{funcionarios.filter((item) => item.status === 'Ativo').length}</strong><small>Com acesso liberado</small></div></div>
-        <div className={styles.metrica}><div className={styles.metricaIcone}><KeyRound size={23} /></div><div><span>Sem senha</span><strong>{funcionarios.filter((item) => !item.senhaDefinida).length}</strong><small>Aguardando você cadastrar</small></div></div>
-        <div className={styles.metrica}><div className={styles.metricaIcone}><QrCode size={23} /></div><div><span>Comandas fechadas</span><strong>{funcionarios.reduce((total, item) => total + item.comandas, 0)}</strong><small>Produção da equipe</small></div></div>
-      </section>
-
       <section className={styles.card}>
         <div className={styles.topoCard}><div><h2>QR Code da equipe</h2><p>Um só para todos os garçons. Imprima e deixe no balcão.</p></div><QrCode size={34} color="#ffc107" /></div>
         <div className={styles.qrArea}>

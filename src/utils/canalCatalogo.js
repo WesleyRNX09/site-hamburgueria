@@ -11,19 +11,19 @@ export const CANAIS_CATALOGO = [
   {
     valor: 'ambos',
     rotulo: 'Cardápio online e salão',
-    curto: 'Nos dois',
+    curto: 'Online/salão',
     ajuda: 'Aparece para o cliente no site e para o garçom na comanda.'
   },
   {
     valor: 'online',
     rotulo: 'Somente cardápio online',
-    curto: 'Só online',
+    curto: 'Online',
     ajuda: 'Só o cliente vê no site. Útil para combos de entrega.'
   },
   {
     valor: 'salao',
     rotulo: 'Somente salão (mesas e comandas)',
-    curto: 'Só salão',
+    curto: 'Salão',
     ajuda: 'Só o garçom vê ao lançar itens na mesa. Não aparece no site.'
   }
 ];

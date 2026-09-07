@@ -1,5 +1,6 @@
-import { Edit3, Layers3, Plus, Save, X } from 'lucide-react';
+import { ArrowLeft, Edit3, Layers3, Plus, Save, X } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
 import { useApp } from '../../../context/appContext';
@@ -10,6 +11,7 @@ const vazio = { nome: '', ordem: 0, canal: 'ambos', ativo: true };
 
 function CategoriasAdmin() {
   const { categorias, produtos, salvarCategoria, alternarCategoria } = useApp();
+  const navigate = useNavigate();
   const [formulario, setFormulario] = useState(null);
   const [erro, setErro] = useState('');
   const [processando, setProcessando] = useState(false);
@@ -42,7 +44,12 @@ function CategoriasAdmin() {
     }
   }
 
-  const acao = <button type="button" className={styles.botaoPrimario} onClick={() => setFormulario({ ...vazio, ordem: categorias.length })}><Plus size={17} /> Nova categoria</button>;
+  const acao = (
+    <div className={styles.acoesCabecalho}>
+      <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/cardapio')}><ArrowLeft size={17} /> Cardápio</button>
+      <button type="button" className={styles.botaoPrimario} onClick={() => setFormulario({ ...vazio, ordem: categorias.length })}><Plus size={17} /> Nova categoria</button>
+    </div>
+  );
 
   return (
     <AdminLayout titulo="Categorias" subtitulo="Organize as seções do cardápio sem valores fixos no código." acao={acao}>

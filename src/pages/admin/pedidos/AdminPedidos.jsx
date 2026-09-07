@@ -7,6 +7,30 @@ import { useApp } from '../../../context/appContext';
 import styles from '../shared.module.css';
 
 const filtrosStatus = ['Todos', 'Recebido', 'Em preparo', 'Pronto', 'Saiu para entrega', 'Entregue', 'Retirado', 'Cancelado'];
+const filtrosPeriodo = ['Hoje', 'Ontem', 'Últimos 7 dias', 'Todos'];
+
+// Mesmo recorte por dia usado nos relatórios: virada do dia no fuso do navegador.
+function inicioDoDia(diasAtras) {
+  const data = new Date();
+  data.setHours(0, 0, 0, 0);
+  data.setDate(data.getDate() - diasAtras);
+  return data;
+}
+
+function intervaloDoPeriodo(periodo) {
+  if (periodo === 'Ontem') return { inicio: inicioDoDia(1), fim: inicioDoDia(0) };
+  if (periodo === 'Últimos 7 dias') return { inicio: inicioDoDia(6), fim: null };
+  if (periodo === 'Hoje') return { inicio: inicioDoDia(0), fim: null };
+  return null;
+}
+
+function dentroDoPeriodo(pedido, intervalo) {
+  if (!intervalo) return true;
+  const data = new Date(pedido.criadoEm);
+  if (Number.isNaN(data.getTime())) return false;
+  if (data < intervalo.inicio) return false;
+  return !intervalo.fim || data < intervalo.fim;
+}
 
 function moeda(valor) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
@@ -27,9 +51,13 @@ function AdminPedidos() {
   const [busca, setBusca] = useState('');
   const [origem, setOrigem] = useState('Todos');
   const [status, setStatus] = useState('Todos');
+  const [periodo, setPeriodo] = useState('Hoje');
 
   const termo = busca.trim().toLowerCase();
-  const filtrados = pedidos.filter((pedido) => {
+  const intervalo = intervaloDoPeriodo(periodo);
+  // O período recorta a tela inteira, para os cartões baterem com a tabela.
+  const doPeriodo = pedidos.filter((pedido) => dentroDoPeriodo(pedido, intervalo));
+  const filtrados = doPeriodo.filter((pedido) => {
     const correspondeBusca = !termo || [pedido.id, pedido.cliente, pedido.origem, ...pedido.itens.map((item) => item.nome)]
       .join(' ')
       .toLowerCase()
@@ -44,20 +72,28 @@ function AdminPedidos() {
     return correspondeBusca && correspondeOrigem && correspondeStatus;
   });
 
-  const delivery = pedidos.filter((pedido) => pedido.origem === 'Delivery').length;
-  const salao = pedidos.length - delivery;
-  const preparo = pedidos.filter((pedido) => pedido.status === 'Em preparo').length;
+  const delivery = doPeriodo.filter((pedido) => pedido.origem === 'Delivery').length;
+  const salao = doPeriodo.length - delivery;
+  const preparo = doPeriodo.filter((pedido) => pedido.status === 'Em preparo').length;
+  const rotuloPeriodo = periodo === 'Todos' ? 'Todos os registros carregados' : periodo;
 
   return (
     <AdminLayout titulo="Gerenciar pedidos" subtitulo="Acompanhe pedidos de delivery e do salão em um só lugar.">
       <section className={styles.gradeMetricas}>
-        <div className={styles.metrica}><div className={styles.metricaIcone}><ShoppingBag size={23} /></div><div><span>Total de pedidos</span><strong>{pedidos.length}</strong><small>Pedidos registrados</small></div></div>
+        <div className={styles.metrica}><div className={styles.metricaIcone}><ShoppingBag size={23} /></div><div><span>Total de pedidos</span><strong>{doPeriodo.length}</strong><small>{rotuloPeriodo}</small></div></div>
         <div className={styles.metrica}><div className={styles.metricaIcone}><ChefHat size={23} /></div><div><span>Em preparo</span><strong>{preparo}</strong><small>Aguardando finalização</small></div></div>
         <div className={styles.metrica}><div className={styles.metricaIcone}><Bike size={23} /></div><div><span>Delivery</span><strong>{delivery}</strong><small>Pedidos para entrega</small></div></div>
         <div className={styles.metrica}><div className={styles.metricaIcone}><Store size={23} /></div><div><span>Salão</span><strong>{salao}</strong><small>Atendimento em mesas</small></div></div>
       </section>
 
       <section className={styles.card}>
+        <div className={styles.filtros}>
+          <div className={styles.abas} role="group" aria-label="Filtrar pedidos por período">
+            {filtrosPeriodo.map((item) => (
+              <button type="button" key={item} aria-pressed={periodo === item} className={`${styles.aba} ${periodo === item ? styles.abaAtiva : ''}`} onClick={() => setPeriodo(item)}>{item}</button>
+            ))}
+          </div>
+        </div>
         <div className={styles.filtros}>
           <label className={styles.busca}>
             <Search size={17} />

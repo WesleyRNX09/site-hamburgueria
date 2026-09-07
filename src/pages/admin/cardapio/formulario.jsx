@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, ImagePlus, ListPlus, Save, Upload } from 'lucide-react';
+import { ArrowLeft, Check, ImagePlus, ListPlus, Save, Trash2, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -6,7 +6,7 @@ import AdminLayout from '../../../components/AdminLayout';
 import { useApp } from '../../../context/appContext';
 import { CANAIS_CATALOGO, canalCatalogo } from '../../../utils/canalCatalogo';
 import { otimizarImagemProduto } from '../../../utils/imageUpload';
-import { usarPlaceholderProduto } from '../../../utils/productImage';
+import { imagemProdutoPadrao, usarPlaceholderProduto } from '../../../utils/productImage';
 import styles from '../shared.module.css';
 
 const formularioVazio = {
@@ -81,6 +81,10 @@ function FormularioProduto() {
     }
   }
 
+  // O placeholder do cardápio não é foto do produto: sem essa distinção o
+  // formulário ofereceria "remover" uma imagem que não existe no banco.
+  const temFoto = Boolean(dados.imagem) && dados.imagem !== imagemProdutoPadrao;
+
   const acao = <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/cardapio')}><ArrowLeft size={17} /> Voltar</button>;
 
   return (
@@ -89,16 +93,21 @@ function FormularioProduto() {
         <form className={styles.formulario} onSubmit={enviar}>
           <div className={styles.uploadImagem}>
             <div className={styles.previaImagem}>
-              {dados.imagem
+              {temFoto
                 ? <img src={dados.imagem} alt="Prévia do produto" onError={usarPlaceholderProduto} />
                 : <div><ImagePlus size={34} /><span>A foto do produto aparecerá aqui</span></div>}
             </div>
             <div className={styles.uploadConteudo}>
               <h2>Foto do produto</h2>
               <p>Envie uma imagem JPG, PNG ou WebP. Ela será otimizada e usada no site do cliente, no painel e na comanda do garçom.</p>
-              <label htmlFor="imagemProduto" className={styles.botaoSecundario}>
-                <Upload size={17} /> {processandoImagem ? 'Otimizando...' : dados.imagem ? 'Trocar foto' : 'Escolher foto'}
-              </label>
+              <div className={styles.acoes}>
+                <label htmlFor="imagemProduto" className={styles.botaoSecundario}>
+                  <Upload size={17} /> {processandoImagem ? 'Otimizando...' : temFoto ? 'Trocar foto' : 'Escolher foto'}
+                </label>
+                {temFoto && (
+                  <button type="button" className={styles.botaoPerigo} disabled={processandoImagem} onClick={() => alterar('imagem', '')}><Trash2 size={17} /> Remover foto</button>
+                )}
+              </div>
               <input id="imagemProduto" className={styles.arquivoInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={processandoImagem} onChange={selecionarImagem} />
             </div>
           </div>

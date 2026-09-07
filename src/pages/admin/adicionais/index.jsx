@@ -1,5 +1,6 @@
-import { Edit3, Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Edit3, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
 import { useApp } from '../../../context/appContext';
@@ -13,6 +14,7 @@ function moeda(valor) {
 
 function AdicionaisAdmin() {
   const { adicionais, produtos, salvarAdicional, removerAdicional, alternarAdicional } = useApp();
+  const navigate = useNavigate();
   const [dados, setDados] = useState(vazio);
   const [busca, setBusca] = useState('');
   const [erro, setErro] = useState('');
@@ -85,8 +87,10 @@ function AdicionaisAdmin() {
     return produtos.filter((produto) => (produto.adicionaisIds ?? []).includes(adicionalId)).length;
   }
 
+  const acao = <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/cardapio')}><ArrowLeft size={17} /> Cardápio</button>;
+
   return (
-    <AdminLayout titulo="Adicionais" subtitulo="Crie os extras e escolha em quais produtos cada um poderá aparecer.">
+    <AdminLayout titulo="Adicionais" subtitulo="Crie os extras e escolha em quais produtos cada um poderá aparecer." acao={acao}>
       <div className={styles.gradeDuasColunas}>
         <section className={styles.card}>
           <div className={styles.topoCard}>

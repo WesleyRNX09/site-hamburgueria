@@ -36,6 +36,9 @@
   margin-bottom: 18px;
 }
 
+/* Variante usada pelo dashboard, que exibe apenas três métricas no topo. */
+.gradeMetricasTres { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
 .metrica,
 .card,
 .painel,
@@ -99,10 +102,15 @@
 .topoCard h3 { margin: 0; color: var(--cor-texto); font-size: 18px; }
 .topoCard p { margin: 5px 0 0; color: #929292; font-size: 12px; }
 
+/*
+  Sem `scrollbar-gutter: stable`: ele reserva a faixa da barra vertical, que
+  aqui nunca aparece (a tabela só rola na horizontal e o contêiner não tem
+  altura máxima). O resultado era uma tira morta de ~15px na direita, e a
+  última coluna parecia cortada antes da borda.
+*/
 .tabelaContainer {
   overflow-x: auto;
   overscroll-behavior-inline: contain;
-  scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
   border: 1px solid #292929;
   border-radius: 12px;
@@ -202,17 +210,34 @@
 
 .acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .acoesCabecalho { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
-.vazio { padding: 44px 20px; color: #929292; text-align: center; }
+/* O reset global deixa todo svg como display:block, então o ícone precisa de
+   centralização própria: text-align sozinho não alcança esse bloco. */
+.vazio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 44px 20px;
+  color: #929292;
+  text-align: center;
+}
 .vazio svg { margin-bottom: 12px; color: color-mix(in srgb, var(--cor-principal) 65%, black); }
 .vazio h3 { margin: 0 0 7px; color: #ddd; }
 .vazio p { margin: 0; font-size: 13px; }
 
-.gradeProdutos,
-.gradePromocoes,
 .gradeMesas {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
+}
+
+/* Cardápio e promoções: cards compactos que se acomodam sozinhos na largura
+   disponível, para uma lista grande não virar uma tela quilométrica. */
+.gradeProdutos,
+.gradePromocoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
 }
 
 .produtoCard,
@@ -227,6 +252,29 @@
 .produtoConteudo p { min-height: 38px; margin: 9px 0; color: #838383; font-size: 12px; line-height: 1.55; }
 .contagemAdicionais { display: block; color: #8f8f8f; font-size: 12px; }
 .produtoRodape { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+
+/* Versão compacta dos cards de produto e de promoção. */
+.produtoCard .produtoImagem,
+.promocaoCard .produtoImagem { height: 128px; }
+.produtoCard .produtoConteudo,
+.promocaoCard .produtoConteudo { padding: 13px; }
+.produtoCard .produtoConteudo h3,
+.promocaoCard .produtoConteudo h3 { font-size: 15px; }
+/* Duas linhas fixas de descrição mantêm todos os cards com a mesma altura. */
+.produtoCard .produtoConteudo p,
+.promocaoCard .produtoConteudo p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 7px 0;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.produtoCard .contagemAdicionais { font-size: 11px; }
+.produtoCard .produtoRodape,
+.promocaoCard .produtoRodape { margin-top: 11px; }
+.produtoCard .preco,
+.promocaoCard .preco { font-size: 16px; }
 .preco { color: var(--cor-principal); font-size: 19px; font-weight: 900; }
 .categoria { color: #8f8f8f; font-size: 11px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; }
 
@@ -314,10 +362,12 @@
 
 .listaAdicionaisAdmin { display: grid; gap: 9px; margin-top: 16px; }
 .adicionalLinha { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 13px; border: 1px solid #2d2d2d; border-radius: 11px; background: #111; padding: 13px; }
-.adicionalLinha strong,
-.adicionalLinha span { display: block; }
-.adicionalLinha strong { color: #eee; font-size: 13px; }
-.adicionalLinha span { margin-top: 4px; color: #8f8f8f; font-size: 12px; }
+/* Só o bloco de texto da linha: a pílula de status é filha direta e precisa
+   manter o inline-flex centralizado do .status. */
+.adicionalLinha > div strong,
+.adicionalLinha > div span { display: block; }
+.adicionalLinha > div strong { color: #eee; font-size: 13px; }
+.adicionalLinha > div span { margin-top: 4px; color: #8f8f8f; font-size: 12px; }
 
 .detalheGrid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.75fr); gap: 18px; }
 .listaInfo { display: grid; gap: 0; }
@@ -418,8 +468,6 @@
 
 @media (max-width: 1100px) {
   .gradeMetricas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .gradeProdutos,
-  .gradePromocoes,
   .gradeMesas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .gradeSelecaoAdicionais { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -506,7 +554,7 @@
   .tituloCampoComAcao p,
   .opcaoAdicional strong,
   .opcaoAdicional small,
-  .adicionalLinha span,
+  .adicionalLinha > div span,
   .linhaInfo span,
   .linhaInfo strong,
   .itemPedido p,

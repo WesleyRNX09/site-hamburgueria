@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  BadgePercent,
   BarChart3,
   BellRing,
   ClipboardList,
   LayoutDashboard,
-  Layers3,
   LogOut,
-  ListPlus,
   Menu,
   Package,
   Settings,
@@ -25,10 +22,9 @@ import styles from './index.module.css';
 const itensMenu = [
   { nome: 'Dashboard', rota: '/admin/dashboard', icone: LayoutDashboard },
   { nome: 'Pedidos', rota: '/admin/pedidos', icone: ClipboardList },
+  // Categorias, adicionais e promoções moram dentro da tela de cardápio,
+  // para encurtar o menu.
   { nome: 'Cardápio', rota: '/admin/cardapio', icone: Package },
-  { nome: 'Categorias', rota: '/admin/categorias', icone: Layers3 },
-  { nome: 'Adicionais', rota: '/admin/adicionais', icone: ListPlus },
-  { nome: 'Promoções', rota: '/admin/promocoes', icone: BadgePercent },
   { nome: 'Mesas / Comandas', rota: '/admin/mesas', icone: UtensilsCrossed },
   { nome: 'Funcionários', rota: '/admin/funcionarios', icone: Users },
   { nome: 'Acessos', rota: '/admin/acessos', icone: ShieldCheck },
