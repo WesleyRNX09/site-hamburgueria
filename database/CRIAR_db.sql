@@ -69,6 +69,10 @@ CREATE TABLE IF NOT EXISTS configuracoes_estabelecimento (
   email VARCHAR(160),
   endereco VARCHAR(255),
   horario_funcionamento TEXT,
+  -- Grade semanal: [{ "dia": 0-6, "aberto": bool, "abre": "HH:MM", "fecha": "HH:MM" }].
+  horarios_json TEXT NULL,
+  -- 1 = o servidor decide aberta/fechada pelo relógio; 0 = vale loja_aberta.
+  funcionamento_automatico TINYINT(1) NOT NULL DEFAULT 0,
   instagram_url VARCHAR(500),
   facebook_url VARCHAR(500),
   loja_aberta TINYINT(1) NOT NULL DEFAULT 0,
@@ -674,7 +678,8 @@ INSERT INTO schema_migrations (versao, checksum) VALUES
   ('011_registrar_autoria_da_comanda.sql', 'f327fbf669bb69e4e95f636e66289e34feda5852772151a0c11f306f1f26dcc4'),
   ('012_adicionar_login_do_garcom.sql', '371e3d178993ed316dd67a4a321e38ee2c47dac46bce4436ead2c41764fc7fd6'),
   ('013_acesso_unico_do_garcom.sql', 'e3ef5ae2adcd59a4f74cce3efa27bfb4aa211298b82149fffbe3c9b02436ee7a'),
-  ('014_separar_cardapio_do_salao.sql', 'a3f19528864c09205aacc7d4833fceca41234f75e76d740daf0acfbc6d0342be')
+  ('014_separar_cardapio_do_salao.sql', 'a3f19528864c09205aacc7d4833fceca41234f75e76d740daf0acfbc6d0342be'),
+  ('015_horario_automatico_da_loja.sql', '4ec43857d55a1e0ecdbb547855406e0cab47ac47383e6e2a7892778b7ad4897e')
 ON DUPLICATE KEY UPDATE versao = VALUES(versao);
 
 INSERT INTO estabelecimentos

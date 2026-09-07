@@ -528,6 +528,7 @@ test('salva toda a configuração somente no tenant autenticado e valida o tema'
     instagramUrl: linhaSalva.instagram_url,
     facebookUrl: '',
     lojaAberta: true,
+    lojaAbertaManual: true,
     pedidoMinimo: 25,
     taxaEntrega: 7,
     tempoEntrega: linhaSalva.tempo_entrega,
@@ -569,21 +570,22 @@ test('salva toda a configuração somente no tenant autenticado e valida o tema'
   assert.equal(gravacao.parametros[19], 'Hambúrguer de verdade, feito do nosso jeito.');
   assert.equal(gravacao.parametros[20], 'Ingredientes selecionados e preparo na hora.');
   assert.equal(gravacao.parametros[21], 'Feito com carinho para você.');
-  assert.deepEqual(JSON.parse(gravacao.parametros[38]), ['Cartão', 'Dinheiro']);
-  assert.equal(gravacao.parametros[39], 'Cancelamento antes do preparo.');
-  assert.equal(gravacao.parametros[40], 'Informações legais da Loja A.');
+  assert.deepEqual(JSON.parse(gravacao.parametros[32]), ['Cartão', 'Dinheiro']);
+  assert.equal(gravacao.parametros[33], 'Cancelamento antes do preparo.');
+  assert.equal(gravacao.parametros[34], 'Informações legais da Loja A.');
+  // Cores e fonte pertencem ao superadministrador: o painel do estabelecimento
+  // não pode gravar essas colunas nem enviando os campos na requisição.
+  assert.equal(/cor_principal|cor_secundaria|cor_fundo|cor_card|cor_texto|fonte/i.test(gravacao.sql), false);
+  assert.equal(gravacao.parametros.includes('#E95420'), false);
+  assert.equal(gravacao.parametros.includes('Georgia'), false);
+  // O funcionamento manual só muda por lojaAbertaManual, campo mapeado à parte.
+  assert.equal(gravacao.parametros[7], 1);
+  assert.equal(gravacao.parametros[35], null);
+  assert.equal(gravacao.parametros[36], 0);
 
   const auditoria = comandos.find(({ sql }) => sql.includes('INSERT INTO auditoria_admin'));
   assert.deepEqual(auditoria.parametros.slice(0, 5), [11, 7, 'configuracao.atualizada', 'configuracao', '11']);
 
-  await assert.rejects(
-    salvarConfiguracao(banco, 11, { ...dados, corPrincipal: 'vermelho' }, 7),
-    /cores válidas/
-  );
-  await assert.rejects(
-    salvarConfiguracao(banco, 11, { ...dados, fonte: 'Comic Sans' }, 7),
-    /fonte permitida/
-  );
   await assert.rejects(
     salvarConfiguracao(banco, 11, { ...dados, bannerBotaoDestino: 'https://externo.exemplo/' }, 7),
     /destino válido/
@@ -602,6 +604,35 @@ test('salva toda a configuração somente no tenant autenticado e valida o tema'
   assert.equal(ultimaGravacao.parametros[15], null);
   assert.equal(ultimaGravacao.parametros[16], null);
   assert.equal(conexoesAbertas, 2);
+
+  // Horário automático: a grade vira a fonte do texto público e do estado.
+  await salvarConfiguracao(banco, 11, {
+    ...dados,
+    lojaAbertaManual: false,
+    funcionamentoAutomatico: true,
+    horarios: [{ dia: 1, aberto: true, abre: '19:00', fecha: '23:00' }]
+  }, 7);
+  const comHorario = comandos
+    .filter(({ sql }) => sql.includes('INSERT INTO configuracoes_estabelecimento'))
+    .at(-1);
+  assert.equal(comHorario.parametros[36], 1);
+  assert.equal(comHorario.parametros[7], 0);
+  assert.equal(comHorario.parametros[23], 'Segunda-feira: 19:00 às 23:00');
+  assert.deepEqual(
+    JSON.parse(comHorario.parametros[35])[1],
+    { dia: 1, aberto: true, abre: '19:00', fecha: '23:00' }
+  );
+  await assert.rejects(
+    salvarConfiguracao(banco, 11, { ...dados, funcionamentoAutomatico: true, horarios: [] }, 7),
+    /ao menos um dia/
+  );
+  await assert.rejects(
+    salvarConfiguracao(banco, 11, {
+      ...dados,
+      horarios: [{ dia: 1, aberto: true, abre: '19:00', fecha: '19:00' }]
+    }, 7),
+    /diferentes/
+  );
 });
 
 test('assina JWT com perfil e tenant e rejeita adulteração ou expiração', () => {
@@ -1542,7 +1573,7 @@ if (!executarIntegracao) {
     assert.equal(canceladoPago.corpo.pedido.pagamentoEstornadoPor, administrador.nome);
   });
 
-  test('admin cria acessos adicionais e registra a ação na auditoria', async () => {
+  test('admin cria acessos adicionais e o histórico lista somente logins', async () => {
     const usuario = `gestor-${randomUUID().slice(0, 8)}`;
     const criado = await chamar('/api/admin/administradores', {
       metodo: 'POST',
@@ -1558,7 +1589,8 @@ if (!executarIntegracao) {
     assert.equal(criado.status, 201);
     assert.equal(criado.corpo.administrador.ativo, true);
     const dados = await chamar('/api/admin/dados', { token: tokenAdmin });
-    assert.ok(dados.corpo.auditoria.some((item) => item.acao === 'administrador.criado'));
+    assert.ok(dados.corpo.auditoria.length > 0);
+    assert.ok(dados.corpo.auditoria.every((item) => item.acao === 'administrador.login'));
   });
 
   test('persiste catálogo e imagens no diretório isolado do tenant', async () => {

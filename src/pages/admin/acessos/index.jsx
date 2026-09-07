@@ -119,10 +119,10 @@ function AcessosAdmin() {
       </div>
 
       <section className={`${styles.card} ${styles.secaoSeparada}`}>
-        <div className={styles.topoCard}><div><h2>Histórico administrativo</h2><p>Confirmações, estornos, cancelamentos e mudanças de acesso.</p></div></div>
+        <div className={styles.topoCard}><div><h2>Histórico de acessos</h2><p>Cada entrada de administrador no painel administrativo.</p></div></div>
         <div className={`${styles.tabelaContainer} ${styles.tabelaCartoes}`}>
-          <table className={styles.tabela} aria-label="Histórico administrativo"><thead><tr><th>Data</th><th>Administrador</th><th>Ação</th><th>Registro</th></tr></thead><tbody>{auditoria.map((registro) => <tr key={registro.id}><td data-rotulo="Data">{dataHora(registro.criadoEm)}</td><td data-rotulo="Administrador"><strong>{registro.administrador}</strong></td><td data-rotulo="Ação">{registro.acao.replaceAll('.', ' ')}</td><td data-rotulo="Registro">{registro.entidade} {registro.entidadeId}</td></tr>)}</tbody></table>
-          {auditoria.length === 0 && <div className={styles.vazio}><p>As próximas ações relevantes aparecerão aqui.</p></div>}
+          <table className={styles.tabela} aria-label="Histórico de acessos"><thead><tr><th>Data</th><th>Administrador</th><th>Usuário</th><th>Ação</th></tr></thead><tbody>{auditoria.map((registro) => <tr key={registro.id}><td data-rotulo="Data">{dataHora(registro.criadoEm)}</td><td data-rotulo="Administrador"><strong>{registro.administrador}</strong></td><td data-rotulo="Usuário">{registro.usuario || '—'}</td><td data-rotulo="Ação">Entrou no painel</td></tr>)}</tbody></table>
+          {auditoria.length === 0 && <div className={styles.vazio}><p>Os próximos logins de administradores aparecerão aqui.</p></div>}
         </div>
       </section>
     </AdminLayout>

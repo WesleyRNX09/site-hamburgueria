@@ -1,10 +1,9 @@
 import {
   CheckCircle2,
+  Clock,
   Database,
   ImageUp,
-  Palette,
   Plus,
-  RotateCcw,
   Save,
   Store,
   Trash2,
@@ -14,39 +13,38 @@ import { useMemo, useState } from 'react';
 
 import AdminLayout from '../../../components/AdminLayout';
 import { useApp } from '../../../context/appContext';
+import {
+  DIAS_SEMANA,
+  ORDEM_EXIBICAO,
+  estaAbertoNoHorario,
+  normalizarHorarios,
+  resumoHorarios
+} from '../../../utils/horarios';
 import { otimizarImagemProduto } from '../../../utils/imageUpload';
 import { criarVariaveisTema } from '../../../utils/theme';
 import styles from '../shared.module.css';
 import configStyles from './index.module.css';
 
-const CORES_PADRAO = Object.freeze({
-  corPrincipal: '#FFC107',
-  corSecundaria: '#0A0A0A',
-  corFundo: '#111111',
-  corCard: '#181818',
-  corTexto: '#FFFFFF',
-  fonte: 'Poppins'
-});
-
-const FONTES = ['Poppins', 'Arial', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Georgia'];
-
 function dadosEditaveis(configuracao) {
   return {
     ...configuracao,
-    areasEntrega: Array.isArray(configuracao.areasEntrega) ? configuracao.areasEntrega : []
+    areasEntrega: Array.isArray(configuracao.areasEntrega) ? configuracao.areasEntrega : [],
+    horarios: normalizarHorarios(configuracao.horarios)
   };
 }
 
-function CampoCor({ campo, label, valor, onChange }) {
-  return (
-    <div className={styles.campo}>
-      <label htmlFor={campo}>{label}</label>
-      <div className={configStyles.campoCor}>
-        <input id={campo} type="color" value={valor} onChange={(event) => onChange(campo, event.target.value.toUpperCase())} />
-        <output htmlFor={campo}>{valor}</output>
-      </div>
-    </div>
-  );
+/* Os três estados possíveis do funcionamento, resolvidos em dois campos:
+  o modo automático segue a grade; os manuais ignoram o relógio. */
+function modoFuncionamento(dados) {
+  if (dados.funcionamentoAutomatico) return 'automatico';
+  return dados.lojaAbertaManual ? 'aberta' : 'fechada';
+}
+
+/* Fora do corpo do componente porque consulta o relógio. */
+function lojaAbertaAgora(dados) {
+  return dados.funcionamentoAutomatico
+    ? estaAbertoNoHorario(dados.horarios)
+    : dados.lojaAbertaManual === true;
 }
 
 function UploadIdentidade({ campo, titulo, descricao, valor, proporcao, onSelect, onRemove }) {
@@ -115,6 +113,27 @@ function ConfiguracoesAdmin() {
     setSalvo(false);
   }
 
+  function alterarModo(valor) {
+    setDados((atuais) => ({
+      ...atuais,
+      funcionamentoAutomatico: valor === 'automatico',
+      lojaAbertaManual: valor === 'aberta'
+    }));
+    setAlterado(true);
+    setSalvo(false);
+  }
+
+  function alterarHorario(dia, campo, valor) {
+    setDados((atuais) => ({
+      ...atuais,
+      horarios: atuais.horarios.map((item) => (
+        item.dia === dia ? { ...item, [campo]: valor } : item
+      ))
+    }));
+    setAlterado(true);
+    setSalvo(false);
+  }
+
   async function selecionarImagem(campo, event) {
     const arquivo = event.target.files?.[0];
     event.target.value = '';
@@ -125,12 +144,6 @@ function ConfiguracoesAdmin() {
     } catch (falha) {
       setErro(falha.message);
     }
-  }
-
-  function restaurarTema() {
-    setDados((atuais) => ({ ...atuais, ...CORES_PADRAO }));
-    setAlterado(true);
-    setSalvo(false);
   }
 
   async function enviar(event) {
@@ -146,6 +159,12 @@ function ConfiguracoesAdmin() {
         areasEntrega: dados.areasEntrega.map((area) => ({
           bairro: area.bairro,
           taxa: Number(area.taxa)
+        })),
+        horarios: dados.horarios.map((dia) => ({
+          dia: dia.dia,
+          aberto: dia.aberto === true,
+          abre: dia.abre,
+          fecha: dia.fecha
         }))
       });
       setDados(dadosEditaveis(configuracaoSalva));
@@ -164,31 +183,14 @@ function ConfiguracoesAdmin() {
         <div className={configStyles.colunaFormulario}>
           <section className={styles.card}>
             <div className={styles.topoCard}>
-              <div><h2>Identidade visual</h2><p>Estas alterações aparecem no site público, no painel e na área do garçom.</p></div>
-              <Palette className={configStyles.iconeDestaque} size={25} />
+              <div><h2>Logo e banner</h2><p>Estas imagens aparecem no site público, no painel e na área do garçom.</p></div>
+              <ImageUp className={configStyles.iconeDestaque} size={25} />
             </div>
 
             <div className={styles.formulario}>
               <UploadIdentidade campo="logo" titulo="Logo da loja" descricao="JPG, PNG ou WebP. Use uma imagem quadrada ou horizontal com fundo transparente." valor={dados.logo} proporcao="logo" onSelect={selecionarImagem} onRemove={alterar} />
               <UploadIdentidade campo="banner" titulo="Banner principal" descricao="JPG, PNG ou WebP. Uma imagem horizontal funciona melhor na capa do cardápio." valor={dados.banner} proporcao="banner" onSelect={selecionarImagem} onRemove={alterar} />
-
-              <div className={configStyles.tituloSecaoInterna}>
-                <div><h3>Cores e tipografia</h3><p>Somente cores hexadecimais e fontes da lista segura podem ser publicadas.</p></div>
-                <button type="button" className={styles.botaoSecundario} onClick={restaurarTema}><RotateCcw size={16} /> Restaurar padrão</button>
-              </div>
-              <div className={configStyles.gradeCores}>
-                <CampoCor campo="corPrincipal" label="Cor principal" valor={dados.corPrincipal ?? CORES_PADRAO.corPrincipal} onChange={alterar} />
-                <CampoCor campo="corSecundaria" label="Cor secundária" valor={dados.corSecundaria ?? CORES_PADRAO.corSecundaria} onChange={alterar} />
-                <CampoCor campo="corFundo" label="Fundo" valor={dados.corFundo ?? CORES_PADRAO.corFundo} onChange={alterar} />
-                <CampoCor campo="corCard" label="Cards" valor={dados.corCard ?? CORES_PADRAO.corCard} onChange={alterar} />
-                <CampoCor campo="corTexto" label="Texto" valor={dados.corTexto ?? CORES_PADRAO.corTexto} onChange={alterar} />
-                <div className={styles.campo}>
-                  <label htmlFor="fonteLoja">Fonte</label>
-                  <select id="fonteLoja" value={dados.fonte ?? CORES_PADRAO.fonte} onChange={(event) => alterar('fonte', event.target.value)}>
-                    {FONTES.map((fonte) => <option key={fonte} value={fonte}>{fonte}</option>)}
-                  </select>
-                </div>
-              </div>
+              <div className={styles.aviso}>As cores e a fonte do sistema são definidas pela plataforma e não podem ser alteradas por aqui.</div>
             </div>
           </section>
 
@@ -230,7 +232,7 @@ function ConfiguracoesAdmin() {
               <div className={styles.campo}><label htmlFor="whatsappLoja">WhatsApp <span>(opcional)</span></label><input id="whatsappLoja" maxLength="40" value={dados.whatsapp ?? ''} onChange={(event) => alterar('whatsapp', event.target.value)} placeholder="Número com DDD" /></div>
               <div className={styles.campo}><label htmlFor="emailLoja">E-mail</label><input id="emailLoja" required maxLength="160" type="email" value={dados.email ?? ''} onChange={(event) => alterar('email', event.target.value)} /></div>
               <div className={`${styles.campo} ${styles.campoCompleto}`}><label htmlFor="enderecoLoja">Endereço</label><input id="enderecoLoja" required maxLength="255" value={dados.endereco ?? ''} onChange={(event) => alterar('endereco', event.target.value)} /></div>
-              <div className={`${styles.campo} ${styles.campoCompleto}`}><label htmlFor="horarioFuncionamento">Horário de funcionamento</label><textarea id="horarioFuncionamento" required maxLength="2000" value={dados.horarioFuncionamento ?? ''} onChange={(event) => alterar('horarioFuncionamento', event.target.value)} placeholder={'Segunda a quinta: 18h às 23h\nSexta e sábado: 18h à 0h'} /></div>
+              <div className={`${styles.campo} ${styles.campoCompleto}`}><label htmlFor="horarioFuncionamento">Horário exibido no site</label><textarea id="horarioFuncionamento" required maxLength="2000" value={dados.horarioFuncionamento ?? ''} onChange={(event) => alterar('horarioFuncionamento', event.target.value)} placeholder={'Segunda a quinta: 18h às 23h\nSexta e sábado: 18h à 0h'} /></div>
               <div className={styles.campo}><label htmlFor="instagramUrl">Instagram <span>(URL opcional)</span></label><input id="instagramUrl" maxLength="500" type="url" value={dados.instagramUrl ?? ''} onChange={(event) => alterar('instagramUrl', event.target.value)} placeholder="https://instagram.com/sua-loja" /></div>
               <div className={styles.campo}><label htmlFor="facebookUrl">Facebook <span>(URL opcional)</span></label><input id="facebookUrl" maxLength="500" type="url" value={dados.facebookUrl ?? ''} onChange={(event) => alterar('facebookUrl', event.target.value)} placeholder="https://facebook.com/sua-loja" /></div>
             </div>
@@ -239,13 +241,44 @@ function ConfiguracoesAdmin() {
           <section className={styles.card}>
             <div className={styles.topoCard}><div><h2>Operação e atendimento</h2><p>Disponibilidade dos canais e regras usadas pelo servidor.</p></div></div>
             <div className={styles.gridFormulario}>
-              <div className={styles.campo}><label htmlFor="lojaAberta">Funcionamento atual</label><select id="lojaAberta" value={dados.lojaAberta ? 'aberta' : 'fechada'} onChange={(event) => alterar('lojaAberta', event.target.value === 'aberta')}><option value="aberta">Loja aberta</option><option value="fechada">Loja fechada</option></select></div>
+              <div className={styles.campo}><label htmlFor="modoFuncionamento">Funcionamento atual</label><select id="modoFuncionamento" value={modoFuncionamento(dados)} onChange={(event) => alterarModo(event.target.value)}><option value="automatico">Automático pelo horário</option><option value="aberta">Loja aberta (manual)</option><option value="fechada">Loja fechada (manual)</option></select></div>
               <div className={styles.campo}><label htmlFor="entregaAtiva">Delivery</label><select id="entregaAtiva" value={dados.entregaAtiva ? 'ativo' : 'inativo'} onChange={(event) => alterar('entregaAtiva', event.target.value === 'ativo')}><option value="ativo">Entrega ativa</option><option value="inativo">Entrega indisponível</option></select></div>
               <div className={styles.campo}><label htmlFor="retiradaAtiva">Retirada no balcão</label><select id="retiradaAtiva" value={dados.retiradaAtiva ? 'ativo' : 'inativo'} onChange={(event) => alterar('retiradaAtiva', event.target.value === 'ativo')}><option value="ativo">Retirada ativa</option><option value="inativo">Retirada indisponível</option></select></div>
               <div className={styles.campo}><label htmlFor="atendimentoGarcomAtivo">Atendimento por garçom</label><select id="atendimentoGarcomAtivo" value={dados.atendimentoGarcomAtivo ? 'ativo' : 'inativo'} onChange={(event) => alterar('atendimentoGarcomAtivo', event.target.value === 'ativo')}><option value="ativo">Salão ativo</option><option value="inativo">Salão indisponível</option></select></div>
               <div className={styles.campo}><label htmlFor="taxaEntrega">Taxa padrão de entrega</label><input id="taxaEntrega" min="0" required type="number" step="0.01" value={dados.taxaEntrega ?? 0} onChange={(event) => alterar('taxaEntrega', event.target.value)} /></div>
               <div className={styles.campo}><label htmlFor="tempoEntrega">Tempo estimado</label><input id="tempoEntrega" required maxLength="60" value={dados.tempoEntrega ?? ''} onChange={(event) => alterar('tempoEntrega', event.target.value)} placeholder="30–45 min" /></div>
               <div className={styles.campo}><label htmlFor="pedidoMinimo">Pedido mínimo</label><input id="pedidoMinimo" min="0" required type="number" step="0.01" value={dados.pedidoMinimo ?? 0} onChange={(event) => alterar('pedidoMinimo', event.target.value)} /></div>
+            </div>
+
+            <div className={styles.tituloCampoComAcao}>
+              <div><h2>Horário de funcionamento</h2><p>Marque os dias e as horas de abertura. No modo automático, o cardápio abre e fecha sozinho.</p></div>
+              <Clock className={configStyles.iconeDestaque} size={22} />
+            </div>
+            <div className={configStyles.gradeHorarios}>
+              {ORDEM_EXIBICAO.map((indice) => {
+                const dia = dados.horarios[indice];
+                return (
+                  <div className={configStyles.linhaHorario} key={dia.dia}>
+                    <label className={configStyles.diaHorario} htmlFor={`dia-${dia.dia}`}>
+                      <input id={`dia-${dia.dia}`} type="checkbox" checked={dia.aberto} onChange={(event) => alterarHorario(dia.dia, 'aberto', event.target.checked)} />
+                      <span>{DIAS_SEMANA[dia.dia].nome}</span>
+                    </label>
+                    <div className={styles.campo}>
+                      <label htmlFor={`abre-${dia.dia}`}>Abre</label>
+                      <input id={`abre-${dia.dia}`} type="time" value={dia.abre} disabled={!dia.aberto} onChange={(event) => alterarHorario(dia.dia, 'abre', event.target.value)} />
+                    </div>
+                    <div className={styles.campo}>
+                      <label htmlFor={`fecha-${dia.dia}`}>Fecha</label>
+                      <input id={`fecha-${dia.dia}`} type="time" value={dia.fecha} disabled={!dia.aberto} onChange={(event) => alterarHorario(dia.dia, 'fecha', event.target.value)} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className={styles.aviso}>
+              {resumoHorarios(dados.horarios)
+                ? `Texto publicado no site: ${resumoHorarios(dados.horarios).split('\n').join(' • ')}. Um fechamento menor que a abertura atravessa a meia-noite.`
+                : 'Sem dias marcados, o site usa o texto livre de "Horário exibido no site" e o funcionamento continua manual.'}
             </div>
 
             <div className={styles.tituloCampoComAcao}>
@@ -296,7 +329,7 @@ function ConfiguracoesAdmin() {
                 {dados.banner ? <img src={dados.banner} alt="" /> : <span>Seu banner aparecerá aqui</span>}
               </div>
               <div className={configStyles.previaConteudo}>
-                <span>{dados.lojaAberta ? 'Aberta para pedidos' : 'Fechada no momento'}</span>
+                <span>{lojaAbertaAgora(dados) ? 'Aberta para pedidos' : 'Fechada no momento'}</span>
                 <div><strong>Destaque do cardápio</strong><small>Produto, descrição e preço</small><b>R$ 29,90</b></div>
                 <button type="button" tabIndex="-1">Adicionar</button>
               </div>

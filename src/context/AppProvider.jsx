@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { configuracaoInicial } from '../data/initialData';
+import { estaAbertoNoHorario } from '../utils/horarios';
 import { aplicarTema, normalizarConfiguracaoPublica } from '../utils/theme';
 import {
   acompanharPedidoApi,
@@ -162,6 +163,17 @@ export function AppProvider({ children }) {
   const audioLiberadoRef = useRef(false);
 
   useEffect(() => localStorage.setItem(CHAVES.carrinho, JSON.stringify(carrinho)), [carrinho]);
+  /* Horário automático: a tela aberta desde antes da abertura precisa virar
+    sozinha. O estado só troca quando o resultado muda, então não há
+    re-render a cada minuto. */
+  useEffect(() => {
+    if (!configuracao.funcionamentoAutomatico) return undefined;
+    const timer = setInterval(() => setConfiguracaoEstado((atual) => {
+      const aberta = estaAbertoNoHorario(atual.horarios);
+      return aberta === atual.lojaAberta ? atual : { ...atual, lojaAberta: aberta };
+    }), 60000);
+    return () => clearInterval(timer);
+  }, [configuracao.funcionamentoAutomatico]);
   useLayoutEffect(() => aplicarTema(document.documentElement, configuracao), [configuracao]);
   useEffect(() => {
     const nome = configuracao.nomeLoja?.trim();

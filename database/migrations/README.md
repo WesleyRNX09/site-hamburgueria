@@ -67,4 +67,9 @@ A pasta `legado/` preserva o histórico anterior e não é executada pelo runner
   o site sem duplicar cadastro. Coluna nova com DEFAULT `ambos`: nenhuma
   linha é reescrita e o cardápio online continua igual. A visibilidade é a
   interseção entre produto e categoria, e um CHECK limita os valores.
+- `015_horario_automatico_da_loja.sql`: acrescenta `horarios_json` (grade da
+  semana) e `funcionamento_automatico` a `configuracoes_estabelecimento`, para
+  o sistema abrir e fechar a loja pelo relógio em vez de depender do botão
+  manual. Colunas novas com DEFAULT: enquanto o administrador não ligar o modo
+  automático, `loja_aberta` continua mandando.
 - `legado/20260824_operacao_comercial.sql`: histórico anterior, fora do runner.

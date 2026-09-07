@@ -49,6 +49,7 @@ import {
   listarDadosAdmin,
   listarDadosGarcom,
   listarDadosPublicos,
+  registrarLoginAdmin,
   revalidarCarrinho,
   limparItensNaoLancados,
   limparItensNaoLancadosAdmin,
@@ -600,6 +601,8 @@ async function rotaAdmin({
       'administrador',
       DURACAO_SESSAO_ADMIN_MS
     );
+    // Histórico de acessos da tela administrativa: um registro por login válido.
+    await registrarLoginAdmin(banco, idEstabelecimento, administrador.id, administrador.usuario);
     responderJson(resposta, 200, {
       token: sessao.token,
       expiraEm: sessao.expiraEm,

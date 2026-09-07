@@ -3,6 +3,15 @@ import { randomUUID } from 'node:crypto';
 import { filtroCanal, formatarPreco, listarCatalogo, precoParaCentavos } from './catalog.js';
 import { executarTransacao } from './database.js';
 import { prepararPagamentoComanda } from './payments.js';
+/* Regra de horário compartilhada com o site público: o servidor decide o
+  pedido, o navegador decide o que mostrar, e os dois usam o mesmo cálculo. */
+import {
+  algumDiaAberto,
+  erroNosHorarios,
+  estaAbertoNoHorario,
+  normalizarHorarios,
+  resumoHorarios
+} from '../src/utils/horarios.js';
 import {
   criarHashSenha,
   criarHashToken,
@@ -176,13 +185,6 @@ function normalizarCor(valor, padrao) {
   return /^#[0-9A-Fa-f]{6}$/.test(cor) ? cor.toUpperCase() : padrao;
 }
 
-function validarCorConfiguracao(valor, padrao) {
-  const cor = texto(valor, 7);
-  if (!cor) return padrao;
-  if (!/^#[0-9A-Fa-f]{6}$/.test(cor)) throw erroDominio('Informe cores válidas no formato hexadecimal.');
-  return cor.toUpperCase();
-}
-
 function normalizarFonte(valor) {
   return FONTES_PERMITIDAS.get(texto(valor, 80).toLowerCase()) ?? 'Poppins';
 }
@@ -292,6 +294,8 @@ function mapearConfiguracao(linha) {
         linha.aceita_cartao ? 'Cartão' : null,
         linha.aceita_dinheiro ? 'Dinheiro' : null
       ].filter(Boolean);
+  const horarios = normalizarHorarios(linha.horarios_json);
+  const funcionamentoAutomatico = Boolean(linha.funcionamento_automatico);
   return {
     nomeLoja: linha.nome_loja ?? '',
     slug: linha.slug ?? '',
@@ -301,7 +305,12 @@ function mapearConfiguracao(linha) {
     taxaEntrega: centavosParaNumero(linha.taxa_entrega_centavos),
     tempoEntrega: linha.tempo_entrega ?? '',
     pedidoMinimo: centavosParaNumero(linha.pedido_minimo_centavos),
-    lojaAberta: Boolean(linha.loja_aberta),
+    horarios,
+    funcionamentoAutomatico,
+    lojaAbertaManual: Boolean(linha.loja_aberta),
+    lojaAberta: funcionamentoAutomatico
+      ? estaAbertoNoHorario(horarios)
+      : Boolean(linha.loja_aberta),
     pixChave: linha.pix_chave ?? '',
     pixBeneficiario: linha.pix_beneficiario ?? '',
     pixCidade: linha.pix_cidade ?? '',
@@ -372,6 +381,8 @@ export async function buscarConfiguracao(banco, idEstabelecimento) {
       ce.pix_cidade,
       ce.whatsapp,
       ce.horario_funcionamento,
+      ce.horarios_json,
+      ce.funcionamento_automatico,
       ce.instagram_url,
       ce.facebook_url,
       ce.entrega_ativa,
@@ -419,6 +430,8 @@ export function selecionarConfiguracaoPublica(configuracao) {
     email: configuracao.email,
     endereco: configuracao.endereco,
     horarioFuncionamento: configuracao.horarioFuncionamento,
+    horarios: configuracao.horarios,
+    funcionamentoAutomatico: configuracao.funcionamentoAutomatico,
     instagramUrl: configuracao.instagramUrl,
     facebookUrl: configuracao.facebookUrl,
     lojaAberta: configuracao.lojaAberta,
@@ -473,15 +486,19 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
   const tituloSobre = texto(dados.tituloSobre, 160);
   const textoSobre = texto(dados.textoSobre, 600);
   const mensagemRodape = texto(dados.mensagemRodape, 280);
-  const corPrincipal = validarCorConfiguracao(dados.corPrincipal, CORES_PADRAO.corPrincipal);
-  const corSecundaria = validarCorConfiguracao(dados.corSecundaria, CORES_PADRAO.corSecundaria);
-  const corFundo = validarCorConfiguracao(dados.corFundo, CORES_PADRAO.corFundo);
-  const corCard = validarCorConfiguracao(dados.corCard, CORES_PADRAO.corCard);
-  const corTexto = validarCorConfiguracao(dados.corTexto, CORES_PADRAO.corTexto);
-  const fonteInformada = texto(dados.fonte, 80);
-  const fonte = fonteInformada ? FONTES_PERMITIDAS.get(fonteInformada.toLowerCase()) : 'Poppins';
   const whatsapp = texto(dados.whatsapp, 40);
-  const horarioFuncionamento = texto(dados.horarioFuncionamento, 2000);
+  /* A grade da semana é a fonte da verdade quando algum dia está marcado: o
+    texto público passa a ser gerado a partir dela, sem cadastro duplicado. */
+  const erroHorarios = erroNosHorarios(dados.horarios);
+  if (erroHorarios) throw erroDominio(erroHorarios);
+  const horarios = normalizarHorarios(dados.horarios);
+  const funcionamentoAutomatico = dados.funcionamentoAutomatico === true;
+  if (funcionamentoAutomatico && !algumDiaAberto(horarios)) {
+    throw erroDominio('Marque ao menos um dia de funcionamento para usar o horário automático.');
+  }
+  const horarioFuncionamento = algumDiaAberto(horarios)
+    ? resumoHorarios(horarios)
+    : texto(dados.horarioFuncionamento, 2000);
   const instagramUrl = validarUrlOpcional(dados.instagramUrl, 'o Instagram');
   const facebookUrl = validarUrlOpcional(dados.facebookUrl, 'o Facebook');
   const politicaCancelamento = texto(dados.politicaCancelamento, 2000);
@@ -513,7 +530,6 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
     throw erroDominio('Preencha todos os dados da lanchonete.');
   }
   if (!/^\S+@\S+\.\S+$/.test(email)) throw erroDominio('Informe um e-mail válido para a loja.');
-  if (!fonte) throw erroDominio('Selecione uma fonte permitida.');
   if (pixChave && (!pixBeneficiario || !pixCidade)) {
     throw erroDominio('Informe o beneficiário e a cidade da chave Pix ou deixe a configuração Pix vazia.');
   }
@@ -540,11 +556,11 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
        tempo_entrega, pedido_minimo_centavos, loja_aberta, pix_chave, pix_beneficiario, pix_cidade,
        logo_url, banner_url, banner_titulo, banner_subtitulo, banner_botao_texto, banner_botao_destino,
        titulo_cardapio, texto_apresentacao, titulo_sobre, texto_sobre, mensagem_rodape,
-       cor_principal, cor_secundaria, cor_fundo, cor_card, cor_texto, fonte,
        whatsapp, horario_funcionamento, instagram_url, facebook_url, entrega_ativa, retirada_ativa,
        atendimento_garcom_ativo, aceita_cartao, aceita_dinheiro, areas_entrega_json,
-       formas_pagamento_json, politica_cancelamento, informacoes_legais)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       formas_pagamento_json, politica_cancelamento, informacoes_legais,
+       horarios_json, funcionamento_automatico)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       telefone = VALUES(telefone), email = VALUES(email), endereco = VALUES(endereco),
       taxa_entrega_centavos = VALUES(taxa_entrega_centavos),
@@ -557,9 +573,6 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
       titulo_cardapio = VALUES(titulo_cardapio), texto_apresentacao = VALUES(texto_apresentacao),
       titulo_sobre = VALUES(titulo_sobre), texto_sobre = VALUES(texto_sobre),
       mensagem_rodape = VALUES(mensagem_rodape),
-      cor_principal = VALUES(cor_principal), cor_secundaria = VALUES(cor_secundaria),
-      cor_fundo = VALUES(cor_fundo), cor_card = VALUES(cor_card), cor_texto = VALUES(cor_texto),
-      fonte = VALUES(fonte),
       whatsapp = VALUES(whatsapp), horario_funcionamento = VALUES(horario_funcionamento),
       instagram_url = VALUES(instagram_url), facebook_url = VALUES(facebook_url),
       entrega_ativa = VALUES(entrega_ativa), retirada_ativa = VALUES(retirada_ativa),
@@ -568,7 +581,9 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
       areas_entrega_json = VALUES(areas_entrega_json),
       formas_pagamento_json = VALUES(formas_pagamento_json),
       politica_cancelamento = VALUES(politica_cancelamento),
-      informacoes_legais = VALUES(informacoes_legais)
+      informacoes_legais = VALUES(informacoes_legais),
+      horarios_json = VALUES(horarios_json),
+      funcionamento_automatico = VALUES(funcionamento_automatico)
   `, [
     idEstabelecimento,
     telefone,
@@ -577,7 +592,7 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
     taxaEntregaCentavos,
     tempoEntrega,
     pedidoMinimoCentavos,
-    dados.lojaAberta === true ? 1 : 0,
+    dados.lojaAbertaManual === true ? 1 : 0,
     pixChave || null,
     pixChave ? pixBeneficiario : null,
     pixChave ? (pixCidade || null) : null,
@@ -592,12 +607,6 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
     tituloSobre || null,
     textoSobre || null,
     mensagemRodape || null,
-    corPrincipal,
-    corSecundaria,
-    corFundo,
-    corCard,
-    corTexto,
-    fonte,
     whatsapp || null,
     horarioFuncionamento,
     instagramUrl || null,
@@ -610,7 +619,9 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
     areasEntrega.length ? JSON.stringify(areasEntrega) : null,
     JSON.stringify(formasPagamento),
     politicaCancelamento || null,
-    informacoesLegais || null
+    informacoesLegais || null,
+    algumDiaAberto(horarios) ? JSON.stringify(horarios) : null,
+    funcionamentoAutomatico ? 1 : 0
   ]);
     await registrarAuditoria(
       conexao,
@@ -1607,7 +1618,8 @@ export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
   try {
     pedidoId = await executarTransacao(banco, async (conexao) => {
       const [configuracoes] = await conexao.execute(`
-        SELECT loja_aberta, entrega_ativa, retirada_ativa, aceita_cartao,
+        SELECT loja_aberta, funcionamento_automatico, horarios_json,
+          entrega_ativa, retirada_ativa, aceita_cartao,
           aceita_dinheiro, pix_chave, pix_beneficiario, pix_cidade,
           areas_entrega_json, taxa_entrega_centavos, pedido_minimo_centavos
         FROM configuracoes_estabelecimento
@@ -1615,7 +1627,12 @@ export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
         FOR UPDATE
       `, [idEstabelecimento]);
       const configuracao = configuracoes[0];
-      if (!configuracao?.loja_aberta) throw erroDominio('A loja está fechada no momento.', 409);
+      /* O navegador só decide o que exibir: quem aceita ou recusa o pedido
+        fora do horário é o servidor. */
+      const lojaAberta = configuracao?.funcionamento_automatico
+        ? estaAbertoNoHorario(configuracao.horarios_json)
+        : Boolean(configuracao?.loja_aberta);
+      if (!lojaAberta) throw erroDominio('A loja está fechada no momento.', 409);
       if (!retirada && !configuracao.entrega_ativa) throw erroDominio('A entrega está indisponível no momento.', 409);
       if (retirada && !configuracao.retirada_ativa) throw erroDominio('A retirada no balcão está indisponível no momento.', 409);
       if (pagamento === 'Pix' && (!texto(configuracao.pix_chave, 180)
@@ -1973,27 +1990,50 @@ export async function alterarSenhaAdministrador(
   });
 }
 
-export async function listarAuditoriaAdmin(banco, idEstabelecimento) {
+/* Ação de auditoria gravada a cada login bem-sucedido no painel administrativo.
+  O histórico exibido na tela de acessos mostra somente esses registros. */
+export const ACAO_LOGIN_ADMIN = 'administrador.login';
+
+export async function registrarLoginAdmin(banco, idEstabelecimento, administradorId, usuario) {
+  await registrarAuditoria(
+    banco,
+    idEstabelecimento,
+    administradorId,
+    ACAO_LOGIN_ADMIN,
+    'administrador',
+    administradorId,
+    { usuario }
+  );
+}
+
+export async function listarAuditoriaAdmin(banco, idEstabelecimento, { acao = null } = {}) {
   const [linhas] = await banco.execute(`
     SELECT au.id, au.acao, au.entidade, au.entidade_id, au.detalhes_json,
-      au.criado_em, a.nome AS administrador_nome
+      au.criado_em, a.nome AS administrador_nome, a.usuario AS administrador_usuario
     FROM auditoria_admin au
     LEFT JOIN administradores a
       ON a.id = au.administrador_id
       AND a.id_estabelecimento = au.id_estabelecimento
     WHERE au.id_estabelecimento = ?
+      ${acao ? 'AND au.acao = ?' : ''}
     ORDER BY au.criado_em DESC, au.id DESC
     LIMIT 100
-  `, [idEstabelecimento]);
-  return linhas.map((linha) => ({
-    id: Number(linha.id),
-    administrador: linha.administrador_nome ?? 'Sistema',
-    acao: linha.acao,
-    entidade: linha.entidade,
-    entidadeId: linha.entidade_id ?? '',
-    detalhes: typeof linha.detalhes_json === 'string' ? JSON.parse(linha.detalhes_json) : (linha.detalhes_json ?? null),
-    criadoEm: dataIso(linha.criado_em)
-  }));
+  `, acao ? [idEstabelecimento, acao] : [idEstabelecimento]);
+  return linhas.map((linha) => {
+    const detalhes = typeof linha.detalhes_json === 'string'
+      ? JSON.parse(linha.detalhes_json)
+      : (linha.detalhes_json ?? null);
+    return {
+      id: Number(linha.id),
+      administrador: linha.administrador_nome ?? 'Sistema',
+      usuario: linha.administrador_usuario ?? detalhes?.usuario ?? '',
+      acao: linha.acao,
+      entidade: linha.entidade,
+      entidadeId: linha.entidade_id ?? '',
+      detalhes,
+      criadoEm: dataIso(linha.criado_em)
+    };
+  });
 }
 
 async function obterComandaDoGarcom(
@@ -2821,7 +2861,7 @@ export async function listarDadosAdmin(banco, idEstabelecimento) {
     listarPedidos(banco, idEstabelecimento),
     buscarConfiguracao(banco, idEstabelecimento),
     listarAdministradores(banco, idEstabelecimento),
-    listarAuditoriaAdmin(banco, idEstabelecimento),
+    listarAuditoriaAdmin(banco, idEstabelecimento, { acao: ACAO_LOGIN_ADMIN }),
     obterTokenAcessoGarcom(banco, idEstabelecimento)
   ]);
   return {

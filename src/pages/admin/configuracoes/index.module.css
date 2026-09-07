@@ -20,34 +20,22 @@
 .previaLogo img { object-fit: contain; padding: 18px; }
 .previaBanner { aspect-ratio: 16 / 7; }
 
-.tituloSecaoInterna {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 18px;
-  border-top: 1px solid #2b2b2b;
-  padding-top: 18px;
-}
-
-.tituloSecaoInterna h3 { margin: 0; color: var(--cor-texto); font-size: 17px; }
-.tituloSecaoInterna p { margin: 5px 0 0; color: #929292; font-size: 12px; line-height: 1.55; }
-
-.gradeCores { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-
-.campoCor {
+/* Grade semanal do horário de funcionamento. */
+.gradeHorarios { display: grid; gap: 8px; }
+.linhaHorario {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
-  align-items: center;
-  gap: 9px;
-  min-height: 44px;
-  border: 1px solid #333;
-  border-radius: 9px;
+  grid-template-columns: minmax(0, 1fr) 130px 130px;
+  align-items: end;
+  gap: 12px;
+  border: 1px solid #292929;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--cor-secundaria) 82%, black);
-  padding: 5px 10px 5px 6px;
+  padding: 10px 14px;
 }
 
-.campoCor input { width: 46px; height: 32px; border: 0; border-radius: 7px; background: transparent; padding: 0; cursor: pointer; }
-.campoCor output { color: #c9c9c9; font-family: monospace; font-size: 12px; }
+.diaHorario { display: flex; align-items: center; gap: 9px; color: var(--cor-texto); font-size: 13px; font-weight: 700; cursor: pointer; }
+.diaHorario input { width: 17px; height: 17px; accent-color: var(--cor-principal); cursor: pointer; }
+.linhaHorario input[type="time"]:disabled { opacity: 0.45; }
 
 .previaSite {
   overflow: hidden;
@@ -110,24 +98,21 @@
 @media (max-width: 1100px) {
   .layoutConfiguracoes { grid-template-columns: 1fr; }
   .colunaLateral { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .gradeCores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 900px) { .barraSalvar { left: 18px; } }
 
 @media (max-width: 760px) {
   .uploadIdentidade { grid-template-columns: 1fr; }
-  .tituloSecaoInterna { align-items: flex-start; flex-direction: column; }
+  .linhaHorario { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .diaHorario { grid-column: 1 / -1; }
   .colunaLateral { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 560px) {
   .layoutConfiguracoes { padding-bottom: 138px; }
-  .gradeCores { grid-template-columns: 1fr; }
   .barraSalvar { right: 10px; bottom: 10px; left: 10px; align-items: stretch; flex-direction: column; }
-  .barraSalvar button,
-  .tituloSecaoInterna button { width: 100%; }
+  .barraSalvar button { width: 100%; }
   .listaSeguranca li,
-  .tituloSecaoInterna p,
   .barraSalvar > div { font-size: 14px; }
 }

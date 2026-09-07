@@ -55,11 +55,14 @@ Fluxo de leitura/escrita:
 | `tituloSobre` | `titulo_sobre` | texto, 160, opcional | `salvarConfiguracao` |
 | `textoSobre` | `texto_sobre` | texto, 600, opcional | `salvarConfiguracao` |
 | `mensagemRodape` | `mensagem_rodape` | texto, 280, opcional | `salvarConfiguracao` |
-| `corPrincipal`, `corSecundaria`, `corFundo`, `corCard`, `corTexto` | `cor_*` | hexadecimal `#RRGGBB` | `validarCorConfiguracao` + `CHECK` no banco |
-| `fonte` | `fonte` | allowlist fixa (Poppins, Arial, Verdana, Tahoma, Trebuchet MS, Georgia) | `FONTES_PERMITIDAS` |
-| `telefone`, `whatsapp`, `email`, `endereco`, `horarioFuncionamento` | idem | texto, com validação de formato de e-mail | `salvarConfiguracao` |
+| `corPrincipal`, `corSecundaria`, `corFundo`, `corCard`, `corTexto` | `cor_*` | hexadecimal `#RRGGBB` | somente pelo superadministrador (`salvarConfiguracaoVisual`); o endpoint do administrador não grava essas colunas |
+| `fonte` | `fonte` | allowlist fixa (Poppins, Arial, Verdana, Tahoma, Trebuchet MS, Georgia) | idem: só o superadministrador altera |
+| `telefone`, `whatsapp`, `email`, `endereco`, `horarioFuncionamento` | idem | texto, com validação de formato de e-mail; com dias marcados na grade, o texto é gerado por `resumoHorarios` | `salvarConfiguracao` |
+| `horarios` | `horarios_json` | lista de 7 dias `{dia 0-6, aberto, abre "HH:MM", fecha "HH:MM"}`; fechamento menor que a abertura atravessa a meia-noite | `normalizarHorarios` + `erroNosHorarios` |
+| `funcionamentoAutomatico` | `funcionamento_automatico` | booleano; exige ao menos um dia aberto | `salvarConfiguracao` |
+| `lojaAbertaManual` | `loja_aberta` | booleano usado só fora do modo automático | booleano estrito (`=== true`) |
 | `instagramUrl`, `facebookUrl` | `instagram_url`, `facebook_url` | URL http(s), opcional | `validarUrlOpcional` |
-| `lojaAberta`, `entregaAtiva`, `retiradaAtiva`, `atendimentoGarcomAtivo`, `aceitaCartao`, `aceitaDinheiro` | booleanos | `TINYINT(1)` | booleano estrito (`=== true`) |
+| `entregaAtiva`, `retiradaAtiva`, `atendimentoGarcomAtivo`, `aceitaCartao`, `aceitaDinheiro` | booleanos | `TINYINT(1)` | booleano estrito (`=== true`) |
 | `taxaEntrega`, `pedidoMinimo` | `*_centavos` | número ≥ 0, convertido para centavos | `precoParaCentavos` |
 | `pixChave`, `pixBeneficiario`, `pixCidade` | `pix_*` | texto; beneficiário/cidade exigidos se houver chave | `salvarConfiguracao` |
 | `areasEntrega` | `areas_entrega_json` | lista `{bairro, taxa}`, sem bairro duplicado | `salvarConfiguracao` |

@@ -1,4 +1,5 @@
 import { configuracaoInicial } from '../data/initialData.js';
+import { estaAbertoNoHorario, normalizarHorarios } from './horarios.js';
 
 const FONTES = new Map([
   ['poppins', { nome: 'Poppins', css: '"Poppins", Arial, sans-serif' }],
@@ -58,6 +59,8 @@ function corDeContraste(corHexadecimal) {
 export function normalizarConfiguracaoPublica(recebida = {}) {
   const fonte = normalizarFonte(recebida.fonte);
   const corPrincipal = cor(recebida.corPrincipal, configuracaoInicial.corPrincipal);
+  const horarios = normalizarHorarios(recebida.horarios);
+  const funcionamentoAutomatico = recebida.funcionamentoAutomatico === true;
   return {
     nomeLoja: texto(recebida.nomeLoja, 160),
     slug: /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(texto(recebida.slug, 100)) ? texto(recebida.slug, 100) : '',
@@ -88,7 +91,14 @@ export function normalizarConfiguracaoPublica(recebida = {}) {
     taxaEntrega: numeroNaoNegativo(recebida.taxaEntrega),
     tempoEntrega: texto(recebida.tempoEntrega, 60),
     pedidoMinimo: numeroNaoNegativo(recebida.pedidoMinimo),
-    lojaAberta: recebida.lojaAberta === true,
+    horarios,
+    funcionamentoAutomatico,
+    lojaAbertaManual: recebida.lojaAbertaManual === true,
+    /* Com o horário automático ligado, o próprio navegador recalcula: quem
+      deixou o cardápio aberto às 18h50 vê a loja abrir às 19h. */
+    lojaAberta: funcionamentoAutomatico
+      ? estaAbertoNoHorario(horarios)
+      : recebida.lojaAberta === true,
     pixChave: texto(recebida.pixChave, 180),
     pixBeneficiario: texto(recebida.pixBeneficiario, 160),
     pixCidade: texto(recebida.pixCidade, 60),
