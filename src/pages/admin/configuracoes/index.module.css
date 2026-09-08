@@ -20,8 +20,16 @@
 .previaLogo img { object-fit: contain; padding: 18px; }
 .previaBanner { aspect-ratio: 16 / 7; }
 
+/*
+  Blocos de título que aparecem no meio de um card (horários, áreas de entrega).
+  Sem margem própria eles encostam no campo anterior e no conteúdo seguinte, por
+  isso o respiro fica aqui e não na classe compartilhada, que também é usada em
+  telas onde o espaçamento já vem do grid do formulário.
+*/
+.blocoSecao { margin-top: 28px; margin-bottom: 18px; }
+
 /* Grade semanal do horário de funcionamento. */
-.gradeHorarios { display: grid; gap: 8px; }
+.gradeHorarios { display: grid; gap: 10px; }
 .linhaHorario {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 130px 130px;
@@ -30,12 +38,55 @@
   border: 1px solid #292929;
   border-radius: 12px;
   background: color-mix(in srgb, var(--cor-secundaria) 82%, black);
-  padding: 10px 14px;
+  padding: 12px 16px;
 }
 
-.diaHorario { display: flex; align-items: center; gap: 9px; color: var(--cor-texto); font-size: 13px; font-weight: 700; cursor: pointer; }
-.diaHorario input { width: 17px; height: 17px; accent-color: var(--cor-principal); cursor: pointer; }
+/* O rótulo do dia fica à esquerda, centralizado na altura da linha. */
+.diaHorario {
+  display: flex;
+  align-self: center;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 11px;
+  color: var(--cor-texto);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.diaHorario input {
+  display: grid;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  appearance: none;
+  border: 1.5px solid #3d3d3d;
+  border-radius: 6px;
+  background: #151515;
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.diaHorario input::after {
+  content: '';
+  width: 10px;
+  height: 6px;
+  border-bottom: 2px solid #111;
+  border-left: 2px solid #111;
+  opacity: 0;
+  transform: rotate(-45deg) scale(0.6);
+  transition: 0.18s ease;
+}
+
+.diaHorario input:hover { border-color: var(--cor-principal); }
+.diaHorario input:checked { border-color: var(--cor-principal); background: var(--cor-principal); }
+.diaHorario input:checked::after { opacity: 1; transform: rotate(-45deg) scale(1); }
+.diaHorario input:focus-visible { outline: 2px solid var(--cor-principal); outline-offset: 2px; }
 .linhaHorario input[type="time"]:disabled { opacity: 0.45; }
+
+/* Separa o aviso do último dia da semana. */
+.avisoHorarios { margin-top: 16px; }
 
 .previaSite {
   overflow: hidden;

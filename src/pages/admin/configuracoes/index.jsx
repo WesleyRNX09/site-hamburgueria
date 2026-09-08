@@ -250,7 +250,7 @@ function ConfiguracoesAdmin() {
               <div className={styles.campo}><label htmlFor="pedidoMinimo">Pedido mínimo</label><input id="pedidoMinimo" min="0" required type="number" step="0.01" value={dados.pedidoMinimo ?? 0} onChange={(event) => alterar('pedidoMinimo', event.target.value)} /></div>
             </div>
 
-            <div className={styles.tituloCampoComAcao}>
+            <div className={`${styles.tituloCampoComAcao} ${configStyles.blocoSecao}`}>
               <div><h2>Horário de funcionamento</h2><p>Marque os dias e as horas de abertura. No modo automático, o cardápio abre e fecha sozinho.</p></div>
               <Clock className={configStyles.iconeDestaque} size={22} />
             </div>
@@ -275,13 +275,13 @@ function ConfiguracoesAdmin() {
                 );
               })}
             </div>
-            <div className={styles.aviso}>
+            <div className={`${styles.aviso} ${configStyles.avisoHorarios}`}>
               {resumoHorarios(dados.horarios)
                 ? `Texto publicado no site: ${resumoHorarios(dados.horarios).split('\n').join(' • ')}. Um fechamento menor que a abertura atravessa a meia-noite.`
                 : 'Sem dias marcados, o site usa o texto livre de "Horário exibido no site" e o funcionamento continua manual.'}
             </div>
 
-            <div className={styles.tituloCampoComAcao}>
+            <div className={`${styles.tituloCampoComAcao} ${configStyles.blocoSecao}`}>
               <div><h2>Áreas de entrega</h2><p>Sem bairros cadastrados, qualquer bairro informado usa a taxa padrão.</p></div>
               <button type="button" className={styles.botaoSecundario} onClick={adicionarArea}><Plus size={16} /> Adicionar bairro</button>
             </div>

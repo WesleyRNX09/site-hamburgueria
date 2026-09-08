@@ -65,11 +65,17 @@
   display: none;
 }
 
+/*
+  `align-content: start` mantém os itens agrupados no topo: sem ele, o grid
+  distribui as linhas por toda a altura da barra e cada link vira um bloco alto
+  com espaço morto entre eles.
+*/
 .navegacao {
   display: grid;
   flex: 1 1 auto;
   min-height: 0;
-  gap: 6px;
+  align-content: start;
+  gap: 4px;
   overflow-y: auto;
   padding-right: 4px;
   scrollbar-width: thin;
@@ -83,12 +89,12 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 50px;
+  gap: 12px;
+  min-height: 42px;
   border-radius: 10px;
-  padding: 0 14px;
+  padding: 0 12px;
   color: #a5a5a5;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   text-decoration: none;
   transition: 0.2s ease;
@@ -108,7 +114,7 @@
   position: absolute;
   left: 0;
   width: 3px;
-  height: 28px;
+  height: 22px;
   border-radius: 999px;
   background: var(--cor-principal);
   box-shadow: 0 0 12px rgb(from var(--cor-principal) r g b / 0.7);
@@ -120,11 +126,11 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 12px;
-  margin-top: auto;
+  margin-top: 28px;
   border: 0;
   border-top: 1px solid #242424;
   background: transparent;
-  padding: 24px 14px 0;
+  padding: 20px 12px 0;
   color: #8e8e8e;
   font: inherit;
   font-weight: 700;
