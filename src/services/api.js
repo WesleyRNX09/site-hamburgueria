@@ -127,6 +127,60 @@ export function atualizarEstabelecimentoSuperadmin(id, dados) {
   });
 }
 
+export function alterarSenhaSuperadmin(dados) {
+  return requisicao('/api/superadmin/senha', {
+    metodo: 'PUT',
+    dados,
+    autenticacao: 'superadmin'
+  });
+}
+
+
+export function listarSuperadministradores() {
+  return requisicao('/api/superadmin/superadministradores', { autenticacao: 'superadmin' });
+}
+
+export function criarSuperadministrador(dados) {
+  return requisicao('/api/superadmin/superadministradores', {
+    metodo: 'POST',
+    dados,
+    autenticacao: 'superadmin'
+  });
+}
+
+export function alterarStatusSuperadministrador(id, ativo) {
+  return requisicao(`/api/superadmin/superadministradores/${id}/status`, {
+    metodo: 'PATCH',
+    dados: { ativo },
+    autenticacao: 'superadmin'
+  });
+}
+
+
+export function listarAdministradoresEstabelecimento(idEstabelecimento) {
+  return requisicao(`/api/superadmin/estabelecimentos/${idEstabelecimento}/administradores`, {
+    autenticacao: 'superadmin'
+  });
+}
+
+export function redefinirSenhaAdministradorEstabelecimento(idEstabelecimento, idAdministrador, dados) {
+  return requisicao(
+    `/api/superadmin/estabelecimentos/${idEstabelecimento}/administradores/${idAdministrador}/senha`,
+    { metodo: 'PUT', dados, autenticacao: 'superadmin' }
+  );
+}
+
+
+export function listarAuditoriaSuperadmin(filtros = {}) {
+  const parametros = new URLSearchParams();
+  Object.entries(filtros).forEach(([chave, valor]) => {
+    if (valor) parametros.set(chave, valor);
+  });
+  const consulta = parametros.size ? `?${parametros.toString()}` : '';
+  return requisicao(`/api/superadmin/auditoria${consulta}`, { autenticacao: 'superadmin' });
+}
+
+
 export function criarPedidoDeliveryApi(dados, itens) {
   return requisicao('/api/pedidos', { metodo: 'POST', dados: { ...dados, itens } });
 }

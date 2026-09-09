@@ -26,6 +26,9 @@ import PoliticaPrivacidade from './pages/legal/privacidade';
 import TermosUso from './pages/legal/termos';
 import LoginSuperadmin from './pages/superadmin/login';
 import EstabelecimentosSuperadmin from './pages/superadmin/estabelecimentos';
+import SenhaSuperadmin from './pages/superadmin/senha';
+import SuperadministradoresSuperadmin from './pages/superadmin/superadministradores';
+import AuditoriaSuperadmin from './pages/superadmin/auditoria';
 
 function AreaSuperadmin() {
   return (
@@ -50,6 +53,9 @@ function App() {
         <Route element={<RequireSuperadmin />}>
           <Route path="/superadmin" element={<Navigate to="/superadmin/estabelecimentos" replace />} />
           <Route path="/superadmin/estabelecimentos" element={<EstabelecimentosSuperadmin />} />
+          <Route path="/superadmin/superadministradores" element={<SuperadministradoresSuperadmin />} />
+          <Route path="/superadmin/auditoria" element={<AuditoriaSuperadmin />} />
+          <Route path="/superadmin/senha" element={<SenhaSuperadmin />} />
         </Route>
       </Route>
 

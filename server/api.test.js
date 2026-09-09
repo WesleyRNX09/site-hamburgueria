@@ -20,8 +20,9 @@ import {
 } from './operations.js';
 import { aguardarServidor, fecharServidor } from './runtime.js';
 import { adicionaisSeed, mesasSeed, pedidosSeed, produtosSeed } from './seed.js';
-import { criarHashSenha, criarJwt, verificarJwt } from './security.js';
+import { criarHashSenha, criarJwt, verificarJwt, verificarSenha } from './security.js';
 import {
+  alternarStatusSuperadministrador,
   criarEstabelecimentoGerencial,
   listarEstabelecimentosGerenciais
 } from './superadmin.js';
@@ -1061,6 +1062,788 @@ test('não expõe detalhes internos quando o banco falha', async () => {
   } finally {
     console.error = erroOriginal;
     await fecharServidor(servidorComFalha);
+  }
+});
+
+
+test('superadministrador troca a própria senha e derruba as sessões antigas', async () => {
+  const SENHA_ANTIGA = 'senha-super-antiga-1';
+  const SENHA_NOVA = 'senha-super-nova-2026';
+  const comandos = [];
+  let senhaHashAtual = criarHashSenha(SENHA_ANTIGA);
+  let sessoesValidas = true;
+
+  const responderExecucao = (sql) => {
+    if (sql.includes('FROM superadministradores') && sql.includes('senha_hash')) {
+      return [[{
+        id: 1,
+        nome: 'Super Teste',
+        usuario: 'superteste',
+        email: 'super@teste.local',
+        senha_hash: senhaHashAtual
+      }]];
+    }
+    if (sql.includes('UPDATE superadministradores SET senha_hash')) return [{ affectedRows: 1 }];
+    if (sql.includes('INSERT INTO sessoes_superadmin')) {
+      sessoesValidas = true;
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('DELETE FROM sessoes_superadmin WHERE superadministrador_id')) {
+      sessoesValidas = false;
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('DELETE FROM sessoes_superadmin')) return [{ affectedRows: 0 }];
+    if (sql.includes('FROM sessoes_superadmin ss')) {
+      return [sessoesValidas
+        ? [{ id: 1, nome: 'Super Teste', usuario: 'superteste', email: 'super@teste.local' }]
+        : []];
+    }
+    if (sql.includes('INSERT INTO auditoria_superadmin')) return [{ affectedRows: 1 }];
+    throw new Error(`Consulta inesperada no teste: ${sql}`);
+  };
+
+  const conexao = {
+    async beginTransaction() { comandos.push({ sql: 'BEGIN', parametros: [] }); },
+    async commit() { comandos.push({ sql: 'COMMIT', parametros: [] }); },
+    async rollback() { comandos.push({ sql: 'ROLLBACK', parametros: [] }); },
+    release() { comandos.push({ sql: 'RELEASE', parametros: [] }); },
+    async execute(sql, parametros = []) {
+      comandos.push({ sql, parametros });
+      if (sql.includes('UPDATE superadministradores SET senha_hash')) {
+        senhaHashAtual = parametros[0];
+      }
+      return responderExecucao(sql);
+    }
+  };
+  const banco = {
+    async getConnection() { return conexao; },
+    async execute(sql, parametros = []) {
+      comandos.push({ sql, parametros });
+      return responderExecucao(sql);
+    }
+  };
+
+  const servidor = criarServidor({
+    banco,
+    pastaUploads: tmpdir(),
+    tenantDesenvolvimento: '',
+    jwtSecret: JWT_SECRET_TESTE
+  });
+  await aguardarServidor(servidor, 0);
+  const baseUrl = `http://127.0.0.1:${servidor.address().port}`;
+  const entrar = (senha) => fetch(`${baseUrl}/api/superadmin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Host: 'host-sem-tenant.teste' },
+    body: JSON.stringify({ usuario: 'superteste', senha })
+  });
+  const trocarSenha = (token, dados) => fetch(`${baseUrl}/api/superadmin/senha`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      Host: 'host-sem-tenant.teste'
+    },
+    body: JSON.stringify(dados)
+  });
+
+  try {
+    const login = await entrar(SENHA_ANTIGA);
+    assert.equal(login.status, 200);
+    const { token } = await login.json();
+
+    // Sem sessão nenhuma a rota não pode nem chegar na validação de senha.
+    const semSessao = await fetch(`${baseUrl}/api/superadmin/senha`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Host: 'host-sem-tenant.teste' },
+      body: JSON.stringify({ senhaAtual: SENHA_ANTIGA, novaSenha: SENHA_NOVA, confirmacaoSenha: SENHA_NOVA })
+    });
+    assert.equal(semSessao.status, 401);
+
+    const senhaAtualErrada = await trocarSenha(token, {
+      senhaAtual: 'senha-que-nao-e-a-atual',
+      novaSenha: SENHA_NOVA,
+      confirmacaoSenha: SENHA_NOVA
+    });
+    assert.equal(senhaAtualErrada.status, 401);
+    assert.equal(comandos.some(({ sql }) => sql.includes('UPDATE superadministradores')), false);
+    assert.equal(comandos.some(({ sql }) => sql === 'ROLLBACK'), true);
+
+    const curta = await trocarSenha(token, {
+      senhaAtual: SENHA_ANTIGA,
+      novaSenha: 'curta123',
+      confirmacaoSenha: 'curta123'
+    });
+    assert.equal(curta.status, 400);
+
+    const semConfirmacao = await trocarSenha(token, {
+      senhaAtual: SENHA_ANTIGA,
+      novaSenha: SENHA_NOVA,
+      confirmacaoSenha: 'outra-coisa-qualquer'
+    });
+    assert.equal(semConfirmacao.status, 400);
+    assert.equal(comandos.some(({ sql }) => sql.includes('UPDATE superadministradores')), false);
+
+    const trocada = await trocarSenha(token, {
+      senhaAtual: SENHA_ANTIGA,
+      novaSenha: SENHA_NOVA,
+      confirmacaoSenha: SENHA_NOVA
+    });
+    assert.equal(trocada.status, 200);
+
+    const update = comandos.find(({ sql }) => sql.includes('UPDATE superadministradores SET senha_hash'));
+    assert.notEqual(update.parametros[0], SENHA_NOVA);
+    assert.match(update.parametros[0], /^scrypt:/);
+    assert.equal(
+      comandos.some(({ sql }) => sql.includes('DELETE FROM sessoes_superadmin WHERE superadministrador_id')),
+      true
+    );
+    const auditoria = comandos.find(({ sql }) => sql.includes('INSERT INTO auditoria_superadmin'));
+    assert.equal(auditoria.parametros[2], 'superadministrador.senha_alterada');
+    assert.equal(JSON.stringify(auditoria.parametros).includes(SENHA_NOVA), false);
+    assert.equal(comandos.some(({ sql }) => sql === 'COMMIT'), true);
+
+    // O token que fez a troca também morre: escopo global não mantém sessão antiga.
+    const sessaoAntiga = await fetch(`${baseUrl}/api/superadmin/sessao`, {
+      headers: { Authorization: `Bearer ${token}`, Host: 'host-sem-tenant.teste' }
+    });
+    assert.equal(sessaoAntiga.status, 401);
+
+    assert.equal((await entrar(SENHA_ANTIGA)).status, 401);
+    assert.equal((await entrar(SENHA_NOVA)).status, 200);
+    assert.equal(comandos.some(({ sql }) => /SELECT\s+\*/i.test(sql)), false);
+  } finally {
+    await fecharServidor(servidor);
+  }
+});
+
+
+/*
+  Banco falso com a tabela de superadministradores e as sessões em memória.
+  A busca de sessão respeita `sa.ativo = 1` igual ao SQL real, que é o ponto
+  central deste teste: desativar precisa derrubar quem já estava logado.
+*/
+function bancoSuperadministradores() {
+  const agora = new Date('2026-09-01T00:00:00.000Z');
+  const registros = new Map([[1, {
+    id: 1,
+    usuario: 'super-a',
+    email: 'super-a@teste.local',
+    nome: 'Super A',
+    senha_hash: criarHashSenha('senha-super-a-2026'),
+    ativo: 1,
+    criado_em: agora,
+    atualizado_em: agora
+  }]]);
+  const sessoes = new Map();
+  const comandos = [];
+  let proximoId = 2;
+
+  function responder(sql, parametros = []) {
+    if (sql.includes('INSERT INTO superadministradores')) {
+      const [usuario, email, nome, senhaHash] = parametros;
+      const duplicado = [...registros.values()]
+        .some((item) => item.usuario === usuario || item.email === email);
+      if (duplicado) {
+        const erro = new Error('Duplicate entry');
+        erro.code = 'ER_DUP_ENTRY';
+        throw erro;
+      }
+      const id = proximoId;
+      proximoId += 1;
+      registros.set(id, {
+        id, usuario, email, nome, senha_hash: senhaHash, ativo: 1,
+        criado_em: agora, atualizado_em: agora
+      });
+      return [{ insertId: id }];
+    }
+    if (sql.includes('INSERT INTO sessoes_superadmin')) {
+      sessoes.set(parametros[0], Number(parametros[1]));
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('INSERT INTO auditoria_superadmin')) return [{ affectedRows: 1 }];
+    if (sql.includes('UPDATE superadministradores SET ativo')) {
+      const registro = registros.get(Number(parametros[1]));
+      if (registro) registro.ativo = Number(parametros[0]);
+      return [{ affectedRows: registro ? 1 : 0 }];
+    }
+    if (sql.includes('DELETE FROM sessoes_superadmin WHERE superadministrador_id')) {
+      for (const [chave, dono] of sessoes) {
+        if (dono === Number(parametros[0])) sessoes.delete(chave);
+      }
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('DELETE FROM sessoes_superadmin')) return [{ affectedRows: 0 }];
+    if (sql.includes('FROM sessoes_superadmin ss')) {
+      const registro = registros.get(sessoes.get(parametros[0]));
+      if (!registro || registro.ativo !== 1 || registro.id !== Number(parametros[1])) return [[]];
+      const { id, nome, usuario, email } = registro;
+      return [[{ id, nome, usuario, email }]];
+    }
+    if (sql.includes('LOWER(usuario)')) {
+      const identificador = String(parametros[0]).toLowerCase();
+      const achado = [...registros.values()].find((item) => item.ativo === 1
+        && (item.usuario === identificador || item.email === identificador));
+      return [achado ? [achado] : []];
+    }
+    if (sql.includes('SELECT COUNT(id) AS total')) {
+      const total = [...registros.values()].filter((item) => item.ativo === 1).length;
+      return [[{ total }]];
+    }
+    if (sql.includes('SELECT id FROM superadministradores WHERE id = ?')) {
+      const registro = registros.get(Number(parametros[0]));
+      return [registro ? [{ id: registro.id }] : []];
+    }
+    if (sql.includes('FROM superadministradores')) {
+      const lista = sql.includes('WHERE id = ?')
+        ? [registros.get(Number(parametros[0]))].filter(Boolean)
+        : [...registros.values()].sort((a, b) => b.ativo - a.ativo
+          || a.nome.localeCompare(b.nome));
+      // Espelha exatamente as colunas que SELECAO_SUPERADMINISTRADOR pede.
+      return [lista.map((item) => ({
+        id: item.id,
+        usuario: item.usuario,
+        email: item.email,
+        nome: item.nome,
+        ativo: item.ativo,
+        criado_em: item.criado_em,
+        atualizado_em: item.atualizado_em
+      }))];
+    }
+    throw new Error(`Consulta inesperada no teste: ${sql}`);
+  }
+
+  const conexao = {
+    async beginTransaction() { comandos.push({ sql: 'BEGIN', parametros: [] }); },
+    async commit() { comandos.push({ sql: 'COMMIT', parametros: [] }); },
+    async rollback() { comandos.push({ sql: 'ROLLBACK', parametros: [] }); },
+    release() {},
+    async execute(sql, parametros = []) {
+      comandos.push({ sql, parametros });
+      return responder(sql, parametros);
+    }
+  };
+  return {
+    comandos,
+    registros,
+    banco: {
+      async getConnection() { return conexao; },
+      async execute(sql, parametros = []) {
+        comandos.push({ sql, parametros });
+        return responder(sql, parametros);
+      }
+    }
+  };
+}
+
+test('superadministrador cria, lista e desativa outras contas globais', async () => {
+  const { banco, comandos, registros } = bancoSuperadministradores();
+  const servidor = criarServidor({
+    banco,
+    pastaUploads: tmpdir(),
+    tenantDesenvolvimento: '',
+    jwtSecret: JWT_SECRET_TESTE
+  });
+  await aguardarServidor(servidor, 0);
+  const baseUrl = `http://127.0.0.1:${servidor.address().port}`;
+  const cabecalhos = (token) => ({
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+    Host: 'host-sem-tenant.teste'
+  });
+  const entrar = (usuario, senha) => fetch(`${baseUrl}/api/superadmin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Host: 'host-sem-tenant.teste' },
+    body: JSON.stringify({ usuario, senha })
+  });
+  const criar = (token, dados) => fetch(`${baseUrl}/api/superadmin/superadministradores`, {
+    method: 'POST', headers: cabecalhos(token), body: JSON.stringify(dados)
+  });
+  const alterarStatus = (token, id, ativo) => fetch(
+    `${baseUrl}/api/superadmin/superadministradores/${id}/status`,
+    { method: 'PATCH', headers: cabecalhos(token), body: JSON.stringify({ ativo }) }
+  );
+
+  try {
+    const login = await entrar('super-a', 'senha-super-a-2026');
+    assert.equal(login.status, 200);
+    const { token: tokenA } = await login.json();
+
+    const listaInicial = await fetch(`${baseUrl}/api/superadmin/superadministradores`, {
+      headers: cabecalhos(tokenA)
+    });
+    assert.equal(listaInicial.status, 200);
+    const { superadministradores: iniciais } = await listaInicial.json();
+    assert.equal(iniciais.length, 1);
+    assert.equal(iniciais[0].usuario, 'super-a');
+    assert.equal(Object.hasOwn(iniciais[0], 'senha_hash'), false);
+    assert.equal(Object.hasOwn(iniciais[0], 'senhaHash'), false);
+
+    const dadosB = {
+      nome: 'Super B',
+      usuario: 'super-b',
+      email: 'super-b@teste.local',
+      senha: 'senha-super-b-2026',
+      confirmacaoSenha: 'senha-super-b-2026'
+    };
+
+    const curta = { ...dadosB, senha: 'curta123', confirmacaoSenha: 'curta123' };
+    assert.equal((await criar(tokenA, curta)).status, 400);
+    assert.equal((await criar(tokenA, { ...dadosB, usuario: 'AB' })).status, 400);
+    assert.equal((await criar(tokenA, { ...dadosB, email: 'sem-arroba' })).status, 400);
+    assert.equal((await criar(tokenA, { ...dadosB, confirmacaoSenha: 'outra-senha-2026' })).status, 400);
+    assert.equal(registros.size, 1);
+
+    const criado = await criar(tokenA, dadosB);
+    assert.equal(criado.status, 201);
+    const { superadministrador: novo } = await criado.json();
+    assert.equal(novo.usuario, 'super-b');
+    assert.equal(novo.ativo, true);
+    const insercao = comandos.find(({ sql }) => sql.includes('INSERT INTO superadministradores'));
+    assert.notEqual(insercao.parametros[3], dadosB.senha);
+    assert.match(insercao.parametros[3], /^scrypt:/);
+
+    // Usuário repetido cai no índice único e vira 409, não 500.
+    assert.equal((await criar(tokenA, dadosB)).status, 409);
+
+    const auditoriaCriacao = comandos.find(({ sql, parametros }) => sql.includes('INSERT INTO auditoria_superadmin')
+      && parametros[2] === 'superadministrador.criado');
+    assert.ok(auditoriaCriacao);
+    assert.equal(JSON.stringify(auditoriaCriacao.parametros).includes(dadosB.senha), false);
+
+    // A conta nova entra e recebe sessão própria.
+    const loginB = await entrar('super-b', dadosB.senha);
+    assert.equal(loginB.status, 200);
+    const { token: tokenB } = await loginB.json();
+    const sessaoB = await fetch(`${baseUrl}/api/superadmin/sessao`, { headers: cabecalhos(tokenB) });
+    assert.equal(sessaoB.status, 200);
+
+    // Ninguém pode desativar o próprio acesso nem uma conta inexistente.
+    assert.equal((await alterarStatus(tokenA, novo.id + 90, false)).status, 404);
+    assert.equal((await alterarStatus(tokenA, 1, false)).status, 409);
+    assert.equal(registros.get(1).ativo, 1);
+
+    const desativado = await alterarStatus(tokenA, novo.id, false);
+    assert.equal(desativado.status, 200);
+    assert.equal((await desativado.json()).superadministrador.ativo, false);
+    assert.equal(registros.get(novo.id).ativo, 0);
+    // Preservação de dados: a linha continua no banco, só muda o `ativo`.
+    assert.equal(registros.size, 2);
+
+    const auditoriaDesativacao = comandos.find(({ sql, parametros }) => sql.includes('INSERT INTO auditoria_superadmin')
+      && parametros[2] === 'superadministrador.desativado');
+    assert.ok(auditoriaDesativacao);
+
+    // O essencial: a sessão viva morre na hora e o login deixa de funcionar.
+    const sessaoMorta = await fetch(`${baseUrl}/api/superadmin/sessao`, { headers: cabecalhos(tokenB) });
+    assert.equal(sessaoMorta.status, 401);
+    const usoAposDesativar = await criar(tokenB, { ...dadosB, usuario: 'super-c', email: 'c@teste.local' });
+    assert.equal(usoAposDesativar.status, 401);
+    assert.equal((await entrar('super-b', dadosB.senha)).status, 401);
+    assert.equal((await entrar('super-b@teste.local', dadosB.senha)).status, 401);
+
+    // Reativação devolve o acesso sem recriar a conta.
+    assert.equal((await alterarStatus(tokenA, novo.id, true)).status, 200);
+    assert.equal((await entrar('super-b', dadosB.senha)).status, 200);
+
+    assert.equal(comandos.some(({ sql }) => /SELECT\s+\*/i.test(sql)), false);
+  } finally {
+    await fecharServidor(servidor);
+  }
+});
+
+test('a desativação nunca deixa a plataforma sem superadministrador ativo', async () => {
+  const comandos = [];
+  const conexao = {
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() { comandos.push({ sql: 'ROLLBACK', parametros: [] }); },
+    release() {},
+    async execute(sql, parametros = []) {
+      comandos.push({ sql, parametros });
+      if (sql.includes('SELECT id FROM superadministradores')) return [[{ id: 9 }]];
+      if (sql.includes('SELECT COUNT(id) AS total')) return [[{ total: 1 }]];
+      throw new Error(`Consulta inesperada no teste: ${sql}`);
+    }
+  };
+  const banco = { async getConnection() { return conexao; } };
+
+  await assert.rejects(
+    alternarStatusSuperadministrador(banco, 9, false, 4),
+    /ao menos um superadministrador ativo/
+  );
+  assert.equal(comandos.some(({ sql }) => sql.includes('UPDATE superadministradores')), false);
+  assert.equal(comandos.some(({ sql }) => sql === 'ROLLBACK'), true);
+});
+
+
+/*
+  Dois estabelecimentos com um administrador cada. O banco falso só devolve o
+  administrador quando o par (id, id_estabelecimento) bate, exatamente como o
+  índice/filtro do SQL real — é isso que o teste de isolamento precisa provar.
+*/
+function bancoResetDeSenha() {
+  const agora = new Date('2026-09-01T00:00:00.000Z');
+  const administradores = new Map([
+    [100, {
+      id: 100,
+      id_estabelecimento: 10,
+      usuario: 'admin-loja-a',
+      email: 'admin-a@teste.local',
+      nome: 'Admin Loja A',
+      senha_hash: criarHashSenha('senha-original-loja-a'),
+      ativo: 1,
+      criado_em: agora
+    }],
+    [200, {
+      id: 200,
+      id_estabelecimento: 20,
+      usuario: 'admin-loja-b',
+      email: 'admin-b@teste.local',
+      nome: 'Admin Loja B',
+      senha_hash: criarHashSenha('senha-original-loja-b'),
+      ativo: 1,
+      criado_em: agora
+    }]
+  ]);
+  const estabelecimentos = new Map([
+    [10, { id_estabelecimento: 10, nome_fantasia: 'Loja A', slug: 'loja-a' }],
+    [20, { id_estabelecimento: 20, nome_fantasia: 'Loja B', slug: 'loja-b' }]
+  ]);
+  const comandos = [];
+
+  function responder(sql, parametros = []) {
+    if (sql.includes('LOWER(usuario)')) {
+      return [[{
+        id: 1,
+        nome: 'Super Teste',
+        usuario: 'superteste',
+        email: 'super@teste.local',
+        senha_hash: criarHashSenha('senha-global-segura')
+      }]];
+    }
+    if (sql.includes('INSERT INTO sessoes_superadmin')) return [{ affectedRows: 1 }];
+    if (sql.includes('DELETE FROM sessoes_superadmin')) return [{ affectedRows: 0 }];
+    if (sql.includes('FROM sessoes_superadmin ss')) {
+      return [[{ id: 1, nome: 'Super Teste', usuario: 'superteste', email: 'super@teste.local' }]];
+    }
+    if (sql.includes('INSERT INTO auditoria_superadmin')) return [{ affectedRows: 1 }];
+    if (sql.includes('FROM estabelecimentos e')) {
+      const registro = estabelecimentos.get(Number(parametros[0]));
+      if (!registro) return [[]];
+      return [[{
+        ...registro,
+        dominio_personalizado: null,
+        status: 'ativo',
+        plano: 'basico',
+        status_assinatura: 'ativa',
+        vencimento_assinatura_em: null,
+        criado_em: agora,
+        atualizado_em: agora,
+        total_administradores: 1
+      }]];
+    }
+    if (sql.includes('UPDATE administradores SET senha_hash')) {
+      // Só altera quando id E id_estabelecimento batem, igual ao WHERE real.
+      const registro = administradores.get(Number(parametros[1]));
+      if (!registro || registro.id_estabelecimento !== Number(parametros[2])) {
+        return [{ affectedRows: 0 }];
+      }
+      registro.senha_hash = parametros[0];
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('DELETE FROM sessoes_admin')) return [{ affectedRows: 1 }];
+    if (sql.includes('FROM administradores')) {
+      if (sql.includes('WHERE id = ? AND id_estabelecimento = ?')) {
+        const registro = administradores.get(Number(parametros[0]));
+        if (!registro || registro.id_estabelecimento !== Number(parametros[1])) return [[]];
+        const { id, usuario, nome } = registro;
+        return [[{ id, usuario, nome }]];
+      }
+      const lista = [...administradores.values()]
+        .filter((item) => item.id_estabelecimento === Number(parametros[0]))
+        .map(({ id, usuario, email, nome, ativo, criado_em: criadoEm }) => ({
+          id, usuario, email, nome, ativo, criado_em: criadoEm
+        }));
+      return [lista];
+    }
+    throw new Error(`Consulta inesperada no teste: ${sql}`);
+  }
+
+  const conexao = {
+    async beginTransaction() { comandos.push({ sql: 'BEGIN', parametros: [] }); },
+    async commit() { comandos.push({ sql: 'COMMIT', parametros: [] }); },
+    async rollback() { comandos.push({ sql: 'ROLLBACK', parametros: [] }); },
+    release() {},
+    async execute(sql, parametros = []) {
+      comandos.push({ sql, parametros });
+      return responder(sql, parametros);
+    }
+  };
+  return {
+    comandos,
+    administradores,
+    banco: {
+      async getConnection() { return conexao; },
+      async execute(sql, parametros = []) {
+        comandos.push({ sql, parametros });
+        return responder(sql, parametros);
+      }
+    }
+  };
+}
+
+test('superadmin reseta a senha do admin somente dentro do estabelecimento informado', async () => {
+  const { banco, comandos, administradores } = bancoResetDeSenha();
+  const servidor = criarServidor({
+    banco,
+    pastaUploads: tmpdir(),
+    tenantDesenvolvimento: '',
+    jwtSecret: JWT_SECRET_TESTE
+  });
+  await aguardarServidor(servidor, 0);
+  const baseUrl = `http://127.0.0.1:${servidor.address().port}`;
+  const NOVA_SENHA = 'senha-redefinida-2026';
+
+  try {
+    const login = await fetch(`${baseUrl}/api/superadmin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Host: 'host-sem-tenant.teste' },
+      body: JSON.stringify({ usuario: 'superteste', senha: 'senha-global-segura' })
+    });
+    assert.equal(login.status, 200);
+    const { token } = await login.json();
+    const cabecalhos = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      Host: 'host-sem-tenant.teste'
+    };
+    const resetar = (idEstabelecimento, idAdministrador, corpo) => fetch(
+      `${baseUrl}/api/superadmin/estabelecimentos/${idEstabelecimento}/administradores/${idAdministrador}/senha`,
+      { method: 'PUT', headers: cabecalhos, body: JSON.stringify(corpo) }
+    );
+    const senhas = { novaSenha: NOVA_SENHA, confirmacaoSenha: NOVA_SENHA };
+
+    // A listagem por estabelecimento não vaza administrador do outro tenant.
+    const listaA = await fetch(`${baseUrl}/api/superadmin/estabelecimentos/10/administradores`, {
+      headers: cabecalhos
+    });
+    assert.equal(listaA.status, 200);
+    const { administradores: doTenantA } = await listaA.json();
+    assert.equal(doTenantA.length, 1);
+    assert.equal(doTenantA[0].id, 100);
+    assert.equal(Object.hasOwn(doTenantA[0], 'senha_hash'), false);
+    assert.equal((await fetch(`${baseUrl}/api/superadmin/estabelecimentos/77/administradores`, {
+      headers: cabecalhos
+    })).status, 404);
+
+    const hashOriginalB = administradores.get(200).senha_hash;
+
+    // O CENTRO DO PASSO: admin da loja B pedido com o id da loja A vira 404.
+    const cruzado = await resetar(10, 200, senhas);
+    assert.equal(cruzado.status, 404);
+    // E nada foi escrito: nem UPDATE, nem sessão derrubada, nem auditoria.
+    assert.equal(comandos.some(({ sql }) => sql.includes('UPDATE administradores')), false);
+    assert.equal(comandos.some(({ sql }) => sql.includes('DELETE FROM sessoes_admin')), false);
+    assert.equal(comandos.some(({ sql }) => sql.includes('INSERT INTO auditoria_superadmin')), false);
+    assert.equal(administradores.get(200).senha_hash, hashOriginalB);
+    assert.equal(verificarSenha('senha-original-loja-b', administradores.get(200).senha_hash), true);
+    assert.equal(verificarSenha(NOVA_SENHA, administradores.get(200).senha_hash), false);
+
+    // O caminho inverso também: admin da loja A pedido com o id da loja B.
+    assert.equal((await resetar(20, 100, senhas)).status, 404);
+    assert.equal(verificarSenha('senha-original-loja-a', administradores.get(100).senha_hash), true);
+
+    assert.equal((await resetar(10, 999, senhas)).status, 404);
+    assert.equal((await resetar(77, 100, senhas)).status, 404);
+
+    const curta = { novaSenha: 'curta123', confirmacaoSenha: 'curta123' };
+    assert.equal((await resetar(10, 100, curta)).status, 400);
+    assert.equal((await resetar(10, 100, { novaSenha: NOVA_SENHA, confirmacaoSenha: 'outra' })).status, 400);
+    assert.equal(comandos.some(({ sql }) => sql.includes('UPDATE administradores')), false);
+
+    // Par correto: a troca acontece.
+    const correto = await resetar(10, 100, senhas);
+    assert.equal(correto.status, 200);
+    const { administrador } = await correto.json();
+    assert.equal(administrador.id, 100);
+    assert.equal(administrador.usuario, 'admin-loja-a');
+    assert.equal(verificarSenha(NOVA_SENHA, administradores.get(100).senha_hash), true);
+    assert.equal(verificarSenha('senha-original-loja-a', administradores.get(100).senha_hash), false);
+
+    // Toda escrita levou o tenant junto do id, nunca o id sozinho.
+    const update = comandos.find(({ sql }) => sql.includes('UPDATE administradores SET senha_hash'));
+    assert.match(update.sql, /id = \? AND id_estabelecimento = \?/);
+    assert.deepEqual(update.parametros.slice(1), [100, 10]);
+    assert.match(update.parametros[0], /^scrypt:/);
+    const remocao = comandos.find(({ sql }) => sql.includes('DELETE FROM sessoes_admin'));
+    assert.deepEqual(remocao.parametros, [100, 10]);
+
+    const auditoria = comandos.find(({ sql }) => sql.includes('INSERT INTO auditoria_superadmin'));
+    assert.equal(auditoria.parametros[0], 1);
+    assert.equal(auditoria.parametros[1], 10);
+    assert.equal(auditoria.parametros[2], 'administrador.senha_redefinida');
+    assert.equal(JSON.stringify(auditoria.parametros).includes(NOVA_SENHA), false);
+    assert.equal(comandos.some(({ sql }) => sql === 'COMMIT'), true);
+    assert.equal(comandos.some(({ sql }) => /SELECT\s+\*/i.test(sql)), false);
+
+    // Sessão de administrador não abre essas rotas: elas são só do superadmin.
+    const tokenAdmin = criarJwt({
+      idUsuario: 100,
+      perfil: 'administrador',
+      idEstabelecimento: 10,
+      duracaoMs: 60_000,
+      segredo: JWT_SECRET_TESTE
+    });
+    const proibido = await fetch(
+      `${baseUrl}/api/superadmin/estabelecimentos/10/administradores/100/senha`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenAdmin}` },
+        body: JSON.stringify(senhas)
+      }
+    );
+    assert.equal(proibido.status, 403);
+  } finally {
+    await fecharServidor(servidor);
+  }
+});
+
+
+test('a rota de auditoria pagina, filtra por estabelecimento e por período', async () => {
+  const consultas = [];
+  const banco = {
+    async execute(sql, parametros = []) {
+      consultas.push({ sql, parametros });
+      if (sql.includes('LOWER(usuario)')) {
+        return [[{
+          id: 1,
+          nome: 'Super Teste',
+          usuario: 'superteste',
+          email: 'super@teste.local',
+          senha_hash: criarHashSenha('senha-global-segura')
+        }]];
+      }
+      if (sql.includes('INSERT INTO sessoes_superadmin')) return [{ affectedRows: 1 }];
+      if (sql.includes('DELETE FROM sessoes_superadmin')) return [{ affectedRows: 0 }];
+      if (sql.includes('FROM sessoes_superadmin ss')) {
+        return [[{ id: 1, nome: 'Super Teste', usuario: 'superteste', email: 'super@teste.local' }]];
+      }
+      if (sql.includes('SELECT COUNT(a.id) AS total')) return [[{ total: 7 }]];
+      if (sql.includes('FROM auditoria_superadmin a')) {
+        return [[
+          {
+            id: 42,
+            superadministrador_id: 1,
+            id_estabelecimento: 10,
+            acao: 'administrador.senha_redefinida',
+            detalhes_json: '{"administrador":100,"usuario":"admin-loja-a"}',
+            criado_em: new Date('2026-09-05T12:00:00.000Z'),
+            superadministrador_nome: 'Super Teste',
+            superadministrador_usuario: 'superteste',
+            estabelecimento_nome: 'Loja A',
+            estabelecimento_slug: 'loja-a'
+          },
+          {
+            id: 41,
+            superadministrador_id: 1,
+            id_estabelecimento: null,
+            acao: 'superadministrador.criado',
+            detalhes_json: { alvo: 2, usuario: 'super-b' },
+            criado_em: new Date('2026-09-04T12:00:00.000Z'),
+            superadministrador_nome: 'Super Teste',
+            superadministrador_usuario: 'superteste',
+            estabelecimento_nome: null,
+            estabelecimento_slug: null
+          }
+        ]];
+      }
+      throw new Error(`Consulta inesperada no teste: ${sql}`);
+    }
+  };
+  const servidor = criarServidor({
+    banco,
+    pastaUploads: tmpdir(),
+    tenantDesenvolvimento: '',
+    jwtSecret: JWT_SECRET_TESTE
+  });
+  await aguardarServidor(servidor, 0);
+  const baseUrl = `http://127.0.0.1:${servidor.address().port}`;
+
+  try {
+    const login = await fetch(`${baseUrl}/api/superadmin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Host: 'host-sem-tenant.teste' },
+      body: JSON.stringify({ usuario: 'superteste', senha: 'senha-global-segura' })
+    });
+    assert.equal(login.status, 200);
+    const { token } = await login.json();
+    const cabecalhos = { Authorization: `Bearer ${token}`, Host: 'host-sem-tenant.teste' };
+    const auditoria = (consulta) => fetch(`${baseUrl}/api/superadmin/auditoria${consulta}`, {
+      headers: cabecalhos
+    });
+
+    const semFiltro = await auditoria('');
+    assert.equal(semFiltro.status, 200);
+    const corpo = await semFiltro.json();
+    assert.equal(corpo.registros.length, 2);
+    assert.deepEqual(corpo.paginacao, { pagina: 1, limite: 50, total: 7, paginas: 1 });
+
+    // Registro com estabelecimento traz o tenant resolvido e o JSON já lido.
+    assert.equal(corpo.registros[0].acao, 'administrador.senha_redefinida');
+    assert.equal(corpo.registros[0].estabelecimento.nomeFantasia, 'Loja A');
+    assert.equal(corpo.registros[0].superadministrador.usuario, 'superteste');
+    assert.equal(corpo.registros[0].detalhes.usuario, 'admin-loja-a');
+    // Ação global não tem estabelecimento, e o JSON já vem como objeto do driver.
+    assert.equal(corpo.registros[1].estabelecimento, null);
+    assert.equal(corpo.registros[1].detalhes.usuario, 'super-b');
+
+    const listagemSemFiltro = consultas.at(-1);
+    assert.equal(listagemSemFiltro.sql.includes('WHERE'), false);
+    assert.deepEqual(listagemSemFiltro.parametros, []);
+    assert.match(listagemSemFiltro.sql, /LIMIT 50 OFFSET 0/);
+
+    // Filtro por estabelecimento e por período viram parâmetros, não texto no SQL.
+    const filtrada = await auditoria('?estabelecimento=10&de=2026-09-01&ate=2026-09-05&pagina=2&limite=3');
+    assert.equal(filtrada.status, 200);
+    const { paginacao } = await filtrada.json();
+    assert.deepEqual(paginacao, { pagina: 2, limite: 3, total: 7, paginas: 3 });
+
+    const listagemFiltrada = consultas.at(-1);
+    assert.match(listagemFiltrada.sql, /a\.id_estabelecimento = \?/);
+    assert.match(listagemFiltrada.sql, /a\.criado_em >= \?/);
+    assert.match(listagemFiltrada.sql, /a\.criado_em <= \?/);
+    assert.deepEqual(listagemFiltrada.parametros, [10, '2026-09-01 00:00:00', '2026-09-05 23:59:59']);
+    assert.match(listagemFiltrada.sql, /LIMIT 3 OFFSET 3/);
+
+    // O limite tem teto e a página não passa da última existente.
+    await auditoria('?limite=9999&pagina=9999');
+    assert.match(consultas.at(-1).sql, /LIMIT 200 OFFSET 0/);
+
+    // Entrada inválida é recusada antes de virar consulta.
+    assert.equal((await auditoria('?de=ontem')).status, 400);
+    assert.equal((await auditoria('?ate=2026-13-45')).status, 400);
+    // Texto no lugar do número cai no padrão, sem quebrar nem filtrar errado.
+    assert.equal((await auditoria('?estabelecimento=abc')).status, 200);
+    assert.deepEqual(consultas.at(-1).parametros, []);
+
+    assert.equal(consultas.some(({ sql }) => /SELECT\s+\*/i.test(sql)), false);
+
+    // Sessão de administrador não enxerga a auditoria global.
+    const tokenAdmin = criarJwt({
+      idUsuario: 7,
+      perfil: 'administrador',
+      idEstabelecimento: 10,
+      duracaoMs: 60_000,
+      segredo: JWT_SECRET_TESTE
+    });
+    const proibido = await fetch(`${baseUrl}/api/superadmin/auditoria`, {
+      headers: { Authorization: `Bearer ${tokenAdmin}` }
+    });
+    assert.equal(proibido.status, 403);
+    const semSessao = await fetch(`${baseUrl}/api/superadmin/auditoria`);
+    assert.equal(semSessao.status, 401);
+  } finally {
+    await fecharServidor(servidor);
   }
 });
 

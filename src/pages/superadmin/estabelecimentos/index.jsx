@@ -4,13 +4,14 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Edit3,
+  KeyRound,
   Plus,
   Power,
   Search,
   ShieldAlert,
   X
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import SuperadminLayout from '../../../components/SuperadminLayout';
 import { useSuperadmin } from '../../../context/superadminContext';
@@ -168,6 +169,145 @@ function FormularioEstabelecimento({ inicial, editando, opcoes, processando, onC
   );
 }
 
+const TAMANHO_MINIMO_SENHA = 12;
+
+function ResetSenhaAdministrador({ estabelecimento, onCancelar, onConcluir }) {
+  const { carregarAdministradoresDoEstabelecimento, redefinirSenhaAdministrador } = useSuperadmin();
+  const [administradores, setAdministradores] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [dados, setDados] = useState({ idAdministrador: '', novaSenha: '', confirmacaoSenha: '' });
+  const [erro, setErro] = useState('');
+  const [processando, setProcessando] = useState(false);
+
+  useEffect(() => {
+    let ativo = true;
+    carregarAdministradoresDoEstabelecimento(estabelecimento.id)
+      .then((lista) => {
+        if (!ativo) return;
+        setAdministradores(lista);
+        setDados((atuais) => ({
+          ...atuais,
+          idAdministrador: lista[0] ? String(lista[0].id) : ''
+        }));
+      })
+      .catch((falha) => {
+        if (ativo) setErro(falha.message || 'Não foi possível carregar os administradores.');
+      })
+      .finally(() => {
+        if (ativo) setCarregando(false);
+      });
+    return () => { ativo = false; };
+  }, [estabelecimento.id, carregarAdministradoresDoEstabelecimento]);
+
+  function alterar(campo, valor) {
+    setDados((atuais) => ({ ...atuais, [campo]: valor }));
+  }
+
+  async function enviar(evento) {
+    evento.preventDefault();
+    setErro('');
+    if (!dados.idAdministrador) {
+      setErro('Selecione o administrador que terá a senha redefinida.');
+      return;
+    }
+    if (dados.novaSenha.length < TAMANHO_MINIMO_SENHA) {
+      setErro(`A nova senha deve ter pelo menos ${TAMANHO_MINIMO_SENHA} caracteres.`);
+      return;
+    }
+    if (dados.novaSenha !== dados.confirmacaoSenha) {
+      setErro('A confirmação da nova senha não confere.');
+      return;
+    }
+    setProcessando(true);
+    try {
+      const administrador = await redefinirSenhaAdministrador(
+        estabelecimento.id,
+        dados.idAdministrador,
+        { novaSenha: dados.novaSenha, confirmacaoSenha: dados.confirmacaoSenha }
+      );
+      onConcluir(administrador);
+    } catch (falha) {
+      setErro(falha.message || 'Não foi possível redefinir a senha.');
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  return (
+    <section className={styles.formularioCard} aria-labelledby="titulo-reset-senha">
+      <div className={styles.formularioTopo}>
+        <div>
+          <span>RESET DE SENHA</span>
+          <h2 id="titulo-reset-senha">Administradores de {estabelecimento.nomeFantasia}</h2>
+          <p>A senha vale só para este estabelecimento e derruba as sessões abertas do administrador.</p>
+        </div>
+        <button type="button" className={styles.fechar} aria-label="Fechar" onClick={onCancelar}>
+          <X size={20} />
+        </button>
+      </div>
+
+      {erro && <div className={styles.erro} role="alert">{erro}</div>}
+
+      {carregando ? (
+        <p className={styles.ajuda}>Carregando administradores...</p>
+      ) : administradores.length === 0 ? (
+        <p className={styles.ajuda}>Este estabelecimento não possui administradores cadastrados.</p>
+      ) : (
+        <form className={styles.formulario} onSubmit={enviar}>
+          <div className={styles.gridCampos}>
+            <label className={styles.campo}>
+              <span>Administrador</span>
+              <select
+                value={dados.idAdministrador}
+                required
+                onChange={(e) => alterar('idAdministrador', e.target.value)}
+              >
+                {administradores.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.nome} ({item.usuario}){item.ativo ? '' : ' — inativo'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={styles.campo}>
+              <span>Nova senha</span>
+              <input
+                required
+                type="password"
+                minLength={TAMANHO_MINIMO_SENHA}
+                autoComplete="new-password"
+                value={dados.novaSenha}
+                onChange={(e) => alterar('novaSenha', e.target.value)}
+              />
+              <small>Mínimo de {TAMANHO_MINIMO_SENHA} caracteres.</small>
+            </label>
+            <label className={styles.campo}>
+              <span>Confirmar nova senha</span>
+              <input
+                required
+                type="password"
+                minLength={TAMANHO_MINIMO_SENHA}
+                autoComplete="new-password"
+                value={dados.confirmacaoSenha}
+                onChange={(e) => alterar('confirmacaoSenha', e.target.value)}
+              />
+            </label>
+          </div>
+          <div className={styles.acoesFormulario}>
+            <button type="button" className={styles.botaoSecundario} onClick={onCancelar}>
+              Cancelar
+            </button>
+            <button type="submit" className={styles.botaoPrimario} disabled={processando}>
+              <KeyRound size={17} />
+              {processando ? 'Redefinindo...' : 'Redefinir senha'}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
 function EstabelecimentosSuperadmin() {
   const {
     estabelecimentos,
@@ -179,6 +319,7 @@ function EstabelecimentosSuperadmin() {
   } = useSuperadmin();
   const [filtros, setFiltros] = useState({ busca: '', status: '', plano: '', statusAssinatura: '' });
   const [formulario, setFormulario] = useState(null);
+  const [resetSenha, setResetSenha] = useState(null);
   const [processando, setProcessando] = useState(false);
   const [mensagem, setMensagem] = useState('');
   const [erro, setErro] = useState('');
@@ -207,6 +348,19 @@ function EstabelecimentosSuperadmin() {
         vencimentoAssinatura: dataFormulario(estabelecimento.vencimentoAssinatura)
       }
     });
+  }
+
+  function abrirResetSenha(estabelecimento) {
+    setMensagem('');
+    setErro('');
+    setFormulario(null);
+    setResetSenha(estabelecimento);
+  }
+
+  function concluirResetSenha(administrador) {
+    setResetSenha(null);
+    setErro('');
+    setMensagem(`Senha do administrador "${administrador.usuario}" redefinida. As sessões dele foram encerradas.`);
   }
 
   async function filtrar(evento) {
@@ -272,6 +426,15 @@ function EstabelecimentosSuperadmin() {
         />
       )}
 
+      {resetSenha && (
+        <ResetSenhaAdministrador
+          key={resetSenha.id}
+          estabelecimento={resetSenha}
+          onCancelar={() => setResetSenha(null)}
+          onConcluir={concluirResetSenha}
+        />
+      )}
+
       {mensagem && <div className={styles.sucesso} role="status">{mensagem}</div>}
       {erro && <div className={styles.erro} role="alert">{erro}</div>}
 
@@ -301,7 +464,7 @@ function EstabelecimentosSuperadmin() {
                   <td data-rotulo="Plano"><span className={styles.plano}>{textoStatus(item.plano)}</span></td>
                   <td data-rotulo="Assinatura"><span className={`${styles.status} ${item.statusAssinatura === 'ativa' ? styles.ativo : styles.atencao}`}>{textoStatus(item.statusAssinatura)}</span><small className={styles.vencimento}><CalendarClock size={12} /> {dataCurta(item.vencimentoAssinatura)}</small></td>
                   <td data-rotulo="Administradores">{item.totalAdministradores}</td>
-                  <td data-rotulo="Ações"><div className={styles.acoes}><button type="button" aria-label={`Editar ${item.nomeFantasia}`} title="Editar" onClick={() => abrirEdicao(item)}><Edit3 size={17} /></button><button type="button" disabled={processando} aria-label={`${item.status === 'ativo' ? 'Desativar' : 'Ativar'} ${item.nomeFantasia}`} title={item.status === 'ativo' ? 'Desativar' : 'Ativar'} onClick={() => alternarStatus(item)}><Power size={17} /></button></div></td>
+                  <td data-rotulo="Ações"><div className={styles.acoes}><button type="button" aria-label={`Editar ${item.nomeFantasia}`} title="Editar" onClick={() => abrirEdicao(item)}><Edit3 size={17} /></button><button type="button" disabled={processando} aria-label={`${item.status === 'ativo' ? 'Desativar' : 'Ativar'} ${item.nomeFantasia}`} title={item.status === 'ativo' ? 'Desativar' : 'Ativar'} onClick={() => alternarStatus(item)}><Power size={17} /></button><button type="button" aria-label={`Resetar senha de administrador de ${item.nomeFantasia}`} title="Resetar senha de administrador" onClick={() => abrirResetSenha(item)}><KeyRound size={17} /></button></div></td>
                 </tr>
               ))}
             </tbody>

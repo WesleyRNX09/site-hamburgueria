@@ -74,6 +74,44 @@ test('recusa domínio desconhecido, loja desativada e assinatura bloqueada ou ve
   assert.equal(vencida.status, 403);
 });
 
+test('todo status de assinatura bloqueado e o vencimento no passado recusam o acesso público', async () => {
+  const umDiaMs = 24 * 60 * 60 * 1000;
+  const ontem = new Date(Date.now() - umDiaMs);
+  const amanha = new Date(Date.now() + umDiaMs);
+  const tenants = new Map([
+    ['liberada', linhaTenant(1, 'liberada')],
+    ['liberada-em-dia', linhaTenant(2, 'liberada-em-dia', { vencimento_assinatura_em: amanha })],
+    ['inadimplente', linhaTenant(3, 'inadimplente', { status_assinatura: 'inadimplente' })],
+    ['suspensa', linhaTenant(4, 'suspensa', { status_assinatura: 'suspensa' })],
+    ['bloqueada', linhaTenant(5, 'bloqueada', { status_assinatura: 'bloqueada' })],
+    ['cancelada', linhaTenant(6, 'cancelada', { status_assinatura: 'cancelada' })],
+    ['maiuscula', linhaTenant(7, 'maiuscula', { status_assinatura: 'BLOQUEADA' })],
+    ['vencida', linhaTenant(8, 'vencida', { vencimento_assinatura_em: ontem })],
+    ['vencida-e-ativa', linhaTenant(9, 'vencida-e-ativa', {
+      status_assinatura: 'ativa',
+      vencimento_assinatura_em: ontem
+    })]
+  ]);
+  const banco = {
+    async execute(sql, parametros) {
+      assert.match(sql, /FROM estabelecimentos AS e/i);
+      return [[tenants.get(parametros[0])].filter(Boolean)];
+    }
+  };
+  const opcoes = { dominioPrincipal: 'exemplo.test' };
+  const requisicao = (slug) => ({ headers: { host: `${slug}.exemplo.test` } });
+
+  // Assinatura em dia continua atendendo o público normalmente.
+  assert.equal((await resolverEstabelecimento(banco, requisicao('liberada'), opcoes)).id, 1);
+  assert.equal((await resolverEstabelecimento(banco, requisicao('liberada-em-dia'), opcoes)).id, 2);
+
+  for (const slug of ['inadimplente', 'suspensa', 'bloqueada', 'cancelada', 'maiuscula',
+    'vencida', 'vencida-e-ativa']) {
+    const erro = await erroDa(resolverEstabelecimento(banco, requisicao(slug), opcoes));
+    assert.equal(erro.status, 403, `O tenant "${slug}" deveria ter sido recusado com 403.`);
+  }
+});
+
 test('impede sessões de administrador e garçom de atravessarem o host do tenant', async () => {
   const tenants = new Map([
     ['loja-a', linhaTenant(11, 'loja-a')],

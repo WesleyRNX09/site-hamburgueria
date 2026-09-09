@@ -46,6 +46,7 @@ import {
   excluirFuncionario,
   excluirPromocao,
   finalizarComandaAdmin,
+  listarAdministradores,
   listarDadosAdmin,
   listarDadosGarcom,
   listarDadosPublicos,
@@ -69,11 +70,17 @@ import {
   verificarSenha
 } from './security.js';
 import {
+  alterarSenhaSuperadministrador,
+  alternarStatusSuperadministrador,
   atualizarEstabelecimentoGerencial,
   buscarEstabelecimentoGerencial,
   criarEstabelecimentoGerencial,
+  criarSuperadministrador,
+  listarAuditoriaSuperadmin,
   listarEstabelecimentosGerenciais,
-  opcoesSuperadmin
+  listarSuperadministradores,
+  opcoesSuperadmin,
+  redefinirSenhaAdministrador
 } from './superadmin.js';
 import { resolverEstabelecimento } from './tenant.js';
 
@@ -511,6 +518,77 @@ async function rotaSuperadmin({
   }
 
   const superadministrador = await obterSuperadministrador(banco, requisicao, jwtSecret);
+
+  if (requisicao.method === 'PUT' && caminho === '/api/superadmin/senha') {
+    try {
+      await alterarSenhaSuperadministrador(
+        banco,
+        superadministrador.id,
+        await lerJson(requisicao)
+      );
+      responderJson(resposta, 200, { sucesso: true });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  if (requisicao.method === 'GET' && caminho === '/api/superadmin/auditoria') {
+    try {
+      responderJson(resposta, 200, await listarAuditoriaSuperadmin(banco, {
+        estabelecimento: url.searchParams.get('estabelecimento'),
+        de: url.searchParams.get('de'),
+        ate: url.searchParams.get('ate'),
+        pagina: url.searchParams.get('pagina'),
+        limite: url.searchParams.get('limite')
+      }));
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  if (requisicao.method === 'GET' && caminho === '/api/superadmin/superadministradores') {
+    responderJson(resposta, 200, {
+      superadministradores: await listarSuperadministradores(banco)
+    });
+    return true;
+  }
+
+  if (requisicao.method === 'POST' && caminho === '/api/superadmin/superadministradores') {
+    try {
+      responderJson(resposta, 201, {
+        superadministrador: await criarSuperadministrador(
+          banco,
+          await lerJson(requisicao),
+          superadministrador.id
+        )
+      });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  const superadministradorStatus = caminho
+    .match(/^\/api\/superadmin\/superadministradores\/(\d+)\/status$/);
+  if (requisicao.method === 'PATCH' && superadministradorStatus) {
+    try {
+      const dados = await lerJson(requisicao);
+      const alvo = await alternarStatusSuperadministrador(
+        banco,
+        superadministradorStatus[1],
+        Boolean(dados.ativo),
+        superadministrador.id
+      );
+      if (!alvo) throw new ErroHttp(404, 'Superadministrador não encontrado.');
+      responderJson(resposta, 200, { superadministrador: alvo });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
   if (requisicao.method === 'GET' && caminho === '/api/superadmin/estabelecimentos') {
     const estabelecimentos = await listarEstabelecimentosGerenciais(banco, {
       busca: url.searchParams.get('busca'),
@@ -553,6 +631,41 @@ async function rotaSuperadmin({
       );
       if (!estabelecimento) throw new ErroHttp(404, 'Estabelecimento não encontrado.');
       responderJson(resposta, 200, { estabelecimento });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  const administradoresDoEstabelecimento = caminho
+    .match(/^\/api\/superadmin\/estabelecimentos\/(\d+)\/administradores$/);
+  if (requisicao.method === 'GET' && administradoresDoEstabelecimento) {
+    const estabelecimento = await buscarEstabelecimentoGerencial(
+      banco,
+      administradoresDoEstabelecimento[1]
+    );
+    if (!estabelecimento) throw new ErroHttp(404, 'Estabelecimento não encontrado.');
+    responderJson(resposta, 200, {
+      administradores: await listarAdministradores(banco, estabelecimento.id)
+    });
+    return true;
+  }
+
+  const senhaAdministrador = caminho
+    .match(/^\/api\/superadmin\/estabelecimentos\/(\d+)\/administradores\/(\d+)\/senha$/);
+  if (requisicao.method === 'PUT' && senhaAdministrador) {
+    try {
+      const administrador = await redefinirSenhaAdministrador(
+        banco,
+        senhaAdministrador[1],
+        senhaAdministrador[2],
+        await lerJson(requisicao),
+        superadministrador.id
+      );
+      if (!administrador) {
+        throw new ErroHttp(404, 'Administrador não encontrado neste estabelecimento.');
+      }
+      responderJson(resposta, 200, { administrador });
     } catch (erro) {
       tratarErroDados(erro);
     }

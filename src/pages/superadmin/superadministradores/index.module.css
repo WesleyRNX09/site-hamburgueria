@@ -1,0 +1,75 @@
+.botaoPrimario, .botaoSecundario { display: inline-flex; min-height: 43px; align-items: center; justify-content: center; gap: 8px; border-radius: 9px; padding: 0 15px; font: inherit; font-size: 12px; font-weight: 850; cursor: pointer; }
+.botaoPrimario { border: 1px solid #ffc107; background: #ffc107; color: #090909; }
+.botaoPrimario:hover { background: #ffd13f; transform: translateY(-1px); }
+.botaoSecundario { border: 1px solid #3a3a3d; background: #1a1a1d; color: #ddd; }
+.botaoSecundario:hover { border-color: #ffc107; color: #ffc107; }
+.botaoPrimario:disabled, .botaoSecundario:disabled { opacity: .5; cursor: wait; transform: none; }
+.aviso { display: flex; align-items: flex-start; gap: 9px; border: 1px solid rgba(255, 193, 7, .28); border-radius: 10px; background: rgba(255, 193, 7, .05); margin-bottom: 17px; padding: 12px 13px; color: #d9c48a; font-size: 12px; }
+.aviso svg { flex: 0 0 auto; margin-top: 1px; color: #ffc107; }
+.aviso code { border-radius: 5px; background: rgba(0, 0, 0, .35); padding: 1px 6px; color: #ffd873; font-size: 11px; }
+.listaCard, .formularioCard { border: 1px solid #2c2c2f; border-radius: 15px; background: #141416; padding: 22px; }
+.formularioCard { margin-bottom: 18px; box-shadow: 0 20px 55px rgba(0, 0, 0, .28); }
+.formularioTopo, .listaTopo { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.formularioTopo { border-bottom: 1px solid #2b2b2e; margin-bottom: 22px; padding-bottom: 19px; }
+.formularioTopo > div > span { color: #ffc107; font-size: 9px; font-weight: 900; letter-spacing: 1.7px; }
+.formularioTopo h2, .listaTopo h2 { margin: 5px 0 0; font-size: 19px; }
+.formularioTopo p, .listaTopo p { margin: 5px 0 0; color: #909095; font-size: 12px; }
+.fechar { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; border: 1px solid #363639; border-radius: 9px; background: #1b1b1e; color: #999; cursor: pointer; }
+.fechar:hover { border-color: #ffc107; color: #ffc107; }
+.formulario { display: grid; gap: 20px; }
+.gridCampos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.campo { display: grid; gap: 7px; }
+.campo > span { color: #d7d7da; font-size: 11px; font-weight: 750; }
+.campo small { color: #828287; font-size: 11px; font-weight: 500; }
+.campo input { width: 100%; min-height: 44px; border: 1px solid #36363a; border-radius: 9px; outline: none; background: #0e0e10; padding: 0 12px; color: #eee; font: inherit; font-size: 12px; }
+.campo input:focus { border-color: #ffc107; box-shadow: 0 0 0 3px rgba(255, 193, 7, .07); }
+.acoesFormulario { display: flex; justify-content: flex-end; gap: 9px; }
+.erro, .sucesso { border-radius: 9px; margin: 0 0 14px; padding: 11px 13px; font-size: 12px; }
+.erro { border: 1px solid rgba(255, 91, 91, .32); background: rgba(255, 91, 91, .07); color: #ff8e8e; }
+.sucesso { border: 1px solid rgba(51, 205, 116, .3); background: rgba(51, 205, 116, .06); color: #55df8f; }
+.listaTopo { margin-bottom: 18px; }
+.tabelaContainer { overflow: hidden; border: 1px solid #2b2b2e; border-radius: 11px; }
+.tabelaContainer table { width: 100%; min-width: 720px; border-collapse: collapse; }
+.tabelaContainer th { background: #0e0e10; padding: 12px 14px; color: #85858a; font-size: 10px; letter-spacing: .7px; text-align: left; text-transform: uppercase; }
+.tabelaContainer td { border-top: 1px solid #29292c; padding: 14px; color: #c7c7ca; font-size: 12px; }
+.tabelaContainer td > strong, .tabelaContainer td > small { display: block; }
+.tabelaContainer td > strong { color: #f2f2f3; font-size: 13px; }
+.tabelaContainer td > small { margin-top: 4px; color: #818186; }
+.tabelaContainer tbody tr:hover { background: rgba(255, 193, 7, .025); }
+.status { display: inline-flex; min-height: 25px; align-items: center; border: 1px solid #444; border-radius: 999px; padding: 0 9px; font-size: 10px; font-weight: 800; }
+.ativo { border-color: rgba(51, 205, 116, .35); background: rgba(51, 205, 116, .07); color: #55df8f; }
+.inativo { border-color: rgba(255, 91, 91, .35); background: rgba(255, 91, 91, .07); color: #ff8585; }
+.acoes { display: flex; gap: 6px; }
+.acoes button { display: grid; width: 37px; height: 37px; place-items: center; border: 1px solid #37373a; border-radius: 8px; background: #1b1b1e; color: #aaa; cursor: pointer; }
+.acoes button:hover:enabled { border-color: #ffc107; color: #ffc107; }
+.acoes button:disabled { opacity: .35; cursor: not-allowed; }
+.vazio { display: grid; place-items: center; gap: 7px; padding: 42px 18px; color: #85858a; text-align: center; }
+.vazio svg { color: #ffc107; }
+.vazio strong { color: #ddd; }
+.vazio span { font-size: 12px; }
+
+@media (max-width: 1180px) {
+  .gridCampos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tabelaContainer { overflow-x: auto; }
+}
+
+@media (max-width: 650px) {
+  .gridCampos { grid-template-columns: 1fr; }
+  .listaCard, .formularioCard { padding: 17px; }
+  .acoesFormulario { flex-direction: column-reverse; }
+  .acoesFormulario button { width: 100%; }
+  .campo input, .botaoPrimario, .botaoSecundario { min-height: 46px; font-size: 16px; }
+  .campo > span, .campo small, .formularioTopo p, .listaTopo p, .aviso, .erro, .sucesso, .vazio span { font-size: 14px; }
+
+  /* Tabela vira lista de cartões: evita rolagem horizontal em telas estreitas */
+  .tabelaContainer { overflow-x: visible; border: 0; border-radius: 0; background: transparent; }
+  .tabelaContainer table { min-width: 0; }
+  .tabelaContainer table, .tabelaContainer tbody, .tabelaContainer tr, .tabelaContainer td { display: block; width: 100%; }
+  .tabelaContainer thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; }
+  .tabelaContainer tbody tr { border: 1px solid #2b2b2e; border-radius: 12px; background: #141416; margin-bottom: 12px; padding: 4px 14px; }
+  .tabelaContainer tbody tr:last-child { margin-bottom: 0; }
+  .tabelaContainer td { display: flex; flex-direction: column; gap: 5px; border-top: 1px solid #232326; padding: 12px 0; }
+  .tabelaContainer td:first-child { border-top: 0; }
+  .tabelaContainer td::before { content: attr(data-rotulo); color: #77777c; font-size: 10px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+  .acoes button { width: 42px; height: 42px; }
+}

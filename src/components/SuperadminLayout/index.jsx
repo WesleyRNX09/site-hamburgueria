@@ -1,4 +1,4 @@
-import { Building2, LogOut, Menu, ShieldCheck, X } from 'lucide-react';
+import { Building2, KeyRound, LogOut, Menu, ScrollText, ShieldCheck, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
@@ -82,6 +82,30 @@ function SuperadminLayout({ titulo, subtitulo, acao, children }) {
           >
             <Building2 size={20} />
             <span>Estabelecimentos</span>
+          </NavLink>
+          <NavLink
+            to="/superadmin/superadministradores"
+            onClick={() => setMenuAberto(false)}
+            className={({ isActive }) => `${styles.linkMenu} ${isActive ? styles.linkAtivo : ''}`}
+          >
+            <Users size={20} />
+            <span>Superadmins</span>
+          </NavLink>
+          <NavLink
+            to="/superadmin/auditoria"
+            onClick={() => setMenuAberto(false)}
+            className={({ isActive }) => `${styles.linkMenu} ${isActive ? styles.linkAtivo : ''}`}
+          >
+            <ScrollText size={20} />
+            <span>Auditoria</span>
+          </NavLink>
+          <NavLink
+            to="/superadmin/senha"
+            onClick={() => setMenuAberto(false)}
+            className={({ isActive }) => `${styles.linkMenu} ${isActive ? styles.linkAtivo : ''}`}
+          >
+            <KeyRound size={20} />
+            <span>Minha senha</span>
           </NavLink>
         </nav>
 

@@ -1,0 +1,25 @@
+.cartao { max-width: 620px; border: 1px solid #2c2c2f; border-radius: 15px; background: #141416; padding: 22px; }
+.topo { display: flex; align-items: flex-start; gap: 14px; border-bottom: 1px solid #2b2b2e; margin-bottom: 19px; padding-bottom: 18px; }
+.icone { display: grid; width: 46px; height: 46px; flex: 0 0 auto; place-items: center; border: 1px solid rgba(255, 193, 7, .35); border-radius: 12px; background: rgba(255, 193, 7, .06); color: #ffc107; }
+.topo h2 { margin: 0; font-size: 19px; }
+.topo p { margin: 5px 0 0; color: #909095; font-size: 12px; }
+.aviso { display: flex; align-items: flex-start; gap: 9px; border: 1px solid rgba(255, 193, 7, .28); border-radius: 10px; background: rgba(255, 193, 7, .05); margin-bottom: 17px; padding: 12px 13px; color: #d9c48a; font-size: 12px; }
+.aviso svg { flex: 0 0 auto; margin-top: 1px; color: #ffc107; }
+.erro { border: 1px solid rgba(255, 91, 91, .32); border-radius: 9px; background: rgba(255, 91, 91, .07); margin: 0 0 14px; padding: 11px 13px; color: #ff8e8e; font-size: 12px; }
+.formulario { display: grid; gap: 15px; }
+.campo { display: grid; gap: 7px; }
+.campo > span { color: #d7d7da; font-size: 11px; font-weight: 750; }
+.campo small { color: #828287; font-size: 11px; font-weight: 500; }
+.campo input { width: 100%; min-height: 44px; border: 1px solid #36363a; border-radius: 9px; outline: none; background: #0e0e10; padding: 0 12px; color: #eee; font: inherit; font-size: 12px; }
+.campo input:focus { border-color: #ffc107; box-shadow: 0 0 0 3px rgba(255, 193, 7, .07); }
+.acoes { display: flex; justify-content: flex-end; gap: 9px; margin-top: 3px; }
+.botaoPrimario { display: inline-flex; min-height: 43px; align-items: center; justify-content: center; gap: 8px; border: 1px solid #ffc107; border-radius: 9px; background: #ffc107; padding: 0 15px; color: #090909; font: inherit; font-size: 12px; font-weight: 850; cursor: pointer; }
+.botaoPrimario:hover { background: #ffd13f; transform: translateY(-1px); }
+.botaoPrimario:disabled { opacity: .5; cursor: wait; transform: none; }
+
+@media (max-width: 650px) {
+  .cartao { padding: 17px; }
+  .campo input, .botaoPrimario { min-height: 46px; font-size: 16px; }
+  .campo > span, .topo p, .aviso, .erro, .campo small { font-size: 14px; }
+  .acoes button { width: 100%; }
+}

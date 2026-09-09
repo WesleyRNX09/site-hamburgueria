@@ -1,5 +1,5 @@
 import { executarTransacao } from './database.js';
-import { criarHashSenha } from './security.js';
+import { criarHashSenha, verificarSenha } from './security.js';
 
 const PLANOS = new Set(['basico', 'profissional', 'premium']);
 const STATUS_ESTABELECIMENTO = new Set(['ativo', 'inativo']);
@@ -12,6 +12,9 @@ const FONTES = new Map([
   ['trebuchet ms', 'Trebuchet MS'],
   ['georgia', 'Georgia']
 ]);
+const REGEX_USUARIO = /^[a-z0-9._-]{3,80}$/;
+const REGEX_EMAIL = /^\S+@\S+\.\S+$/;
+const TAMANHO_MINIMO_SENHA = 12;
 const CORES_PADRAO = Object.freeze({
   corPrincipal: '#FFC107',
   corSecundaria: '#0A0A0A',
@@ -111,9 +114,11 @@ function validarAdministrador(dados) {
   const email = texto(dados?.email, 160).toLowerCase();
   const senha = String(dados?.senha ?? '');
   if (!nome || !usuario || !email || !senha) throw erroDominio('Preencha os dados do primeiro administrador.');
-  if (!/^[a-z0-9._-]{3,80}$/.test(usuario)) throw erroDominio('O usuário do administrador é inválido.');
-  if (!/^\S+@\S+\.\S+$/.test(email)) throw erroDominio('O e-mail do administrador é inválido.');
-  if (senha.length < 12) throw erroDominio('A senha inicial do administrador deve ter pelo menos 12 caracteres.');
+  if (!REGEX_USUARIO.test(usuario)) throw erroDominio('O usuário do administrador é inválido.');
+  if (!REGEX_EMAIL.test(email)) throw erroDominio('O e-mail do administrador é inválido.');
+  if (senha.length < TAMANHO_MINIMO_SENHA) {
+    throw erroDominio(`A senha inicial do administrador deve ter pelo menos ${TAMANHO_MINIMO_SENHA} caracteres.`);
+  }
   return { nome, usuario, email, senhaHash: criarHashSenha(senha) };
 }
 
@@ -330,15 +335,325 @@ export async function atualizarEstabelecimentoGerencial(banco, id, dados, supera
   return buscarEstabelecimentoGerencial(banco, idEstabelecimento);
 }
 
+/*
+  Troca de senha do próprio superadministrador. Diferente do painel do
+  estabelecimento, aqui TODAS as sessões caem — inclusive a que fez a troca —
+  seguindo o mesmo padrão de criarSuperadministradorInicial. O escopo é global,
+  então uma sessão sobrevivente com a senha antiga é risco alto demais.
+*/
+export async function alterarSenhaSuperadministrador(banco, superadministradorId, dados) {
+  const id = Number(superadministradorId);
+  if (!Number.isInteger(id) || id <= 0) throw erroDominio('Superadministrador inválido.');
+  const senhaAtual = String(dados?.senhaAtual ?? '');
+  const novaSenha = String(dados?.novaSenha ?? '');
+  const confirmacao = String(dados?.confirmacaoSenha ?? '');
+  if (novaSenha.length < 12) throw erroDominio('A nova senha deve ter pelo menos 12 caracteres.');
+  if (novaSenha !== confirmacao) throw erroDominio('A confirmação da nova senha não confere.');
+  await executarTransacao(banco, async (conexao) => {
+    const [linhas] = await conexao.execute(`
+      SELECT senha_hash FROM superadministradores
+      WHERE id = ? AND ativo = 1
+      FOR UPDATE
+    `, [id]);
+    if (!linhas[0] || !verificarSenha(senhaAtual, linhas[0].senha_hash)) {
+      throw erroDominio('A senha atual está incorreta.', 401);
+    }
+    if (verificarSenha(novaSenha, linhas[0].senha_hash)) {
+      throw erroDominio('A nova senha deve ser diferente da senha atual.');
+    }
+    await conexao.execute(
+      'UPDATE superadministradores SET senha_hash = ? WHERE id = ?',
+      [criarHashSenha(novaSenha), id]
+    );
+    await conexao.execute(
+      'DELETE FROM sessoes_superadmin WHERE superadministrador_id = ?',
+      [id]
+    );
+    await registrarAuditoria(conexao, id, null, 'superadministrador.senha_alterada', {});
+  });
+}
+
+const SELECAO_SUPERADMINISTRADOR = `
+  SELECT id, usuario, email, nome, ativo, criado_em, atualizado_em
+  FROM superadministradores
+`;
+
+function mapearSuperadministrador(linha) {
+  return {
+    id: Number(linha.id),
+    usuario: linha.usuario,
+    email: linha.email,
+    nome: linha.nome,
+    ativo: Boolean(linha.ativo),
+    criadoEm: dataIso(linha.criado_em),
+    atualizadoEm: dataIso(linha.atualizado_em)
+  };
+}
+
+export async function listarSuperadministradores(banco) {
+  const [linhas] = await banco.execute(`
+    ${SELECAO_SUPERADMINISTRADOR}
+    ORDER BY ativo DESC, nome
+  `, []);
+  return linhas.map(mapearSuperadministrador);
+}
+
+export async function criarSuperadministrador(banco, dados, superadministradorId) {
+  const nome = texto(dados?.nome, 160);
+  const usuario = texto(dados?.usuario, 80).toLowerCase();
+  const email = texto(dados?.email, 160).toLowerCase();
+  const senha = String(dados?.senha ?? '');
+  const confirmacao = String(dados?.confirmacaoSenha ?? '');
+  if (!nome) throw erroDominio('Informe o nome do superadministrador.');
+  if (!REGEX_USUARIO.test(usuario)) throw erroDominio('O usuário do superadministrador é inválido.');
+  if (!REGEX_EMAIL.test(email)) throw erroDominio('O e-mail do superadministrador é inválido.');
+  if (senha.length < TAMANHO_MINIMO_SENHA) {
+    throw erroDominio(`A senha deve ter pelo menos ${TAMANHO_MINIMO_SENHA} caracteres.`);
+  }
+  if (senha !== confirmacao) throw erroDominio('A confirmação da senha não confere.');
+  const id = await executarTransacao(banco, async (conexao) => {
+    const [resultado] = await conexao.execute(`
+      INSERT INTO superadministradores (usuario, email, nome, senha_hash, ativo)
+      VALUES (?, ?, ?, ?, 1)
+    `, [usuario, email, nome, criarHashSenha(senha)]);
+    await registrarAuditoria(conexao, superadministradorId, null, 'superadministrador.criado', {
+      alvo: Number(resultado.insertId),
+      usuario,
+      email
+    });
+    return Number(resultado.insertId);
+  });
+  const [linhas] = await banco.execute(`${SELECAO_SUPERADMINISTRADOR} WHERE id = ?`, [id]);
+  return mapearSuperadministrador(linhas[0]);
+}
+
+/*
+  Desativação em vez de exclusão: o histórico de auditoria aponta para o id do
+  superadministrador, então apagar a linha cegaria os registros passados. Os
+  dois travamentos abaixo existem porque aqui não há outro nível acima para
+  socorrer: sem eles dá para trancar a plataforma inteira em um clique.
+*/
+export async function alternarStatusSuperadministrador(banco, id, ativo, superadministradorId) {
+  const alvoId = Number(id);
+  if (!Number.isInteger(alvoId) || alvoId <= 0) return null;
+  if (!ativo && alvoId === Number(superadministradorId)) {
+    throw erroDominio('Você não pode desativar o próprio acesso.', 409);
+  }
+  return executarTransacao(banco, async (conexao) => {
+    const [alvos] = await conexao.execute(
+      'SELECT id FROM superadministradores WHERE id = ? FOR UPDATE',
+      [alvoId]
+    );
+    if (!alvos[0]) return null;
+    if (!ativo) {
+      const [contagens] = await conexao.execute(
+        'SELECT COUNT(id) AS total FROM superadministradores WHERE ativo = 1 FOR UPDATE',
+        []
+      );
+      if (Number(contagens[0].total) <= 1) {
+        throw erroDominio('Mantenha ao menos um superadministrador ativo.', 409);
+      }
+    }
+    await conexao.execute(
+      'UPDATE superadministradores SET ativo = ? WHERE id = ?',
+      [ativo ? 1 : 0, alvoId]
+    );
+    if (!ativo) {
+      await conexao.execute(
+        'DELETE FROM sessoes_superadmin WHERE superadministrador_id = ?',
+        [alvoId]
+      );
+    }
+    await registrarAuditoria(
+      conexao,
+      superadministradorId,
+      null,
+      ativo ? 'superadministrador.ativado' : 'superadministrador.desativado',
+      { alvo: alvoId }
+    );
+    const [linhas] = await conexao.execute(`${SELECAO_SUPERADMINISTRADOR} WHERE id = ?`, [alvoId]);
+    return mapearSuperadministrador(linhas[0]);
+  });
+}
+
+/*
+  Reset de senha do administrador de um estabelecimento, feito pelo superadmin.
+
+  O id do administrador NUNCA é usado sozinho: toda leitura e toda escrita
+  filtram por `id = ? AND id_estabelecimento = ?`, com o tenant vindo da própria
+  rota. Um administrador do estabelecimento A informado junto do id do
+  estabelecimento B simplesmente não é encontrado, e a função devolve null (404)
+  em vez de trocar a senha de quem não deveria.
+*/
+export async function redefinirSenhaAdministrador(
+  banco,
+  idEstabelecimento,
+  idAdministrador,
+  dados,
+  superadministradorId
+) {
+  const tenantId = Number(idEstabelecimento);
+  const alvoId = Number(idAdministrador);
+  if (!Number.isInteger(tenantId) || tenantId <= 0) return null;
+  if (!Number.isInteger(alvoId) || alvoId <= 0) return null;
+  const novaSenha = String(dados?.novaSenha ?? '');
+  const confirmacao = String(dados?.confirmacaoSenha ?? '');
+  if (novaSenha.length < TAMANHO_MINIMO_SENHA) {
+    throw erroDominio(`A nova senha deve ter pelo menos ${TAMANHO_MINIMO_SENHA} caracteres.`);
+  }
+  if (novaSenha !== confirmacao) throw erroDominio('A confirmação da nova senha não confere.');
+  return executarTransacao(banco, async (conexao) => {
+    const [alvos] = await conexao.execute(`
+      SELECT id, usuario, nome FROM administradores
+      WHERE id = ? AND id_estabelecimento = ?
+      FOR UPDATE
+    `, [alvoId, tenantId]);
+    if (!alvos[0]) return null;
+    await conexao.execute(`
+      UPDATE administradores SET senha_hash = ?
+      WHERE id = ? AND id_estabelecimento = ?
+    `, [criarHashSenha(novaSenha), alvoId, tenantId]);
+    // A senha antiga deixou de valer: nenhuma sessão daquele admin sobrevive.
+    await conexao.execute(`
+      DELETE FROM sessoes_admin
+      WHERE administrador_id = ? AND id_estabelecimento = ?
+    `, [alvoId, tenantId]);
+    await registrarAuditoria(
+      conexao,
+      superadministradorId,
+      tenantId,
+      'administrador.senha_redefinida',
+      { administrador: alvoId, usuario: alvos[0].usuario }
+    );
+    return { id: alvoId, usuario: alvos[0].usuario, nome: alvos[0].nome };
+  });
+}
+
+const LIMITE_AUDITORIA_PADRAO = 50;
+const LIMITE_AUDITORIA_MAXIMO = 200;
+
+/*
+  Filtro de período. A coluna é DATETIME, então comparamos com o texto
+  'YYYY-MM-DD HH:MM:SS' em vez de um objeto Date: assim o recorte usa o mesmo
+  relógio gravado no banco, sem conversão de fuso pelo driver.
+*/
+function dataFiltro(valor, fimDoDia) {
+  const informada = texto(valor, 10);
+  if (!informada) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(informada)) throw erroDominio('Informe uma data válida no filtro.');
+  const data = new Date(`${informada}T00:00:00.000Z`);
+  if (Number.isNaN(data.getTime()) || data.toISOString().slice(0, 10) !== informada) {
+    throw erroDominio('Informe uma data válida no filtro.');
+  }
+  return `${informada} ${fimDoDia ? '23:59:59' : '00:00:00'}`;
+}
+
+function inteiroPositivo(valor, padrao, maximo = 0) {
+  const numero = Number(texto(valor, 12));
+  if (!Number.isInteger(numero) || numero <= 0) return padrao;
+  return maximo > 0 ? Math.min(numero, maximo) : numero;
+}
+
+function detalhesAuditoria(valor) {
+  if (!valor) return null;
+  if (typeof valor === 'string') {
+    try {
+      return JSON.parse(valor);
+    } catch {
+      return null;
+    }
+  }
+  return valor;
+}
+
+function mapearAuditoria(linha) {
+  return {
+    id: Number(linha.id),
+    acao: linha.acao,
+    criadoEm: dataIso(linha.criado_em),
+    superadministrador: linha.superadministrador_id
+      ? {
+        id: Number(linha.superadministrador_id),
+        nome: linha.superadministrador_nome ?? '',
+        usuario: linha.superadministrador_usuario ?? ''
+      }
+      : null,
+    estabelecimento: linha.id_estabelecimento
+      ? {
+        id: Number(linha.id_estabelecimento),
+        nomeFantasia: linha.estabelecimento_nome ?? '',
+        slug: linha.estabelecimento_slug ?? ''
+      }
+      : null,
+    detalhes: detalhesAuditoria(linha.detalhes_json)
+  };
+}
+
+export async function listarAuditoriaSuperadmin(banco, filtros = {}) {
+  const condicoes = [];
+  const parametros = [];
+  const idEstabelecimento = inteiroPositivo(filtros.estabelecimento, 0);
+  if (idEstabelecimento > 0) {
+    condicoes.push('a.id_estabelecimento = ?');
+    parametros.push(idEstabelecimento);
+  }
+  const de = dataFiltro(filtros.de, false);
+  if (de) {
+    condicoes.push('a.criado_em >= ?');
+    parametros.push(de);
+  }
+  const ate = dataFiltro(filtros.ate, true);
+  if (ate) {
+    condicoes.push('a.criado_em <= ?');
+    parametros.push(ate);
+  }
+  const restricao = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
+
+  const [contagens] = await banco.execute(`
+    SELECT COUNT(a.id) AS total
+    FROM auditoria_superadmin a
+    ${restricao}
+  `, parametros);
+  const total = Number(contagens[0]?.total ?? 0);
+
+  const limite = inteiroPositivo(filtros.limite, LIMITE_AUDITORIA_PADRAO, LIMITE_AUDITORIA_MAXIMO);
+  const paginas = Math.max(1, Math.ceil(total / limite));
+  const pagina = Math.min(inteiroPositivo(filtros.pagina, 1), paginas);
+  const deslocamento = (pagina - 1) * limite;
+
+  /* LIMIT/OFFSET entram interpolados porque o protocolo preparado do MySQL não
+     aceita placeholder nessa posição. Os dois passam por inteiroPositivo antes,
+     então chegam aqui como inteiros já validados, nunca como texto do usuário. */
+  const [linhas] = await banco.execute(`
+    SELECT a.id, a.superadministrador_id, a.id_estabelecimento, a.acao,
+           a.detalhes_json, a.criado_em,
+           sa.nome AS superadministrador_nome, sa.usuario AS superadministrador_usuario,
+           e.nome_fantasia AS estabelecimento_nome, e.slug AS estabelecimento_slug
+    FROM auditoria_superadmin a
+    LEFT JOIN superadministradores sa ON sa.id = a.superadministrador_id
+    LEFT JOIN estabelecimentos e ON e.id_estabelecimento = a.id_estabelecimento
+    ${restricao}
+    ORDER BY a.criado_em DESC, a.id DESC
+    LIMIT ${limite} OFFSET ${deslocamento}
+  `, parametros);
+
+  return {
+    registros: linhas.map(mapearAuditoria),
+    paginacao: { pagina, limite, total, paginas }
+  };
+}
+
 export async function criarSuperadministradorInicial(banco, dados) {
   const nome = texto(dados.nome, 160);
   const usuario = texto(dados.usuario, 80).toLowerCase();
   const email = texto(dados.email, 160).toLowerCase();
   const senha = String(dados.senha ?? '');
-  if (!nome || !/^[a-z0-9._-]{3,80}$/.test(usuario) || !/^\S+@\S+\.\S+$/.test(email)) {
+  if (!nome || !REGEX_USUARIO.test(usuario) || !REGEX_EMAIL.test(email)) {
     throw new Error('Preencha nome, usuário e e-mail válidos para o superadministrador.');
   }
-  if (senha.length < 12) throw new Error('SUPERADMIN_PASSWORD deve ter pelo menos 12 caracteres.');
+  if (senha.length < TAMANHO_MINIMO_SENHA) {
+    throw new Error(`SUPERADMIN_PASSWORD deve ter pelo menos ${TAMANHO_MINIMO_SENHA} caracteres.`);
+  }
   const [linhas] = await banco.execute(`
     SELECT id FROM superadministradores
     WHERE LOWER(usuario) = LOWER(?) OR LOWER(email) = LOWER(?)
