@@ -1065,6 +1065,56 @@ test('não expõe detalhes internos quando o banco falha', async () => {
   }
 });
 
+test('CORS libera subdomínio do domínio principal e domínio personalizado cadastrado, mas recusa origem alheia', async () => {
+  const banco = {
+    async query() { return [[{ 1: 1 }]]; },
+    async execute(sql, parametros = []) {
+      if (sql.includes('FROM estabelecimentos')) {
+        const encontrado = parametros[0] === 'proprio.cliente.com.br';
+        return [encontrado ? [{ id_estabelecimento: 1 }] : []];
+      }
+      throw new Error(`Consulta inesperada no teste: ${sql}`);
+    }
+  };
+  const servidor = criarServidor({
+    banco,
+    pastaUploads: tmpdir(),
+    dominioPrincipal: 'exemplo.com',
+    corsOrigins: ['https://painel-fixo.exemplo.org']
+  });
+  await aguardarServidor(servidor, 0);
+  const base = `http://127.0.0.1:${servidor.address().port}`;
+
+  try {
+    const doSubdominio = await fetch(`${base}/api/saude`, {
+      headers: { Origin: 'https://loja1.exemplo.com' }
+    });
+    assert.equal(doSubdominio.status, 200);
+    assert.equal(doSubdominio.headers.get('access-control-allow-origin'), 'https://loja1.exemplo.com');
+
+    const doDominioPersonalizado = await fetch(`${base}/api/saude`, {
+      headers: { Origin: 'https://proprio.cliente.com.br' }
+    });
+    assert.equal(doDominioPersonalizado.status, 200);
+
+    const daListaFixa = await fetch(`${base}/api/saude`, {
+      headers: { Origin: 'https://painel-fixo.exemplo.org' }
+    });
+    assert.equal(daListaFixa.status, 200);
+
+    const semOrigin = await fetch(`${base}/api/saude`);
+    assert.equal(semOrigin.status, 200);
+
+    const deOrigemAlheia = await fetch(`${base}/api/saude`, {
+      headers: { Origin: 'https://site-nao-relacionado.com' }
+    });
+    assert.equal(deOrigemAlheia.status, 403);
+    assert.match((await deOrigemAlheia.json()).erro, /Origem não autorizada/);
+  } finally {
+    await fecharServidor(servidor);
+  }
+});
+
 
 test('superadministrador troca a própria senha e derruba as sessões antigas', async () => {
   const SENHA_ANTIGA = 'senha-super-antiga-1';

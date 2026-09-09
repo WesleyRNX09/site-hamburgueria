@@ -112,10 +112,13 @@ Regras importantes:
 - Use aspas no `.env` se uma senha possuir `#`, espaços ou caracteres que
   possam ser interpretados pelo formato do arquivo.
 - `VITE_API_URL` deve ficar vazio quando frontend e API usam a mesma origem.
-- `CORS_ORIGINS` aceita uma lista separada por vírgulas e exige origens HTTPS
-  exatas. Inclua a origem do painel global, cada subdomínio já publicado e
-  cada domínio personalizado; curingas não são aceitos pela implementação
-  atual. Ao cadastrar um novo domínio, atualize a lista e reinicie o processo.
+- `CORS_ORIGINS` aceita uma lista separada por vírgulas com origens HTTPS
+  exatas, mas é só um complemento: qualquer subdomínio de `DOMINIO_PRINCIPAL`
+  e qualquer `dominio_personalizado` já cadastrado em um estabelecimento são
+  liberados automaticamente. Cadastrar um estabelecimento novo pelo painel
+  superadmin já basta; não é preciso editar `CORS_ORIGINS` nem reiniciar o
+  processo. Use essa variável só para origens fora desses dois casos (ex.: um
+  painel administrativo hospedado em outro domínio).
 - `TENANT_DESENVOLVIMENTO` é usado em localhost e pelo comando de criação do
   administrador inicial. Ele não permite trocar o tenant de uma requisição
   remota.

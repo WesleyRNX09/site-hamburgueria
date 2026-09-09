@@ -157,10 +157,46 @@ function cabecalhosSeguranca(resposta) {
   }
 }
 
-function aplicarCors(requisicao, resposta, origensPermitidas) {
+function hostnameDaOrigem(origem) {
+  try {
+    return new URL(origem).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function origemDoDominioPrincipal(host, dominioPrincipal) {
+  const base = String(dominioPrincipal ?? '').trim().toLowerCase();
+  if (!base || !host) return false;
+  return host === base || host.endsWith(`.${base}`);
+}
+
+async function origemComDominioPersonalizado(banco, host) {
+  if (!host) return false;
+  const [linhas] = await banco.execute(`
+    SELECT id_estabelecimento FROM estabelecimentos
+    WHERE LOWER(dominio_personalizado) = ?
+    LIMIT 1
+  `, [host]);
+  return Boolean(linhas[0]);
+}
+
+/*
+  Além da lista fixa em CORS_ORIGINS, qualquer subdomínio do DOMINIO_PRINCIPAL e
+  qualquer dominio_personalizado já cadastrado são aceitos automaticamente. Sem
+  isso, todo estabelecimento novo exigiria editar variável de ambiente e reiniciar
+  o processo só para login e pedidos pararem de cair em "Origem não autorizada" —
+  o navegador manda Origin mesmo em requisição de mesma origem quando o método
+  não é GET/HEAD, então esse bloqueio pega justamente login, carrinho e pedido.
+*/
+async function aplicarCors(requisicao, resposta, { origensPermitidas, dominioPrincipal, banco }) {
   const origem = requisicao.headers.origin;
   if (!origem) return true;
-  if (!origensPermitidas.includes(origem)) return false;
+  const host = hostnameDaOrigem(origem);
+  const permitida = origensPermitidas.includes(origem)
+    || origemDoDominioPrincipal(host, dominioPrincipal)
+    || await origemComDominioPersonalizado(banco, host);
+  if (!permitida) return false;
   resposta.setHeader('Access-Control-Allow-Origin', origem);
   resposta.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
   resposta.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
@@ -1686,7 +1722,7 @@ export function criarServidor({
   return createServer(async (requisicao, resposta) => {
     try {
       resposta.configuracaoSeguranca = { producao };
-      if (!aplicarCors(requisicao, resposta, origensPermitidas)) {
+      if (!(await aplicarCors(requisicao, resposta, { origensPermitidas, dominioPrincipal, banco }))) {
         throw new ErroHttp(403, 'Origem não autorizada.');
       }
       const url = new URL(requisicao.url, 'http://localhost');
