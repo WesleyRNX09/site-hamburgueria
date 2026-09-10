@@ -272,6 +272,15 @@ function Home() {
   const bannerConfigurado = configuracao.banner && configuracao.banner !== bannerComErro
     ? configuracao.banner
     : banner;
+  /* Sem logo enviada, o circulo da identidade mostra as iniciais da loja:
+     o nome inteiro nao cabe e quebraria no meio da palavra. */
+  const iniciaisLoja = nomeExibicao
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((parte) => parte[0])
+    .join('')
+    .toUpperCase();
 
   useEffect(() => {
     if (!configuracao.banner) return undefined;
@@ -692,6 +701,48 @@ function Home() {
         style={{ backgroundImage: `url(${JSON.stringify(bannerConfigurado)})` }}
       >
         <div className={styles.conteudoBanner}>
+          {/* Identidade da loja no mobile: logo sobre a faixa da foto, nome e
+              os chips que decidem o pedido (status, horario, entrega, minimo).
+              No desktop tudo isso ja aparece no selo de status e no rodape. */}
+          <div className={styles.identidadeLoja}>
+            <div className={styles.identidadeLogo}>
+              <LogoEstabelecimento configuracao={configuracao} alternativa={iniciaisLoja} loading="lazy" />
+            </div>
+
+            <strong className={styles.identidadeNome}>{nomeExibicao}</strong>
+
+            {configuracao.endereco && (
+              <span className={styles.identidadeEndereco}>{configuracao.endereco}</span>
+            )}
+
+            <div className={styles.identidadeInfos}>
+              <span
+                className={`${styles.chipLoja} ${pedidosOnlineDisponiveis ? styles.chipAberto : styles.chipFechado}`}
+              >
+                <span className={styles.pontoStatus} aria-hidden="true" />
+                {statusCurto}
+              </span>
+
+              {horarioResumido && (
+                <span className={styles.chipLoja}>{horarioResumido}</span>
+              )}
+
+              {configuracao.entregaAtiva && configuracao.tempoEntrega && (
+                <span className={styles.chipLoja}>Entrega {configuracao.tempoEntrega}</span>
+              )}
+
+              {configuracao.retiradaAtiva && (
+                <span className={styles.chipLoja}>Retirada no local</span>
+              )}
+
+              {pedidoMinimo > 0 && (
+                <span className={styles.chipLoja}>
+                  Mínimo R$ {pedidoMinimo.toFixed(2).replace('.', ',')}
+                </span>
+              )}
+            </div>
+          </div>
+
           <div className={`${styles.statusLoja} ${pedidosOnlineDisponiveis ? styles.statusAberta : styles.statusFechada}`} role="status">
             <span className={styles.pontoStatus} aria-hidden="true" />
 
@@ -729,9 +780,9 @@ function Home() {
           <p className={styles.descricaoBanner}>
             {bannerSubtitulo || (
               <>
-                Carne grelhada na hora, cheddar cremoso,
+                Carne grelhada na hora, cheddar cremoso,{' '}
                 <br className={styles.quebraDesktop} />
-                bacon crocante e ingredientes sempre frescos
+                bacon crocante e ingredientes sempre frescos{' '}
                 <br className={styles.quebraDesktop} />
                 para uma experiência irresistível.
               </>

@@ -297,6 +297,12 @@
   padding: 4rem 3rem 5rem;
 }
 
+/* Identidade da loja (logo, nome e chips): existe so no mobile, onde a
+   pagina segue o formato de cardapio digital. Ver @media (max-width: 650px). */
+.identidadeLoja {
+  display: none;
+}
+
 /* Chip escuro: a cor do status vira um ponto, nao um banho de cor no chip
    inteiro — assim o selo assenta na foto e no sistema escuro/amarelo. */
 .statusLoja {
@@ -3205,199 +3211,6 @@
   }
 }
 
-/* =========================
-   CARDAPIO NO MOBILE: LISTA EM LINHAS
-
-   Cards grandes empilhados obrigavam a rolar muito para comparar itens.
-   Abaixo de 650px cada produto vira uma linha (texto a esquerda, miniatura
-   a direita) separada por um filete, no padrao dos apps de delivery:
-   mais itens por tela e leitura em varredura vertical.
-
-   A linha inteira e o alvo de toque (.aberturaCardProduto); o botao
-   "Adicionar" sai e da lugar ao "+" sobre a miniatura.
-========================= */
-
-@media (max-width: 650px) {
-  .listaProdutos {
-    margin-top: 2rem;
-
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .cardProduto {
-    position: relative;
-
-    height: auto;
-    max-width: none;
-    margin: 0;
-    padding: 1.4rem 0.2rem;
-
-    grid-template-columns: minmax(0, 1fr) 8.8rem;
-    column-gap: 1.4rem;
-    align-items: center;
-
-    background: none;
-    border: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 0;
-
-    box-shadow: none;
-  }
-
-  /* Sem elevacao/zoom no toque: o feedback e o realce da propria linha. */
-  .cardProduto:hover {
-    transform: none;
-    border-color: rgba(255, 255, 255, 0.08);
-    box-shadow: none;
-  }
-
-  .cardProduto:hover .imagemProduto {
-    transform: none;
-    filter: none;
-  }
-
-  .cardProduto:has(.aberturaCardProduto:active) {
-    background: rgba(255, 255, 255, 0.04);
-  }
-
-  .aberturaCardProduto:focus-visible {
-    outline: 2px solid var(--cor-principal);
-    outline-offset: -2px;
-  }
-
-  /* Miniatura a direita, texto a esquerda (a imagem vem antes no DOM). */
-  .areaImagemProduto {
-    grid-column: 2;
-    grid-row: 1;
-
-    width: 8.8rem;
-    height: 8.8rem;
-
-    border-radius: 1rem;
-  }
-
-  /* O degrade lateral so fazia sentido no card largo. */
-  .areaImagemProduto::after {
-    display: none;
-  }
-
-  .informacoesProduto {
-    grid-column: 1;
-    grid-row: 1;
-
-    min-height: 0;
-    padding: 0;
-
-    justify-content: flex-start;
-    gap: 0.5rem;
-  }
-
-  .informacoesProdutoTitulo {
-    font-size: 1.7rem;
-    font-weight: 700;
-    line-height: 1.3;
-  }
-
-  .informacoesProduto p {
-    color: #b0b0b0;
-    font-size: 1.4rem;
-    font-weight: 400;
-    line-height: 1.45;
-  }
-
-  /* O selo sai de cima da miniatura (pequena demais) e vira um chip
-     acima do nome. */
-  .cardProduto .seloProduto {
-    position: static;
-
-    width: fit-content;
-    min-width: 0;
-    max-width: 100%;
-    height: 2.4rem;
-    margin-bottom: 0.2rem;
-    padding: 0 0.9rem;
-
-    font-size: 1.2rem;
-
-    box-shadow: none;
-  }
-
-  .rodapeProduto {
-    margin-top: 0.4rem;
-
-    align-items: baseline;
-    justify-content: flex-start;
-    gap: 0.6rem;
-  }
-
-  .precoProduto {
-    flex: 0 0 auto;
-    min-width: 0;
-
-    flex-direction: row;
-    align-items: baseline;
-    gap: 0.5rem;
-  }
-
-  .precoProduto span {
-    margin-bottom: 0;
-    font-size: 1.2rem;
-  }
-
-  .precoProduto strong {
-    color: var(--cor-principal);
-    font-size: 1.9rem;
-    white-space: nowrap;
-  }
-
-  /* Substituido pelo alvo de toque da linha + indicador "+". */
-  .botaoAdicionar {
-    display: none;
-  }
-
-  .indicadorAdicionar {
-    position: absolute;
-    right: 0.4rem;
-    bottom: 0.4rem;
-    z-index: 2;
-
-    width: 2.4rem;
-    height: 2.4rem;
-
-    display: grid;
-    place-items: center;
-
-    color: var(--cor-fundo);
-    font-size: 1.8rem;
-    font-weight: 800;
-    line-height: 1;
-
-    background-color: var(--cor-principal);
-    border: 2px solid var(--cor-card);
-    border-radius: 50%;
-  }
-
-  .aberturaCardProduto {
-    position: absolute;
-    inset: 0;
-    z-index: 3;
-
-    display: block;
-
-    padding: 0;
-
-    background: none;
-    border: 0;
-
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-}
-
 @media (max-width: 750px) {
 
   .overlayModalProduto {
@@ -3720,5 +3533,460 @@
 
   .statusHorario {
     max-width: 22rem;
+  }
+}
+
+
+/* =========================
+   CARDAPIO NO MOBILE
+
+   Abaixo de 650px a pagina segue o padrao dos cardapios digitais: faixa
+   curta com a foto, identidade da loja logo abaixo (logo, nome e chips de
+   status/entrega/minimo), filtro de categorias fixo no topo e produtos em
+   cartoes compactos — mais itens por tela e leitura em varredura vertical.
+
+   A linha inteira e o alvo de toque (.aberturaCardProduto); o botao
+   "Adicionar" sai e da lugar ao "+" sobre a miniatura.
+========================= */
+
+@media (max-width: 650px) {
+  /* --- Faixa da foto: mais curta, para a identidade subir para a dobra --- */
+
+  .banner {
+    background-size: auto 23svh;
+    background-position: 50% 5rem;
+  }
+
+  .banner::before {
+    background: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.6) 0,
+      rgba(0, 0, 0, 0.15) 10svh,
+      rgba(0, 0, 0, 0.65) 21svh,
+      var(--cor-fundo) 28svh
+    );
+  }
+
+  .conteudoBanner {
+    padding-top: calc(23svh - 3.5rem);
+    padding-bottom: 2rem;
+
+    text-align: center;
+  }
+
+  /* Os chips da identidade ja dizem status, horario e entrega. */
+  .statusLoja {
+    display: none;
+  }
+
+  .identidadeLoja {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    margin-bottom: 2.6rem;
+  }
+
+  /* Sem logo enviada, o circulo mostra as iniciais da loja (ver JSX). */
+  .identidadeLogo {
+    width: 8.6rem;
+    height: 8.6rem;
+    padding: 0.8rem;
+
+    display: grid;
+    place-items: center;
+
+    color: var(--cor-principal);
+    font-size: 3rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.05em;
+    text-align: center;
+    overflow: hidden;
+
+    background: var(--cor-card);
+    border: 2px solid rgb(from var(--cor-principal) r g b / 0.7);
+    border-radius: 50%;
+
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
+  }
+
+  .identidadeLogo img {
+    width: 100%;
+    height: 100%;
+
+    object-fit: cover;
+    border-radius: 50%;
+  }
+
+  .identidadeNome {
+    margin-top: 1.2rem;
+
+    color: var(--cor-texto);
+    font-size: 2.5rem;
+    font-weight: 800;
+    line-height: 1.15;
+  }
+
+  .identidadeEndereco {
+    max-width: 30rem;
+    margin-top: 0.5rem;
+
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 1.25rem;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  .identidadeInfos {
+    margin-top: 1.4rem;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+  }
+
+  .chipLoja {
+    height: 3rem;
+    padding: 0 1.2rem;
+
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 1.25rem;
+    font-weight: 600;
+    white-space: nowrap;
+
+    background: var(--cor-card);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+  }
+
+  .chipAberto {
+    color: #6ff0a6;
+    border-color: rgba(66, 217, 129, 0.32);
+  }
+
+  .chipFechado {
+    color: #ff9a9a;
+    border-color: rgba(255, 119, 119, 0.32);
+  }
+
+  .chipLoja .pontoStatus {
+    width: 0.8rem;
+    height: 0.8rem;
+    margin: 0;
+
+    box-shadow: none;
+  }
+
+  /* --- Chamada da loja: vira uma assinatura curta sob a identidade --- */
+
+  .textoPequeno {
+    margin-bottom: 0.6rem;
+    font-size: 1.15rem;
+    letter-spacing: 0.08em;
+  }
+
+  .conteudoBanner h1 {
+    font-size: 2.3rem;
+    letter-spacing: -0.02rem;
+  }
+
+  .descricaoBanner {
+    max-width: 34rem;
+    margin: 1rem auto 0;
+
+    font-size: 1.35rem;
+    font-weight: 500;
+  }
+
+  .botoesBanner {
+    margin-top: 2rem;
+    align-items: center;
+  }
+
+  /* O carrinho ja mora no cabecalho: sobra o botao que leva ao cardapio. */
+  .botaoPrincipal {
+    display: none;
+  }
+
+  .botoesBanner .botaoSecundario {
+    max-width: 26rem;
+    margin: 0 auto;
+  }
+
+  /* --- Cardapio --- */
+
+  .cardapio {
+    min-height: auto;
+    padding-top: 2.5rem;
+    padding-bottom: 5rem;
+  }
+
+  .cardapio h2 {
+    font-size: 2.4rem;
+  }
+
+  .cardapio > p {
+    margin-top: 0.6rem;
+    font-size: 1.4rem;
+  }
+
+  /* Sem promocao cadastrada a secao inteira sai: um bloco vazio no meio
+     do cardapio parece defeito. No desktop o aviso continua. */
+  .areaPromocoes:has(.semResultados) {
+    display: none;
+  }
+
+  .topoPromocoes h3 {
+    font-size: 2rem;
+  }
+
+  /* Destaque compacto: a foto encolhe e a descricao fica em duas linhas,
+     entao foto, preco e acao cabem juntos sem empurrar o cardapio. */
+  .cardPromocao {
+    flex: 0 0 78%;
+    min-height: 0;
+  }
+
+  .imagemPromocao {
+    min-height: 12rem;
+  }
+
+  .conteudoPromocao {
+    padding: 1.2rem;
+  }
+
+  .conteudoPromocao h4 {
+    margin: 0.3rem 0 0.5rem;
+    font-size: 1.8rem;
+  }
+
+  .conteudoPromocao p {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+
+    font-size: 1.3rem;
+  }
+
+  .precoPromocao {
+    margin-top: 1rem;
+
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.7rem;
+  }
+
+  .conteudoPromocao button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Filtro fixo abaixo do cabecalho: a categoria escolhida continua a
+     vista enquanto a lista rola. */
+  .categorias {
+    position: sticky;
+    top: 5rem;
+    z-index: 900;
+
+    margin-bottom: 1.8rem;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+
+    background: color-mix(in srgb, var(--cor-fundo) 92%, transparent);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .listaProdutos {
+    margin-top: 0;
+
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .cardProduto {
+    position: relative;
+
+    height: auto;
+    max-width: none;
+    margin: 0;
+    padding: 1.1rem;
+
+    grid-template-columns: minmax(0, 1fr) 9.4rem;
+    column-gap: 1.2rem;
+    align-items: center;
+
+    background: var(--cor-card);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 1.4rem;
+
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  }
+
+  /* Sem elevacao/zoom no toque: o feedback e o realce do proprio cartao. */
+  .cardProduto:hover {
+    transform: none;
+    border-color: rgba(255, 255, 255, 0.07);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  }
+
+  .cardProduto:hover .imagemProduto {
+    transform: none;
+    filter: none;
+  }
+
+  .cardProduto:has(.aberturaCardProduto:active) {
+    background: var(--cor-card-elevado);
+    border-color: rgb(from var(--cor-principal) r g b / 0.4);
+  }
+
+  .aberturaCardProduto:focus-visible {
+    outline: 2px solid var(--cor-principal);
+    outline-offset: -2px;
+    border-radius: 1.4rem;
+  }
+
+  /* Miniatura a direita, texto a esquerda (a imagem vem antes no DOM). */
+  .areaImagemProduto {
+    grid-column: 2;
+    grid-row: 1;
+
+    width: 9.4rem;
+    height: 9.4rem;
+
+    border-radius: 1.1rem;
+  }
+
+  /* O degrade lateral so fazia sentido no card largo. */
+  .areaImagemProduto::after {
+    display: none;
+  }
+
+  .informacoesProduto {
+    grid-column: 1;
+    grid-row: 1;
+
+    min-height: 0;
+    padding: 0;
+
+    justify-content: flex-start;
+    gap: 0.5rem;
+  }
+
+  .informacoesProdutoTitulo {
+    font-size: 1.7rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  /* Duas linhas por item: os cartoes ficam com a mesma altura e a lista
+     inteira se le de relance. */
+  .informacoesProduto p {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+
+    color: #b0b0b0;
+    font-size: 1.35rem;
+    font-weight: 400;
+    line-height: 1.45;
+  }
+
+  /* O selo sai de cima da miniatura (pequena demais) e vira um chip
+     acima do nome. */
+  .cardProduto .seloProduto {
+    position: static;
+
+    width: fit-content;
+    min-width: 0;
+    max-width: 100%;
+    height: 2.4rem;
+    margin-bottom: 0.2rem;
+    padding: 0 0.9rem;
+
+    font-size: 1.2rem;
+
+    box-shadow: none;
+  }
+
+  .rodapeProduto {
+    margin-top: 0.4rem;
+
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: 0.6rem;
+  }
+
+  .precoProduto {
+    flex: 0 0 auto;
+    min-width: 0;
+
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  .precoProduto span {
+    margin-bottom: 0;
+    font-size: 1.2rem;
+  }
+
+  .precoProduto strong {
+    color: var(--cor-principal);
+    font-size: 1.9rem;
+    white-space: nowrap;
+  }
+
+  /* Substituido pelo alvo de toque da linha + indicador "+". */
+  .botaoAdicionar {
+    display: none;
+  }
+
+  .indicadorAdicionar {
+    position: absolute;
+    right: 0.8rem;
+    bottom: 0.8rem;
+    z-index: 2;
+
+    width: 2.8rem;
+    height: 2.8rem;
+
+    display: grid;
+    place-items: center;
+
+    color: var(--cor-fundo);
+    font-size: 1.8rem;
+    font-weight: 800;
+    line-height: 1;
+
+    background-color: var(--cor-principal);
+    border: 2px solid var(--cor-card);
+    border-radius: 50%;
+  }
+
+  .aberturaCardProduto {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+
+    display: block;
+
+    padding: 0;
+
+    background: none;
+    border: 0;
+
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
 }
