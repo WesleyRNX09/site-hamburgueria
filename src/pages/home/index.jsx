@@ -241,29 +241,12 @@ function Home() {
   const pedidosOnlineDisponiveis = Boolean(
     configuracao.lojaAberta && (configuracao.entregaAtiva || configuracao.retiradaAtiva)
   );
-  const formasAtendimento = [
-    configuracao.entregaAtiva ? 'delivery' : null,
-    configuracao.retiradaAtiva ? 'retirada' : null,
-    configuracao.atendimentoGarcomAtivo ? 'salão' : null
-  ].filter(Boolean);
-  const resumoAtendimento = formasAtendimento.length
-    ? `Atendimento: ${formasAtendimento.join(', ')}`
-    : 'Nenhuma modalidade disponível no momento.';
-  const statusCompleto = pedidosOnlineDisponiveis
-    ? 'Aberta para pedidos'
-    : configuracao.lojaAberta
-      ? 'Pedidos online indisponíveis'
-      : 'Fechada no momento';
   const statusCurto = pedidosOnlineDisponiveis
     ? 'Aberto'
     : configuracao.lojaAberta
       ? 'Só consulta'
       : 'Fechado';
   const gradeDeHorarios = algumDiaAberto(configuracao.horarios);
-  const horarioResumido = String(configuracao.horarioFuncionamento ?? '')
-    .split('\n')
-    .map((linha) => linha.trim())
-    .find(Boolean) || '';
   const podeFinalizar = pedidosOnlineDisponiveis && minimoAtingido;
   const nomeExibicao = configuracao.nomeLoja || 'Cardápio online';
   const bannerTitulo = configuracao.bannerTitulo?.trim() || '';
@@ -740,16 +723,27 @@ function Home() {
         style={{ backgroundImage: `url(${JSON.stringify(bannerConfigurado)})` }}
       >
         <div className={styles.conteudoBanner}>
-          {/* Identidade da loja no mobile: logo sobre a faixa da foto, nome e
-              os chips que decidem o pedido. O horario nao ocupa um chip fixo:
-              fica dentro do status, que abre a grade completa da semana.
-              No desktop tudo isso ja aparece no selo de status e no rodape. */}
+          {/* Identidade da loja: logo sobre a faixa da foto, nome, chamada
+              configuravel e os dados que decidem o pedido. O horario nao ocupa
+              um chip fixo: fica dentro do status, que abre a grade da semana.
+              Vale nos dois tamanhos — quem abre um cardapio quer saber de que
+              loja ele e, nao ler uma chamada de marketing. */}
           <div className={styles.identidadeLoja} ref={horariosRef}>
             <div className={styles.identidadeLogo}>
               <LogoEstabelecimento configuracao={configuracao} alternativa={iniciaisLoja} loading="lazy" />
             </div>
 
             <strong className={styles.identidadeNome}>{nomeExibicao}</strong>
+
+            {/* Os textos configuraveis do banner viram a chamada curta da loja:
+                continuam sob controle do administrador, sem o bloco de
+                marketing que empurrava o cardapio para fora da tela. */}
+            {(bannerTitulo || bannerSubtitulo) && (
+              <p className={styles.identidadeChamada}>
+                {bannerTitulo && <strong>{bannerTitulo}</strong>}
+                {bannerSubtitulo && <span>{bannerSubtitulo}</span>}
+              </p>
+            )}
 
             {configuracao.endereco && (
               <span className={styles.identidadeEndereco}>{configuracao.endereco}</span>
@@ -793,6 +787,14 @@ function Home() {
               )}
             </div>
 
+            <button
+              type="button"
+              className={styles.identidadeAcao}
+              onClick={() => irParaSecao(bannerBotaoDestino)}
+            >
+              {bannerBotaoTexto}
+            </button>
+
             {/* Fora da fila de chips: a fila rola na horizontal e recortaria
                 o painel se ele morasse dentro dela. */}
             {horariosAbertos && (
@@ -825,70 +827,6 @@ function Home() {
             )}
           </div>
 
-          <div className={`${styles.statusLoja} ${pedidosOnlineDisponiveis ? styles.statusAberta : styles.statusFechada}`} role="status">
-            <span className={styles.pontoStatus} aria-hidden="true" />
-
-            <strong className={styles.statusRotuloLongo}>{statusCompleto}</strong>
-            <strong className={styles.statusRotuloCurto}>{statusCurto}</strong>
-
-            {horarioResumido && (
-              <span className={styles.statusHorario}>{horarioResumido}</span>
-            )}
-
-            <span className={styles.statusDetalhe}>{pedidosOnlineDisponiveis ? `${resumoAtendimento} • Estimativa: ${configuracao.tempoEntrega}` : 'O cardápio continua disponível para consulta.'}</span>
-          </div>
-          <span className={styles.textoPequeno}>
-            🔥 FEITO NA HORA
-          </span>
-
-          <h1>
-            {bannerTitulo ? (
-              <span className={styles.tituloAmarelo}>
-                {bannerTitulo}
-              </span>
-            ) : (
-              <>
-                <span className={styles.tituloBranco}>
-                  O Verdadeiro
-                </span>
-
-                <span className={styles.tituloAmarelo}>
-                  Hambúrguer Artesanal
-                </span>
-              </>
-            )}
-          </h1>
-
-          <p className={styles.descricaoBanner}>
-            {bannerSubtitulo || (
-              <>
-                Carne grelhada na hora, cheddar cremoso,{' '}
-                <br className={styles.quebraDesktop} />
-                bacon crocante e ingredientes sempre frescos{' '}
-                <br className={styles.quebraDesktop} />
-                para uma experiência irresistível.
-              </>
-            )}
-          </p>
-
-          <div className={styles.botoesBanner}>
-            <button
-              type="button"
-              className={styles.botaoPrincipal}
-              onClick={abrirCarrinho}
-            >
-              Peça agora
-            </button>
-
-            <button
-              type="button"
-              className={styles.botaoSecundario}
-              onClick={() => irParaSecao(bannerBotaoDestino)}
-            >
-              {bannerBotaoTexto}
-            </button>
-
-          </div>
         </div>
       </section>
 
@@ -1080,9 +1018,9 @@ function Home() {
 
         </div>
 
-        {/* Mobile: a fila de chips exigia arrastar de lado para achar uma
-            categoria. No lugar dela, um botao que abre a lista inteira.
-            No desktop a fila continua, porque ali ela cabe sem rolagem. */}
+        {/* A fila de chips exigia arrastar de lado para achar uma categoria e,
+            com muitas categorias, escondia a maior parte delas. No lugar dela,
+            um botao unico que abre a lista inteira. */}
         <div className={styles.seletorCategorias} ref={listaCategoriasRef}>
           <button
             type="button"
@@ -1128,24 +1066,6 @@ function Home() {
               ))}
             </ul>
           )}
-        </div>
-
-        <div className={styles.categorias} role="group" aria-label="Filtrar por categoria">
-          {categorias.map((categoria) => (
-            <button
-              key={categoria}
-              type="button"
-              onClick={() => setCategoriaAtiva(categoria)}
-              aria-pressed={categoriaAtiva === categoria}
-              className={`${styles.botaoCategoria} ${
-                categoriaAtiva === categoria
-                  ? styles.categoriaAtiva
-                  : ''
-              }`}
-            >
-              {categoria}
-            </button>
-          ))}
         </div>
 
         {gruposDeProdutos.map((grupo) => (

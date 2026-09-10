@@ -165,32 +165,6 @@
   flex-shrink: 0;
 }
 
-.botaoPrincipal,
-.botaoSecundario {
-  width: 21rem;
-  min-height: 5rem;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  font-family: inherit; /* ADICIONE ISSO */
-  font-size: 1.7rem;
-  font-weight: 700;
-  line-height: 1;
-
-  text-decoration: none;
-
-  border-radius: 2rem;
-
-  cursor: pointer;
-
-  transition:
-    transform 0.2s ease,
-    background-color 0.2s ease,
-    color 0.2s ease;
-}
-
 .botaoCarrinho {
   position: relative;
 
@@ -227,230 +201,384 @@
    BANNER
 ========================= */
 
+/* A foto deixa de ser um banner de tela cheia e vira uma faixa arredondada
+   no topo: o cardapio, que e o que o cliente veio ver, passa a caber na
+   primeira tela. Em vez de pintar a foto no proprio <section>, ela e pintada
+   no ::before — assim da para centralizar, limitar a largura e arredondar. */
 .banner {
   position: relative;
 
   width: 100%;
-  min-height: 100vh;
-  min-height: 100svh;
 
-  display: flex;
-  align-items: center;
+  display: block;
+
+  /* abaixo do cabecalho fixo (7rem), que aqui nao tem fundo proprio */
+  padding: 9rem clamp(2rem, 5vw, 6rem) 0;
 
   background-color: var(--cor-fundo);
-  background-size: cover;
-  /* a foto tem espaco negativo a esquerda: deslocar para 62% deixa o
-     hamburguer inteiro na metade direita, livre do texto */
-  background-position: 62% center;
+  background-position: center;
   background-repeat: no-repeat;
+  /* a imagem em si e herdada pelo ::before; aqui ela nao e desenhada */
+  background-size: 0 0;
 }
 
-/* Escurece o lado esquerdo para o texto aparecer */
 .banner::before {
   content: "";
 
-  position: absolute;
-  inset: 0;
-  z-index: 1;
+  position: static;
 
-  background: linear-gradient(
-    90deg,
-    rgba(0, 0, 0, 0.95) 0%,
-    rgba(0, 0, 0, 0.75) 35%,
-    rgba(0, 0, 0, 0.2) 65%,
-    transparent 100%
-  );
-
-  pointer-events: none;
-}
-
-/* Mistura o final do banner com o fundo da página */
-.banner::after {
-  content: "";
-
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  z-index: 1;
+  display: block;
 
   width: 100%;
-  height: 10rem;
+  max-width: 1280px;
+  height: clamp(22rem, 26vw, 32rem);
+  margin: 0 auto;
 
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    var(--cor-fundo)
-  );
+  background-image: inherit;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+
+  border-radius: 1.6rem;
 
   pointer-events: none;
 }
 
+/* Acima da barra de categorias (900): o painel de horarios nasce aqui
+   dentro e, num nivel mais baixo, a barra passaria por cima dele. Fica
+   abaixo do cabecalho (1000). */
 .conteudoBanner {
   position: relative;
-  z-index: 2;
+  z-index: 960;
 
   width: 100%;
-  max-width: 1500px;
+  max-width: 1280px;
 
   margin: 0 auto;
-  padding: 4rem 3rem 5rem;
+  padding: 1.8rem 0 3rem;
 }
 
-/* Identidade da loja (logo, nome e chips): existe so no mobile, onde a
-   pagina segue o formato de cardapio digital. Ver @media (max-width: 650px). */
+/* =========================
+   IDENTIDADE DA LOJA
+
+   Logo sobre a faixa da foto, nome, chamada configuravel e a linha com
+   status e tempo de entrega. Vale nos dois tamanhos de tela: quem abre um
+   cardapio quer saber de que loja ele e, se esta aberta e em quanto tempo
+   chega — nao ler uma chamada de marketing.
+
+   Aqui a identidade fica lado a lado com a logo; no mobile ela vira uma
+   coluna centralizada (ver @media (max-width: 650px)).
+========================= */
+
 .identidadeLoja {
-  display: none;
+  position: relative;
+
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "logo nome     acao"
+    "logo chamada  acao"
+    "logo endereco acao"
+    "logo meta     acao";
+  column-gap: 2.6rem;
+  row-gap: 0.4rem;
+
+  text-align: left;
+}
+
+/* Sem logo enviada, o circulo mostra as iniciais da loja (ver JSX). */
+.identidadeLogo {
+  grid-area: logo;
+  align-self: start;
+
+  width: 13rem;
+  height: 13rem;
+  margin-top: -8rem;
+  padding: 1rem;
+
+  display: grid;
+  place-items: center;
+
+  color: var(--cor-principal);
+  font-size: 4.4rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  text-align: center;
+  overflow: hidden;
+
+  background: var(--cor-card);
+  border: 2px solid rgb(from var(--cor-principal) r g b / 0.7);
+  border-radius: 50%;
+
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
+}
+
+.identidadeLogo img {
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.identidadeNome {
+  grid-area: nome;
+
+  color: var(--cor-texto);
+  font-size: 3.4rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+/* Uma linha por texto configurado: o administrador continua no controle da
+   chamada, sem que ela vire um bloco que empurra o cardapio tela abaixo. */
+.identidadeChamada {
+  grid-area: chamada;
+
+  margin: 0;
+
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.identidadeChamada strong {
+  color: var(--cor-principal);
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.identidadeChamada span {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+
+.identidadeEndereco {
+  grid-area: endereco;
+
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 1.4rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.identidadeInfos {
+  grid-area: meta;
+  margin-top: 0.8rem;
+
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.9rem 1.6rem;
+}
+
+.identidadeAcao {
+  grid-area: acao;
+  align-self: center;
+
+  min-height: 4.8rem;
+  padding: 0 2.6rem;
+
+  color: var(--cor-sobre-principal);
+  font-family: inherit;
+  font-size: 1.6rem;
+  font-weight: 700;
+  white-space: nowrap;
+
+  background-color: var(--cor-principal);
+  border: 2px solid var(--cor-principal);
+  border-radius: 2rem;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.identidadeAcao:hover {
+  color: var(--cor-principal);
+
+  background-color: transparent;
+  transform: translateY(-2px);
+}
+
+/* Rotulo discreto + valor em destaque, sem borda em volta: fechar cada dado
+   em um chip ocupava largura demais para caber ao lado do status. */
+.infoLoja {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+
+  white-space: nowrap;
+}
+
+.infoLoja span {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.infoLoja strong {
+  color: var(--cor-texto);
+  font-size: 1.4rem;
+  font-weight: 700;
 }
 
 /* Chip escuro: a cor do status vira um ponto, nao um banho de cor no chip
-   inteiro — assim o selo assenta na foto e no sistema escuro/amarelo. */
-.statusLoja {
+   inteiro — assim o selo assenta no sistema escuro/amarelo. */
+.chipLoja {
+  flex: 0 0 auto;
+
+  height: 3.8rem;
+  padding: 0 1.4rem;
+
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 0.4rem 1rem;
-  margin-bottom: 1.6rem;
-  max-width: 100%;
+  gap: 0.6rem;
 
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 1.35rem;
+  font-weight: 600;
+  white-space: nowrap;
+
+  background: var(--cor-card);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
-  padding: 0.7rem 1.4rem;
-
-  background: rgba(10, 10, 10, 0.72);
-  backdrop-filter: blur(8px);
-
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 1.4rem;
-  line-height: 1.25;
 }
 
-.statusLoja strong {
-  color: var(--cor-texto);
-  font-weight: 800;
-  letter-spacing: 0.02em;
+/* O status e o acesso aos horarios da semana. */
+.chipStatus {
+  min-width: 0;
+
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.chipAberto {
+  color: #6ff0a6;
+  border-color: rgba(66, 217, 129, 0.32);
+}
+
+.chipFechado {
+  color: #ff9a9a;
+  border-color: rgba(255, 119, 119, 0.32);
 }
 
 .pontoStatus {
   width: 0.9rem;
   height: 0.9rem;
   flex: 0 0 auto;
-  margin-right: -0.4rem;
 
   border-radius: 50%;
   background: currentColor;
 }
 
-.statusAberta .pontoStatus {
-  color: #42d981;
-  box-shadow: 0 0 0 0.4rem rgba(66, 217, 129, 0.18);
-}
-
-.statusFechada .pontoStatus {
-  color: #ff7777;
-  box-shadow: 0 0 0 0.4rem rgba(255, 119, 119, 0.18);
-}
-
-/* Versao curta (status + horario) so aparece no mobile; ver media query. */
-.statusRotuloCurto,
-.statusHorario {
-  display: none;
-}
-
-.textoPequeno {
-  display: block;
-  margin-bottom: 0.7rem;
-
-  color: var(--cor-principal);
-  font-size: 1.25rem;
-  font-weight: 800;
-}
-
-.conteudoBanner h1 {
-  max-width: 1000px;
+.chipLoja .pontoStatus {
+  width: 0.8rem;
+  height: 0.8rem;
   margin: 0;
 
-  font-size: clamp(4rem, 5.5vw, 6rem);
-  font-weight: 800;
-  line-height: 1.05;
-  letter-spacing: -0.08rem;
+  box-shadow: none;
 }
 
-.tituloBranco,
-.tituloAmarelo {
+.setaChip {
+  width: 1.4rem;
+  height: 1.4rem;
+
+  transition: transform 0.2s ease;
+}
+
+.setaChipAberta {
+  transform: rotate(180deg);
+}
+
+/* Fora da linha de dados: ela pode quebrar em duas e recortaria o painel. */
+.painelHorarios {
+  position: absolute;
+  top: 100%;
+  z-index: 950;
+
+  width: min(30rem, calc(100vw - 3rem));
+  margin-top: 0.9rem;
+  padding: 1.4rem 1.6rem;
+
+  text-align: left;
+
+  background: var(--cor-card-elevado);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1.2rem;
+
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+}
+
+.tituloHorarios {
   display: block;
-}
+  padding-bottom: 1rem;
 
-.tituloBranco {
-  color: #D0D0D0;
-}
-
-.tituloAmarelo {
   color: var(--cor-principal);
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.descricaoBanner {
-  width: 100%;
-  max-width: 600px;
+.painelHorarios ul {
+  margin: 0;
+  padding: 0;
 
-  margin-top: 24px;
-
-  color: #E0E0E0;
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1.45;
+  list-style: none;
 }
 
-.botoesBanner {
-  margin-top: 4.5rem;
+.painelHorarios li {
+  padding: 0.7rem 0;
 
   display: flex;
-  align-items: center;
-  gap: 2rem;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.2rem;
 }
 
-.botaoPrincipal,
-.botaoSecundario {
-  width: 21rem;
-  min-height: 5rem;
+.painelHorarios li + li {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
 
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  font-size: 1.7rem;
+.painelHorarios li span {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.3rem;
   font-weight: 700;
-  text-decoration: none;
-
-  border-radius: 2rem;
-
-  transition:
-    transform 0.2s ease,
-    background-color 0.2s ease,
-    color 0.2s ease;
+  text-transform: uppercase;
 }
 
-.botaoPrincipal {
-  color: var(--cor-fundo);
-  background-color: var(--cor-principal);
-  border: 2px solid var(--cor-principal);
+.painelHorarios li strong {
+  color: var(--cor-texto);
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
-.botaoPrincipal:hover {
-  background-color: var(--cor-principal-clara);
-  transform: translateY(-3px);
+.diaFechado {
+  color: rgba(255, 255, 255, 0.38);
+  font-weight: 600;
 }
 
-.botaoSecundario {
-  color: var(--cor-principal);
-  background-color: rgba(0, 0, 0, 0.25);
-  border: 2px solid var(--cor-principal);
-}
+.horarioLivre {
+  margin: 1rem 0 0;
 
-.botaoSecundario:hover {
-  color: var(--cor-fundo);
-  background-color: var(--cor-principal);
-  transform: translateY(-3px);
+  color: var(--cor-texto);
+  font-size: 1.4rem;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: pre-line;
 }
 
 /* =========================
@@ -458,9 +586,9 @@
 ========================= */
 .areaPromocoes {
   width: 100%;
-  max-width: 1450px;
+  max-width: 1280px;
 
-  margin: 3rem auto 5rem;
+  margin: 3rem auto 4rem;
 
   text-align: left;
   scroll-margin-top: 9rem;
@@ -826,10 +954,10 @@
    CARDÁPIO
 ========================= */
 
+/* Mesma faixa util do banner: cardapio e foto alinham pela mesma coluna. */
 .cardapio {
   width: 100%;
-  min-height: 100vh;
-  padding: 6rem 22rem 8rem;
+  padding: 1rem clamp(2rem, 5vw, 6rem) 8rem;
   margin: 0 auto;
 
   color: var(--cor-texto);
@@ -849,13 +977,13 @@
   margin: 0;
 
   color: var(--cor-principal);
-  font-size: 3.5rem;
+  font-size: 2.6rem;
   font-weight: 800;
 }
 
-.cardapio p { 
+.cardapio p {
   color: #d0d0d0;
-  font-size: 2rem;
+  font-size: 1.6rem;
   font-weight: 500;
 }
 
@@ -867,65 +995,124 @@
   text-align: center;
 }
 
-/* Botao unico com a lista suspensa de categorias: existe so no mobile, onde
-   a fila de chips nao cabe na tela. Ver @media (max-width: 650px). */
+/* Filtro de categorias: um botao que abre a lista inteira, no lugar da fila
+   de chips. Com muitas categorias a fila escondia a maior parte delas atras
+   de uma rolagem horizontal — aqui todas aparecem de uma vez. Fica fixo
+   abaixo do cabecalho, entao a categoria escolhida continua a vista. */
 .seletorCategorias {
-  display: none;
-}
+  position: sticky;
+  top: 7rem;
+  z-index: 900;
 
-.categorias {
   width: 100%;
-  max-width: 1400px;
+  max-width: 1280px;
+  margin: 0 auto 1.5rem;
+  padding: 1.2rem 0;
 
-  margin: 0 auto 4rem;
+  text-align: left;
 
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-
-  flex-wrap: wrap;
+  background: color-mix(in srgb, var(--cor-fundo) 92%, transparent);
+  backdrop-filter: blur(12px);
 }
 
-.botaoCategoria {
-  flex: 0 0 auto;
-  height: 3.8rem;
+.botaoListaCategorias {
+  min-width: 26rem;
+  min-height: 4.6rem;
   padding: 0 1.8rem;
 
   display: inline-flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 1.2rem;
 
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--cor-texto);
+  font-family: inherit;
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: left;
+
+  background: var(--cor-card);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1rem;
+
+  cursor: pointer;
+
+  transition: border-color 0.2s ease;
+}
+
+.botaoListaCategorias:hover {
+  border-color: rgb(from var(--cor-principal) r g b / 0.45);
+}
+
+.botaoListaCategorias .setaChip {
+  flex: 0 0 auto;
+
+  width: 1.8rem;
+  height: 1.8rem;
+
+  color: var(--cor-principal);
+}
+
+.menuCategorias {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 940;
+
+  width: 30rem;
+  max-height: 60vh;
+  margin: 0.2rem 0 0;
+  padding: 0.6rem;
+
+  list-style: none;
+  overflow-y: auto;
+
+  background: var(--cor-card-elevado);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1.2rem;
+
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+}
+
+.menuCategorias li + li {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.menuCategorias button {
+  width: 100%;
+  padding: 1.2rem;
+
+  display: block;
+
+  color: rgba(255, 255, 255, 0.78);
   font-family: inherit;
   font-size: 1.45rem;
   font-weight: 600;
-  white-space: nowrap;
+  text-align: left;
 
-  background-color: var(--cor-card);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
+  background: none;
+  border: 0;
+  border-radius: 0.8rem;
 
   cursor: pointer;
 
   transition:
     color 0.2s ease,
-    background-color 0.2s ease,
-    border-color 0.2s ease;
+    background-color 0.2s ease;
 }
 
-.botaoCategoria:hover {
+.menuCategorias button:hover {
   color: var(--cor-texto);
-  border-color: rgb(from var(--cor-principal) r g b / 0.45);
+  background: rgba(255, 255, 255, 0.06);
 }
 
-/* O ativo e o unico elemento solido da fila: le-se de relance. */
-.categoriaAtiva,
-.categoriaAtiva:hover {
+/* O selecionado e o unico elemento solido da lista: le-se de relance. */
+.menuCategorias .categoriaSelecionada,
+.menuCategorias .categoriaSelecionada:hover {
   color: var(--cor-sobre-principal);
   font-weight: 700;
 
-  background-color: var(--cor-principal);
-  border-color: var(--cor-principal);
+  background: var(--cor-principal);
 }
 
 
@@ -934,20 +1121,21 @@
 
 .grupoCategoria {
   width: 100%;
-  margin-top: 4.5rem;
+  max-width: 1280px;
+  margin: 4.5rem auto 0;
 }
 
 .grupoCategoria:first-of-type {
-  margin-top: 3rem;
+  margin-top: 1rem;
 }
 
 .tituloGrupo {
   margin: 0 0 1.8rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-texto);
   font-size: 2rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-align: left;
   text-transform: uppercase;
 }
@@ -956,7 +1144,8 @@
 
 .listaProdutos {
   width: 100%;
-  margin-top: 3rem;
+  max-width: 1280px;
+  margin: 3rem auto 0;
 
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -970,58 +1159,54 @@
 
 /* Card */
 
+/* Linha compacta: nome e preco a esquerda, miniatura a direita. O cartao
+   alto com foto grande mostrava poucos itens por tela; assim o cardapio
+   inteiro se le de relance, como numa lista de precos. */
 .cardProduto {
   position: relative;
 
   min-width: 0;
-  height: 240px;
+  padding: 1.4rem;
 
   display: grid;
-  grid-template-columns: 230px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 11rem;
+  column-gap: 1.6rem;
+  align-items: center;
 
   text-align: left;
 
-  background: linear-gradient(
-    135deg,
-    var(--cor-card-elevado) 0%,
-    var(--cor-card) 100%
-  );
+  background: var(--cor-card);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 1.4rem;
 
-  border: 1px solid rgb(from var(--cor-principal) r g b / 0.65);
-  border-radius: 1.2rem;
-
-  overflow: hidden;
-
-  box-shadow:
-    0 10px 25px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 
   transition:
-    transform 0.25s ease,
-    border-color 0.25s ease,
-    box-shadow 0.25s ease;
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .cardProduto:hover {
-  transform: translateY(-6px);
+  transform: translateY(-3px);
 
-  border-color: var(--cor-principal);
+  border-color: rgb(from var(--cor-principal) r g b / 0.45);
 
-  box-shadow:
-    0 18px 45px rgba(0, 0, 0, 0.45),
-    0 0 25px rgb(from var(--cor-principal) r g b / 0.1);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.4);
 }
 
-/* Imagem */
+/* Imagem: miniatura a direita (a imagem vem antes no DOM). */
 
 .areaImagemProduto {
   position: relative;
+  grid-column: 2;
+  grid-row: 1;
 
-  width: 100%;
-  height: 240px;
-  min-height: 0;
+  width: 11rem;
+  height: 11rem;
 
   overflow: hidden;
+  border-radius: 1.1rem;
 }
 
 .imagemProduto {
@@ -1043,42 +1228,22 @@
   filter: brightness(1.05);
 }
 
-.areaImagemProduto::after {
-  content: "";
-
-  position: absolute;
-  inset: 0;
-
-  background: linear-gradient(
-    to right,
-    transparent 65%,
-    rgba(23, 23, 23, 0.55) 100%
-  );
-
-  pointer-events: none;
-}
-
-/* Selo */
+/* Selo: fora da miniatura (pequena demais), vira um chip acima do nome. */
 
 .seloProduto {
-  position: absolute;
-  top: 1rem;
-  left: 1rem;
-  z-index: 2;
-
-  min-width: 9.5rem;
-  height: 2rem;
-  max-width: calc(100% - 2rem);
-  padding: 0 0.7rem;
+  width: fit-content;
+  max-width: 100%;
+  height: 2.6rem;
+  margin-bottom: 0.2rem;
+  padding: 0 1rem;
 
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
+  gap: 0.3rem;
 
   overflow: hidden;
   color: var(--cor-fundo);
-  font-size: 1rem;
+  font-size: 1.15rem;
   font-weight: 800;
   text-transform: uppercase;
   white-space: nowrap;
@@ -1086,118 +1251,124 @@
 
   background-color: var(--cor-principal);
   border-radius: 2rem;
-
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 /* Informações */
 
 .informacoesProduto {
+  grid-column: 1;
+  grid-row: 1;
+
   min-width: 0;
-  padding: 1.2rem 1.3rem;
 
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  gap: 0.5rem;
 }
 
+.informacoesProdutoTitulo {
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* Duas linhas por item: os cartoes ficam com a mesma altura e a lista
+   inteira se le de relance. */
 .informacoesProduto p {
-  font-size: 1.5rem;
-}
-.informacoesProdutoTitulo{
-  font-size: 2.4rem;
-  font-weight: 800;
-}
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 
-.informacoesProdutoDescrição{
-  font-size: 1.5rem;
-  font-weight: 800;
+  color: #b0b0b0;
+  font-size: 1.4rem;
+  font-weight: 400;
+  line-height: 1.45;
 }
-
 
 /* Parte inferior */
 
 .rodapeProduto {
   width: 100%;
-  margin-top: 1rem;
+  margin-top: 0.4rem;
 
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  align-items: baseline;
+  justify-content: flex-start;
   gap: 0.8rem;
 }
 
 .precoProduto {
+  flex: 0 0 auto;
+  min-width: 0;
+
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 0.5rem;
 }
 
 .precoProduto span {
-  margin-bottom: 0.1rem;
-
   color: #bdbdbd;
   font-size: 1.3rem;
   font-weight: 600;
 }
 
 .precoProduto strong {
-  color: #f2f2f2;
-  font-size: 2.8rem;
+  color: var(--cor-principal);
+  font-size: 2.1rem;
   font-weight: 800;
   line-height: 1;
+  white-space: nowrap;
 }
 
-/* Botão */
-
+/* O cartao inteiro e o alvo de clique (.aberturaCardProduto); o botao
+   "Adicionar" sai e da lugar ao "+" sobre a miniatura. */
 .botaoAdicionar {
-  min-height: 2.8rem;
-  padding: 0.45rem 1rem;
-  height: 5rem;
-  width: 18rem;
+  display: none;
+}
 
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
+.indicadorAdicionar {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 2;
 
-  color: var(--cor-principal);
-  font-family: inherit;
-  font-size: 1.7rem;
-  font-weight: 700;
+  width: 3rem;
+  height: 3rem;
 
-  background-color: transparent;
-  border: 2px solid var(--cor-principal);
-  border-radius: 6rem;
+  display: grid;
+  place-items: center;
+
+  color: var(--cor-fundo);
+  font-size: 1.9rem;
+  font-weight: 800;
+  line-height: 1;
+
+  background-color: var(--cor-principal);
+  border: 2px solid var(--cor-card);
+  border-radius: 50%;
+}
+
+.aberturaCardProduto {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+
+  display: block;
+
+  padding: 0;
+
+  background: none;
+  border: 0;
 
   cursor: pointer;
-
-  transition:
-    color 0.2s ease,
-    background-color 0.2s ease,
-    transform 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.botaoAdicionar svg {
-  width: 2.3rem;
-  height: 2.3rem;
-  flex-shrink: 0;
-}
-
-.botaoAdicionar:hover {
-  color: var(--cor-fundo);
-  background-color: var(--cor-principal);
-
-  transform: translateY(-2px);
-
-  box-shadow: 0 7px 18px rgb(from var(--cor-principal) r g b / 0.18);
-}
-
-/* Indicador "+" e alvo de toque da linha: existem so no mobile
-   (ver o bloco @media (max-width: 650px)). */
-
-.indicadorAdicionar,
-.aberturaCardProduto {
-  display: none;
+.aberturaCardProduto:focus-visible {
+  outline: 2px solid var(--cor-principal);
+  outline-offset: -2px;
+  border-radius: 1.4rem;
 }
 
 /* =========================
@@ -3085,11 +3256,6 @@
   .menu {
     display: none;
   }
-
-  .descricaoBanner {
-    max-width: 550px;
-    font-size: 1.2rem;
-  }
 }
 
 /* =========================
@@ -3104,8 +3270,12 @@
   /* Sem altura de tela cheia: com o conteudo alinhado ao topo, o
      `min-height` sobrava como um vao morto entre os botoes e a secao
      seguinte. A altura passa a ser a do proprio conteudo. */
+  /* Abaixo de 900px a foto volta a ser pintada no proprio <section>, como
+     faixa sangrada de ponta a ponta: em tela estreita o cartao arredondado
+     sobraria pouca largura para o enquadramento do lanche. */
   .banner {
     min-height: auto;
+    padding: 0;
     align-items: flex-start;
 
     /* faixa com altura proporcional ao viewport: mantem o mesmo
@@ -3119,6 +3289,18 @@
      gradiente continua ancorado na faixa da foto, que tambem e medida
      em svh. Em 100svh o resultado e identico ao anterior. */
   .banner::before {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+
+    width: auto;
+    max-width: none;
+    height: auto;
+    margin: 0;
+
+    border-radius: 0;
+
+    /* o shorthand tambem descarta a foto herdada e o `cover` da base */
     background: linear-gradient(
       to bottom,
       rgba(0, 0, 0, 0.75) 0,
@@ -3130,15 +3312,33 @@
     );
   }
 
+  /* Mistura o fim da faixa com o fundo da pagina. */
   .banner::after {
+    content: "";
+
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    z-index: 1;
+
+    width: 100%;
     height: 4rem;
+
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      var(--cor-fundo)
+    );
+
+    pointer-events: none;
   }
 
   /* texto comeca logo abaixo da faixa da foto, sem vazio no meio */
   .conteudoBanner {
-    padding-top: calc(34vh + 7rem);
-    padding-top: calc(34svh + 7rem);
-    padding-bottom: 5rem;
+    max-width: 1500px;
+    padding: calc(34vh + 7rem) 3rem 5rem;
+    padding: calc(34svh + 7rem) 3rem 5rem;
   }
 }
 
@@ -3169,79 +3369,29 @@
     padding-inline: 1.5rem;
   }
 
-  .conteudoBanner h1 {
-    font-size: 2.7rem;
+  /* A identidade deixa de ficar ao lado da logo: nao ha largura para a
+     coluna de texto mais o botao. */
+  .identidadeLoja {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "logo nome"
+      "logo chamada"
+      "logo endereco"
+      "meta meta"
+      "acao acao";
+    column-gap: 1.8rem;
   }
 
-  .descricaoBanner {
-    max-width: 100%;
-    margin-top: 1.5rem;
-    font-size: 1.05rem;
-  }
-
-  /* Selo: no mobile fica so o status + o horario de funcionamento. */
-  .statusLoja {
-    gap: 0.8rem;
-    padding: 0.6rem 1.2rem;
-    font-size: 1.25rem;
-  }
-
-  .statusRotuloLongo,
-  .statusDetalhe {
-    display: none;
-  }
-
-  .statusRotuloCurto {
-    display: inline;
-  }
-
-  .statusHorario {
-    display: inline-block;
-    max-width: 26rem;
-    padding-left: 0.9rem;
-
-    border-left: 1px solid rgba(255, 255, 255, 0.18);
-
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .quebraDesktop {
-    display: none;
-  }
-
-  .botoesBanner {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
-  }
-
-  .botaoPrincipal,
-  .botaoSecundario {
-    width: 100%;
-    max-width: 22rem;
-    min-height: 4rem;
-
-    font-size: 1.2rem;
+  .identidadeAcao {
+    justify-self: start;
+    margin-top: 1.4rem;
   }
 }
 
 @media (max-width: 1100px) {
-  .cardapio {
-    padding-right: clamp(2rem, 6vw, 6rem);
-    padding-left: clamp(2rem, 6vw, 6rem);
-  }
-
   .listaProdutos {
     grid-template-columns: 1fr;
-  }
-
-  .cardProduto {
-    grid-template-columns: 240px minmax(0, 1fr);
     max-width: 750px;
-    width: 100%;
-    margin: 0 auto;
   }
 }
 
@@ -3368,7 +3518,6 @@
   }
 
   .botaoCarrinho,
-  .descricaoBanner,
   .topoPromocoes span,
   .tipoPromocao,
   .seloProduto,
@@ -3498,55 +3647,7 @@
   text-align: center;
 }
 
-/* =========================
-   CATEGORIAS: RAIL HORIZONTAL (<= 900px)
-   Chips em fila rolavel, sangrando ate a borda da tela — o chip cortado
-   na direita e o proprio indicador de que ha mais categorias.
-========================= */
-
-@media (max-width: 900px) {
-  .categorias {
-    --sangria-categorias: clamp(2rem, 6vw, 6rem);
-
-    width: auto;
-    max-width: none;
-    margin: 0 calc(var(--sangria-categorias) * -1) 3rem;
-    padding: 0.4rem var(--sangria-categorias);
-
-    /* centraliza quando os chips cabem; alinha a esquerda quando rolam */
-    justify-content: flex-start;
-    justify-content: safe center;
-    flex-wrap: nowrap;
-
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scroll-snap-type: x proximity;
-    scroll-padding-inline: var(--sangria-categorias);
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .categorias::-webkit-scrollbar {
-    display: none;
-  }
-
-  .botaoCategoria {
-    scroll-snap-align: start;
-  }
-}
-
 @media (max-width: 700px) {
-  .categorias {
-    --sangria-categorias: 1.5rem;
-    gap: 0.8rem;
-  }
-
-  .botaoCategoria {
-    height: 3.6rem;
-    padding: 0 1.5rem;
-    font-size: 1.35rem;
-  }
-
   .numeroCarrinho {
     font-size: 1rem;
   }
@@ -3563,10 +3664,6 @@
     min-width: 4rem;
     padding: 0;
     gap: 0;
-  }
-
-  .statusHorario {
-    max-width: 22rem;
   }
 }
 
@@ -3614,255 +3711,71 @@
     text-align: center;
   }
 
-  /* Os chips da identidade ja dizem status, horario e entrega. */
-  .statusLoja {
-    display: none;
-  }
-
+  /* A identidade vira uma coluna centralizada: nao ha largura para a logo
+     ao lado do texto. */
   .identidadeLoja {
-    position: relative;
-
     display: flex;
     flex-direction: column;
     align-items: center;
 
-    margin-bottom: 0;
+    text-align: center;
   }
 
-  /* Sem logo enviada, o circulo mostra as iniciais da loja (ver JSX). */
   .identidadeLogo {
+    align-self: center;
+
     width: 8.6rem;
     height: 8.6rem;
+    margin-top: 0;
     padding: 0.8rem;
 
-    display: grid;
-    place-items: center;
-
-    color: var(--cor-principal);
     font-size: 3rem;
-    font-weight: 800;
-    line-height: 1;
-    letter-spacing: 0.05em;
-    text-align: center;
-    overflow: hidden;
-
-    background: var(--cor-card);
-    border: 2px solid rgb(from var(--cor-principal) r g b / 0.7);
-    border-radius: 50%;
-
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
-  }
-
-  .identidadeLogo img {
-    width: 100%;
-    height: 100%;
-
-    object-fit: cover;
-    border-radius: 50%;
   }
 
   .identidadeNome {
     margin-top: 1.2rem;
-
-    color: var(--cor-texto);
     font-size: 2.5rem;
-    font-weight: 800;
-    line-height: 1.15;
   }
 
   .identidadeEndereco {
     max-width: 30rem;
     margin-top: 0.5rem;
 
-    color: rgba(255, 255, 255, 0.58);
     font-size: 1.25rem;
-    font-weight: 500;
-    line-height: 1.4;
   }
 
   /* Tudo visivel de uma vez: nada de rolagem lateral. O que nao couber na
      primeira linha desce para a de baixo, sempre centralizado. */
   .identidadeInfos {
     align-self: stretch;
-    margin-top: 1.4rem;
-
-    display: flex;
-    align-items: center;
     justify-content: center;
-    flex-wrap: wrap;
-    gap: 0.9rem 1.6rem;
-  }
-
-  /* Rotulo discreto + valor em destaque, sem borda em volta: o chip fechado
-     em cada dado ocupava largura demais para caber ao lado do status. */
-  .infoLoja {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0.5rem;
-
-    white-space: nowrap;
   }
 
   .infoLoja span {
-    color: rgba(255, 255, 255, 0.55);
     font-size: 1.25rem;
-    font-weight: 600;
   }
 
   .infoLoja strong {
-    color: var(--cor-texto);
     font-size: 1.35rem;
-    font-weight: 700;
   }
 
   .chipLoja {
-    flex: 0 0 auto;
-
     height: 3.6rem;
     padding: 0 1.3rem;
 
-    display: inline-flex;
-    align-items: center;
-    gap: 0.6rem;
-
-    color: rgba(255, 255, 255, 0.75);
     font-size: 1.25rem;
-    font-weight: 600;
-    white-space: nowrap;
-
-    background: var(--cor-card);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 999px;
-  }
-
-  /* O status vira o acesso aos horarios da semana. */
-  .chipStatus {
-    min-width: 0;
-    min-height: 3.6rem;
-
-    font-family: inherit;
-    cursor: pointer;
-  }
-
-  .setaChip {
-    width: 1.4rem;
-    height: 1.4rem;
-
-    transition: transform 0.2s ease;
-  }
-
-  .setaChipAberta {
-    transform: rotate(180deg);
   }
 
   .painelHorarios {
-    position: absolute;
-    top: 100%;
     left: 50%;
-    z-index: 950;
-
-    width: min(30rem, calc(100vw - 3rem));
-    margin-top: 0.9rem;
-    padding: 1.4rem 1.6rem;
-
-    text-align: left;
-
-    background: var(--cor-card-elevado);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 1.2rem;
-
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
-
     transform: translateX(-50%);
   }
 
-  .tituloHorarios {
-    display: block;
-    padding-bottom: 1rem;
-
-    color: var(--cor-principal);
-    font-size: 1.3rem;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .painelHorarios ul {
-    margin: 0;
-    padding: 0;
-
-    list-style: none;
-  }
-
-  .painelHorarios li {
-    padding: 0.7rem 0;
-
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1.2rem;
-  }
-
-  .painelHorarios li + li {
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .painelHorarios li span {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 1.3rem;
-    font-weight: 700;
-    text-transform: uppercase;
-  }
-
-  .painelHorarios li strong {
-    color: var(--cor-texto);
-    font-size: 1.4rem;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .diaFechado {
-    color: rgba(255, 255, 255, 0.38);
-    font-weight: 600;
-  }
-
-  .horarioLivre {
-    margin: 1rem 0 0;
-
-    color: var(--cor-texto);
-    font-size: 1.4rem;
-    font-weight: 600;
-    line-height: 1.6;
-    white-space: pre-line;
-  }
-
-  .chipAberto {
-    color: #6ff0a6;
-    border-color: rgba(66, 217, 129, 0.32);
-  }
-
-  .chipFechado {
-    color: #ff9a9a;
-    border-color: rgba(255, 119, 119, 0.32);
-  }
-
-  .chipLoja .pontoStatus {
-    width: 0.8rem;
-    height: 0.8rem;
-    margin: 0;
-
-    box-shadow: none;
-  }
-
-  /* A chamada de marketing sai do mobile: depois da identidade o cliente ja
+  /* A chamada e o botao do banner saem: depois da identidade o cliente ja
      cai no cardapio, que e o que ele veio fazer. Os textos continuam
      configuraveis e aparecem no desktop. */
-  .textoPequeno,
-  .conteudoBanner h1,
-  .descricaoBanner,
-  .botoesBanner {
+  .identidadeChamada,
+  .identidadeAcao {
     display: none;
   }
 
@@ -3935,110 +3848,35 @@
     min-width: 0;
   }
 
-  /* A fila de chips sai: com muitas categorias ela so aparecia arrastando
-     de lado. O botao abaixo mostra todas de uma vez. */
-  .categorias {
-    display: none;
-  }
-
-  /* Filtro fixo abaixo do cabecalho: a categoria escolhida continua a
-     vista enquanto a lista rola. */
+  /* Sangra ate a borda da tela e o botao ocupa a largura toda: em tela
+     estreita o alvo de toque vale mais que a economia de largura. */
   .seletorCategorias {
-    position: sticky;
     top: 5rem;
-    z-index: 900;
 
-    display: block;
-
+    width: auto;
     margin: 0 -1.5rem 1.8rem;
     padding: 1rem 1.5rem;
 
-    background: color-mix(in srgb, var(--cor-fundo) 92%, transparent);
-    backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   }
 
   .botaoListaCategorias {
     width: 100%;
+    min-width: 0;
     min-height: 4.4rem;
     padding: 0 1.6rem;
 
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
 
-    color: var(--cor-texto);
-    font-family: inherit;
     font-size: 1.45rem;
-    font-weight: 700;
-    text-align: left;
-
-    background: var(--cor-card);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 1rem;
-
-    cursor: pointer;
-  }
-
-  .botaoListaCategorias .setaChip {
-    flex: 0 0 auto;
-
-    width: 1.8rem;
-    height: 1.8rem;
-
-    color: var(--cor-principal);
   }
 
   .menuCategorias {
-    position: absolute;
-    top: 100%;
     right: 1.5rem;
     left: 1.5rem;
-    z-index: 940;
 
-    max-height: 60vh;
-    margin: 0.6rem 0 0;
-    padding: 0.6rem;
-
-    list-style: none;
-    overflow-y: auto;
-
-    background: var(--cor-card-elevado);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 1.2rem;
-
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
-  }
-
-  .menuCategorias li + li {
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .menuCategorias button {
-    width: 100%;
-    padding: 1.2rem;
-
-    display: block;
-
-    color: rgba(255, 255, 255, 0.78);
-    font-family: inherit;
-    font-size: 1.45rem;
-    font-weight: 600;
-    text-align: left;
-
-    background: none;
-    border: 0;
-    border-radius: 0.8rem;
-
-    cursor: pointer;
-  }
-
-  .menuCategorias .categoriaSelecionada {
-    color: var(--cor-sobre-principal);
-    font-weight: 700;
-
-    background: var(--cor-principal);
+    width: auto;
+    margin-top: 0.6rem;
   }
 
   .grupoCategoria {
@@ -4066,22 +3904,10 @@
   }
 
   .cardProduto {
-    position: relative;
-
-    height: auto;
-    max-width: none;
-    margin: 0;
     padding: 1.1rem;
 
     grid-template-columns: minmax(0, 1fr) 9.4rem;
     column-gap: 1.2rem;
-    align-items: center;
-
-    background: var(--cor-card);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 1.4rem;
-
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
   }
 
   /* Sem elevacao/zoom no toque: o feedback e o realce do proprio cartao. */
@@ -4101,144 +3927,45 @@
     border-color: rgb(from var(--cor-principal) r g b / 0.4);
   }
 
-  .aberturaCardProduto:focus-visible {
-    outline: 2px solid var(--cor-principal);
-    outline-offset: -2px;
-    border-radius: 1.4rem;
-  }
-
-  /* Miniatura a direita, texto a esquerda (a imagem vem antes no DOM). */
   .areaImagemProduto {
-    grid-column: 2;
-    grid-row: 1;
-
     width: 9.4rem;
     height: 9.4rem;
-
-    border-radius: 1.1rem;
-  }
-
-  /* O degrade lateral so fazia sentido no card largo. */
-  .areaImagemProduto::after {
-    display: none;
-  }
-
-  .informacoesProduto {
-    grid-column: 1;
-    grid-row: 1;
-
-    min-height: 0;
-    padding: 0;
-
-    justify-content: flex-start;
-    gap: 0.5rem;
   }
 
   .informacoesProdutoTitulo {
     font-size: 1.7rem;
-    font-weight: 700;
-    line-height: 1.3;
   }
 
-  /* Duas linhas por item: os cartoes ficam com a mesma altura e a lista
-     inteira se le de relance. */
   .informacoesProduto p {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden;
-
-    color: #b0b0b0;
     font-size: 1.35rem;
-    font-weight: 400;
-    line-height: 1.45;
   }
 
-  /* O selo sai de cima da miniatura (pequena demais) e vira um chip
-     acima do nome. */
-  .cardProduto .seloProduto {
-    position: static;
-
-    width: fit-content;
-    min-width: 0;
-    max-width: 100%;
+  .seloProduto {
     height: 2.4rem;
-    margin-bottom: 0.2rem;
     padding: 0 0.9rem;
 
     font-size: 1.2rem;
-
-    box-shadow: none;
   }
 
   .rodapeProduto {
-    margin-top: 0.4rem;
-
-    align-items: baseline;
-    justify-content: flex-start;
     gap: 0.6rem;
   }
 
-  .precoProduto {
-    flex: 0 0 auto;
-    min-width: 0;
-
-    flex-direction: row;
-    align-items: baseline;
-    gap: 0.5rem;
-  }
-
   .precoProduto span {
-    margin-bottom: 0;
     font-size: 1.2rem;
   }
 
   .precoProduto strong {
-    color: var(--cor-principal);
     font-size: 1.9rem;
-    white-space: nowrap;
-  }
-
-  /* Substituido pelo alvo de toque da linha + indicador "+". */
-  .botaoAdicionar {
-    display: none;
   }
 
   .indicadorAdicionar {
-    position: absolute;
     right: 0.8rem;
     bottom: 0.8rem;
-    z-index: 2;
 
     width: 2.8rem;
     height: 2.8rem;
 
-    display: grid;
-    place-items: center;
-
-    color: var(--cor-fundo);
     font-size: 1.8rem;
-    font-weight: 800;
-    line-height: 1;
-
-    background-color: var(--cor-principal);
-    border: 2px solid var(--cor-card);
-    border-radius: 50%;
-  }
-
-  .aberturaCardProduto {
-    position: absolute;
-    inset: 0;
-    z-index: 3;
-
-    display: block;
-
-    padding: 0;
-
-    background: none;
-    border: 0;
-
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
   }
 }
