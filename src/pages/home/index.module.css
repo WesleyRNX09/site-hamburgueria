@@ -3567,7 +3567,13 @@
     );
   }
 
+  /* z-index acima da barra de categorias (900): o painel de horarios nasce
+     dentro deste bloco e, no nivel 2 original, a barra passava por cima dele.
+     Fica abaixo do cabecalho (1000), e o banner ja saiu da tela quando a
+     barra gruda no topo, entao os dois nunca disputam espaco. */
   .conteudoBanner {
+    z-index: 960;
+
     padding-top: calc(23svh - 3.5rem);
     padding-bottom: 2rem;
 
