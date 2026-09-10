@@ -241,12 +241,29 @@ function Home() {
   const pedidosOnlineDisponiveis = Boolean(
     configuracao.lojaAberta && (configuracao.entregaAtiva || configuracao.retiradaAtiva)
   );
+  const formasAtendimento = [
+    configuracao.entregaAtiva ? 'delivery' : null,
+    configuracao.retiradaAtiva ? 'retirada' : null,
+    configuracao.atendimentoGarcomAtivo ? 'salão' : null
+  ].filter(Boolean);
+  const resumoAtendimento = formasAtendimento.length
+    ? `Atendimento: ${formasAtendimento.join(', ')}`
+    : 'Nenhuma modalidade disponível no momento.';
+  const statusCompleto = pedidosOnlineDisponiveis
+    ? 'Aberta para pedidos'
+    : configuracao.lojaAberta
+      ? 'Pedidos online indisponíveis'
+      : 'Fechada no momento';
   const statusCurto = pedidosOnlineDisponiveis
     ? 'Aberto'
     : configuracao.lojaAberta
       ? 'Só consulta'
       : 'Fechado';
   const gradeDeHorarios = algumDiaAberto(configuracao.horarios);
+  const horarioResumido = String(configuracao.horarioFuncionamento ?? '')
+    .split('\n')
+    .map((linha) => linha.trim())
+    .find(Boolean) || '';
   const podeFinalizar = pedidosOnlineDisponiveis && minimoAtingido;
   const nomeExibicao = configuracao.nomeLoja || 'Cardápio online';
   const bannerTitulo = configuracao.bannerTitulo?.trim() || '';
@@ -735,16 +752,6 @@ function Home() {
 
             <strong className={styles.identidadeNome}>{nomeExibicao}</strong>
 
-            {/* Os textos configuraveis do banner viram a chamada curta da loja:
-                continuam sob controle do administrador, sem o bloco de
-                marketing que empurrava o cardapio para fora da tela. */}
-            {(bannerTitulo || bannerSubtitulo) && (
-              <p className={styles.identidadeChamada}>
-                {bannerTitulo && <strong>{bannerTitulo}</strong>}
-                {bannerSubtitulo && <span>{bannerSubtitulo}</span>}
-              </p>
-            )}
-
             {configuracao.endereco && (
               <span className={styles.identidadeEndereco}>{configuracao.endereco}</span>
             )}
@@ -787,14 +794,6 @@ function Home() {
               )}
             </div>
 
-            <button
-              type="button"
-              className={styles.identidadeAcao}
-              onClick={() => irParaSecao(bannerBotaoDestino)}
-            >
-              {bannerBotaoTexto}
-            </button>
-
             {/* Fora da fila de chips: a fila rola na horizontal e recortaria
                 o painel se ele morasse dentro dela. */}
             {horariosAbertos && (
@@ -827,6 +826,73 @@ function Home() {
             )}
           </div>
 
+          {/* Chamada do banner: existe so no desktop, onde a foto ocupa a tela
+              inteira. No mobile a identidade acima ja leva direto ao cardapio
+              (ver o bloco @media (max-width: 650px) do CSS). */}
+          <div className={`${styles.statusLoja} ${pedidosOnlineDisponiveis ? styles.statusAberta : styles.statusFechada}`} role="status">
+            <span className={styles.pontoStatus} aria-hidden="true" />
+
+            <strong className={styles.statusRotuloLongo}>{statusCompleto}</strong>
+            <strong className={styles.statusRotuloCurto}>{statusCurto}</strong>
+
+            {horarioResumido && (
+              <span className={styles.statusHorario}>{horarioResumido}</span>
+            )}
+
+            <span className={styles.statusDetalhe}>{pedidosOnlineDisponiveis ? `${resumoAtendimento} • Estimativa: ${configuracao.tempoEntrega}` : 'O cardápio continua disponível para consulta.'}</span>
+          </div>
+
+          <span className={styles.textoPequeno}>
+            🔥 FEITO NA HORA
+          </span>
+
+          <h1>
+            {bannerTitulo ? (
+              <span className={styles.tituloAmarelo}>
+                {bannerTitulo}
+              </span>
+            ) : (
+              <>
+                <span className={styles.tituloBranco}>
+                  O Verdadeiro
+                </span>
+
+                <span className={styles.tituloAmarelo}>
+                  Hambúrguer Artesanal
+                </span>
+              </>
+            )}
+          </h1>
+
+          <p className={styles.descricaoBanner}>
+            {bannerSubtitulo || (
+              <>
+                Carne grelhada na hora, cheddar cremoso,{' '}
+                <br className={styles.quebraDesktop} />
+                bacon crocante e ingredientes sempre frescos{' '}
+                <br className={styles.quebraDesktop} />
+                para uma experiência irresistível.
+              </>
+            )}
+          </p>
+
+          <div className={styles.botoesBanner}>
+            <button
+              type="button"
+              className={styles.botaoPrincipal}
+              onClick={abrirCarrinho}
+            >
+              Peça agora
+            </button>
+
+            <button
+              type="button"
+              className={styles.botaoSecundario}
+              onClick={() => irParaSecao(bannerBotaoDestino)}
+            >
+              {bannerBotaoTexto}
+            </button>
+          </div>
         </div>
       </section>
 

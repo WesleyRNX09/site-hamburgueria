@@ -201,110 +201,110 @@
    BANNER
 ========================= */
 
-/* A foto deixa de ser um banner de tela cheia e vira uma faixa arredondada
-   no topo: o cardapio, que e o que o cliente veio ver, passa a caber na
-   primeira tela. Em vez de pintar a foto no proprio <section>, ela e pintada
-   no ::before — assim da para centralizar, limitar a largura e arredondar. */
 .banner {
   position: relative;
 
   width: 100%;
+  min-height: 100vh;
+  min-height: 100svh;
 
-  display: block;
-
-  /* abaixo do cabecalho fixo (7rem), que aqui nao tem fundo proprio */
-  padding: 9rem clamp(2rem, 5vw, 6rem) 0;
+  display: flex;
+  align-items: center;
 
   background-color: var(--cor-fundo);
-  background-position: center;
+  background-size: cover;
+  /* a foto tem espaco negativo a esquerda: deslocar para 62% deixa o
+     hamburguer inteiro na metade direita, livre do texto */
+  background-position: 62% center;
   background-repeat: no-repeat;
-  /* a imagem em si e herdada pelo ::before; aqui ela nao e desenhada */
-  background-size: 0 0;
 }
 
+/* Escurece o lado esquerdo para o texto aparecer */
 .banner::before {
   content: "";
 
-  position: static;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
 
-  display: block;
-
-  width: 100%;
-  max-width: 1280px;
-  height: clamp(22rem, 26vw, 32rem);
-  margin: 0 auto;
-
-  background-image: inherit;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: cover;
-
-  border-radius: 1.6rem;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.95) 0%,
+    rgba(0, 0, 0, 0.75) 35%,
+    rgba(0, 0, 0, 0.2) 65%,
+    transparent 100%
+  );
 
   pointer-events: none;
 }
 
-/* Acima da barra de categorias (900): o painel de horarios nasce aqui
-   dentro e, num nivel mais baixo, a barra passaria por cima dele. Fica
-   abaixo do cabecalho (1000). */
-.conteudoBanner {
-  position: relative;
-  z-index: 960;
+/* Mistura o final do banner com o fundo da página */
+.banner::after {
+  content: "";
+
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  z-index: 1;
 
   width: 100%;
-  max-width: 1280px;
+  height: 10rem;
+
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--cor-fundo)
+  );
+
+  pointer-events: none;
+}
+
+.conteudoBanner {
+  position: relative;
+  z-index: 2;
+
+  width: 100%;
+  max-width: 1500px;
 
   margin: 0 auto;
-  padding: 1.8rem 0 3rem;
+  padding: 4rem 3rem 5rem;
 }
 
 /* =========================
    IDENTIDADE DA LOJA
 
-   Logo sobre a faixa da foto, nome, chamada configuravel e a linha com
-   status e tempo de entrega. Vale nos dois tamanhos de tela: quem abre um
-   cardapio quer saber de que loja ele e, se esta aberta e em quanto tempo
-   chega — nao ler uma chamada de marketing.
+   No mobile e o topo inteiro do cardapio: logo sobre a faixa da foto, nome,
+   endereco e a linha com status e tempo de entrega (ver o bloco
+   @media (max-width: 650px)).
 
-   Aqui a identidade fica lado a lado com a logo; no mobile ela vira uma
-   coluna centralizada (ver @media (max-width: 650px)).
+   No desktop, onde a foto ocupa a tela toda e a chamada do banner assume,
+   sobra so o circulo da logo acima dessa chamada.
 ========================= */
 
 .identidadeLoja {
   position: relative;
+}
 
-  width: 100%;
-  max-width: 1280px;
-  margin: 0 auto;
-
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas:
-    "logo nome     acao"
-    "logo chamada  acao"
-    "logo endereco acao"
-    "logo meta     acao";
-  column-gap: 2.6rem;
-  row-gap: 0.4rem;
-
-  text-align: left;
+.identidadeNome,
+.identidadeEndereco,
+.identidadeInfos,
+.painelHorarios {
+  display: none;
 }
 
 /* Sem logo enviada, o circulo mostra as iniciais da loja (ver JSX). */
 .identidadeLogo {
-  grid-area: logo;
-  align-self: start;
-
-  width: 13rem;
-  height: 13rem;
-  margin-top: -8rem;
+  width: 11rem;
+  height: 11rem;
+  margin-bottom: 2rem;
   padding: 1rem;
 
   display: grid;
   place-items: center;
 
   color: var(--cor-principal);
-  font-size: 4.4rem;
+  font-size: 3.8rem;
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0.05em;
@@ -327,87 +327,26 @@
 }
 
 .identidadeNome {
-  grid-area: nome;
-
   color: var(--cor-texto);
-  font-size: 3.4rem;
+  font-size: 2.5rem;
   font-weight: 800;
   line-height: 1.15;
 }
 
-/* Uma linha por texto configurado: o administrador continua no controle da
-   chamada, sem que ela vire um bloco que empurra o cardapio tela abaixo. */
-.identidadeChamada {
-  grid-area: chamada;
-
-  margin: 0;
-
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.identidadeChamada strong {
-  color: var(--cor-principal);
-  font-size: 1.6rem;
-  font-weight: 700;
-}
-
-.identidadeChamada span {
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 1.5rem;
-  font-weight: 500;
-}
-
 .identidadeEndereco {
-  grid-area: endereco;
-
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 1.4rem;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 1.25rem;
   font-weight: 500;
   line-height: 1.4;
 }
 
 .identidadeInfos {
-  grid-area: meta;
-  margin-top: 0.8rem;
+  margin-top: 1.4rem;
 
-  display: flex;
   align-items: center;
+  justify-content: center;
   flex-wrap: wrap;
   gap: 0.9rem 1.6rem;
-}
-
-.identidadeAcao {
-  grid-area: acao;
-  align-self: center;
-
-  min-height: 4.8rem;
-  padding: 0 2.6rem;
-
-  color: var(--cor-sobre-principal);
-  font-family: inherit;
-  font-size: 1.6rem;
-  font-weight: 700;
-  white-space: nowrap;
-
-  background-color: var(--cor-principal);
-  border: 2px solid var(--cor-principal);
-  border-radius: 2rem;
-
-  cursor: pointer;
-
-  transition:
-    color 0.2s ease,
-    background-color 0.2s ease,
-    transform 0.2s ease;
-}
-
-.identidadeAcao:hover {
-  color: var(--cor-principal);
-
-  background-color: transparent;
-  transform: translateY(-2px);
 }
 
 /* Rotulo discreto + valor em destaque, sem borda em volta: fechar cada dado
@@ -476,6 +415,7 @@
   width: 0.9rem;
   height: 0.9rem;
   flex: 0 0 auto;
+  margin-right: -0.4rem;
 
   border-radius: 50%;
   background: currentColor;
@@ -579,6 +519,154 @@
   font-weight: 600;
   line-height: 1.6;
   white-space: pre-line;
+}
+
+/* =========================
+   CHAMADA DO BANNER (desktop)
+========================= */
+
+/* Chip escuro: a cor do status vira um ponto, nao um banho de cor no chip
+   inteiro — assim o selo assenta na foto e no sistema escuro/amarelo. */
+.statusLoja {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  margin-bottom: 1.6rem;
+  max-width: 100%;
+
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 0.7rem 1.4rem;
+
+  background: rgba(10, 10, 10, 0.72);
+  backdrop-filter: blur(8px);
+
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 1.4rem;
+  line-height: 1.25;
+}
+
+.statusLoja strong {
+  color: var(--cor-texto);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.statusAberta .pontoStatus {
+  color: #42d981;
+  box-shadow: 0 0 0 0.4rem rgba(66, 217, 129, 0.18);
+}
+
+.statusFechada .pontoStatus {
+  color: #ff7777;
+  box-shadow: 0 0 0 0.4rem rgba(255, 119, 119, 0.18);
+}
+
+/* Versao curta (status + horario) so aparece no mobile; ver media query. */
+.statusRotuloCurto,
+.statusHorario {
+  display: none;
+}
+
+.textoPequeno {
+  display: block;
+  margin-bottom: 0.7rem;
+
+  color: var(--cor-principal);
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.conteudoBanner h1 {
+  max-width: 1000px;
+  margin: 0;
+
+  font-size: clamp(4rem, 5.5vw, 6rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.08rem;
+}
+
+.tituloBranco,
+.tituloAmarelo {
+  display: block;
+}
+
+.tituloBranco {
+  color: #D0D0D0;
+}
+
+.tituloAmarelo {
+  color: var(--cor-principal);
+}
+
+.descricaoBanner {
+  width: 100%;
+  max-width: 600px;
+
+  margin-top: 24px;
+
+  color: #E0E0E0;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.botoesBanner {
+  margin-top: 4.5rem;
+
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.botaoPrincipal,
+.botaoSecundario {
+  width: 21rem;
+  min-height: 5rem;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-family: inherit;
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+
+  border-radius: 2rem;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.botaoPrincipal {
+  color: var(--cor-fundo);
+  background-color: var(--cor-principal);
+  border: 2px solid var(--cor-principal);
+}
+
+.botaoPrincipal:hover {
+  background-color: var(--cor-principal-clara);
+  transform: translateY(-3px);
+}
+
+.botaoSecundario {
+  color: var(--cor-principal);
+  background-color: rgba(0, 0, 0, 0.25);
+  border: 2px solid var(--cor-principal);
+}
+
+.botaoSecundario:hover {
+  color: var(--cor-fundo);
+  background-color: var(--cor-principal);
+  transform: translateY(-3px);
 }
 
 /* =========================
@@ -3256,6 +3344,11 @@
   .menu {
     display: none;
   }
+
+  .descricaoBanner {
+    max-width: 550px;
+    font-size: 1.2rem;
+  }
 }
 
 /* =========================
@@ -3270,12 +3363,8 @@
   /* Sem altura de tela cheia: com o conteudo alinhado ao topo, o
      `min-height` sobrava como um vao morto entre os botoes e a secao
      seguinte. A altura passa a ser a do proprio conteudo. */
-  /* Abaixo de 900px a foto volta a ser pintada no proprio <section>, como
-     faixa sangrada de ponta a ponta: em tela estreita o cartao arredondado
-     sobraria pouca largura para o enquadramento do lanche. */
   .banner {
     min-height: auto;
-    padding: 0;
     align-items: flex-start;
 
     /* faixa com altura proporcional ao viewport: mantem o mesmo
@@ -3289,18 +3378,6 @@
      gradiente continua ancorado na faixa da foto, que tambem e medida
      em svh. Em 100svh o resultado e identico ao anterior. */
   .banner::before {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-
-    width: auto;
-    max-width: none;
-    height: auto;
-    margin: 0;
-
-    border-radius: 0;
-
-    /* o shorthand tambem descarta a foto herdada e o `cover` da base */
     background: linear-gradient(
       to bottom,
       rgba(0, 0, 0, 0.75) 0,
@@ -3312,33 +3389,15 @@
     );
   }
 
-  /* Mistura o fim da faixa com o fundo da pagina. */
   .banner::after {
-    content: "";
-
-    position: absolute;
-    right: 0;
-    bottom: -1px;
-    left: 0;
-    z-index: 1;
-
-    width: 100%;
     height: 4rem;
-
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      var(--cor-fundo)
-    );
-
-    pointer-events: none;
   }
 
   /* texto comeca logo abaixo da faixa da foto, sem vazio no meio */
   .conteudoBanner {
-    max-width: 1500px;
-    padding: calc(34vh + 7rem) 3rem 5rem;
-    padding: calc(34svh + 7rem) 3rem 5rem;
+    padding-top: calc(34vh + 7rem);
+    padding-top: calc(34svh + 7rem);
+    padding-bottom: 5rem;
   }
 }
 
@@ -3369,22 +3428,61 @@
     padding-inline: 1.5rem;
   }
 
-  /* A identidade deixa de ficar ao lado da logo: nao ha largura para a
-     coluna de texto mais o botao. */
-  .identidadeLoja {
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas:
-      "logo nome"
-      "logo chamada"
-      "logo endereco"
-      "meta meta"
-      "acao acao";
-    column-gap: 1.8rem;
+  .conteudoBanner h1 {
+    font-size: 2.7rem;
   }
 
-  .identidadeAcao {
-    justify-self: start;
-    margin-top: 1.4rem;
+  .descricaoBanner {
+    max-width: 100%;
+    margin-top: 1.5rem;
+    font-size: 1.05rem;
+  }
+
+  /* Selo: no mobile fica so o status + o horario de funcionamento. */
+  .statusLoja {
+    gap: 0.8rem;
+    padding: 0.6rem 1.2rem;
+    font-size: 1.25rem;
+  }
+
+  .statusRotuloLongo,
+  .statusDetalhe {
+    display: none;
+  }
+
+  .statusRotuloCurto {
+    display: inline;
+  }
+
+  .statusHorario {
+    display: inline-block;
+    max-width: 26rem;
+    padding-left: 0.9rem;
+
+    border-left: 1px solid rgba(255, 255, 255, 0.18);
+
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .quebraDesktop {
+    display: none;
+  }
+
+  .botoesBanner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .botaoPrincipal,
+  .botaoSecundario {
+    width: 100%;
+    max-width: 22rem;
+    min-height: 4rem;
+
+    font-size: 1.2rem;
   }
 }
 
@@ -3518,6 +3616,7 @@
   }
 
   .botaoCarrinho,
+  .descricaoBanner,
   .topoPromocoes span,
   .tipoPromocao,
   .seloProduto,
@@ -3665,6 +3764,10 @@
     padding: 0;
     gap: 0;
   }
+
+  .statusHorario {
+    max-width: 22rem;
+  }
 }
 
 
@@ -3711,8 +3814,12 @@
     text-align: center;
   }
 
-  /* A identidade vira uma coluna centralizada: nao ha largura para a logo
-     ao lado do texto. */
+  /* Os dados da identidade ja dizem status, horario e entrega. */
+  .statusLoja {
+    display: none;
+  }
+
+  /* Coluna centralizada com a logo no topo: e ela que abre o cardapio aqui. */
   .identidadeLoja {
     display: flex;
     flex-direction: column;
@@ -3722,33 +3829,31 @@
   }
 
   .identidadeLogo {
-    align-self: center;
-
     width: 8.6rem;
     height: 8.6rem;
-    margin-top: 0;
+    margin-bottom: 0;
     padding: 0.8rem;
 
     font-size: 3rem;
   }
 
   .identidadeNome {
+    display: block;
     margin-top: 1.2rem;
-    font-size: 2.5rem;
   }
 
   .identidadeEndereco {
+    display: block;
     max-width: 30rem;
     margin-top: 0.5rem;
-
-    font-size: 1.25rem;
   }
 
   /* Tudo visivel de uma vez: nada de rolagem lateral. O que nao couber na
      primeira linha desce para a de baixo, sempre centralizado. */
   .identidadeInfos {
     align-self: stretch;
-    justify-content: center;
+
+    display: flex;
   }
 
   .infoLoja span {
@@ -3768,14 +3873,19 @@
 
   .painelHorarios {
     left: 50%;
+
+    display: block;
+
     transform: translateX(-50%);
   }
 
-  /* A chamada e o botao do banner saem: depois da identidade o cliente ja
+  /* A chamada de marketing sai do mobile: depois da identidade o cliente ja
      cai no cardapio, que e o que ele veio fazer. Os textos continuam
      configuraveis e aparecem no desktop. */
-  .identidadeChamada,
-  .identidadeAcao {
+  .textoPequeno,
+  .conteudoBanner h1,
+  .descricaoBanner,
+  .botoesBanner {
     display: none;
   }
 
