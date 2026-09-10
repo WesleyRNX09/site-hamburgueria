@@ -132,12 +132,17 @@ function Home() {
     return produtoSelecionado.adicionaisIds.some((id) => String(id) === String(adicional.id));
   });
 
-  const produtosFiltrados =
-    categoriaAtiva === 'Todos'
-      ? produtos
-      : produtos.filter(
-          (produto) => produto.categoria === categoriaAtiva
-        );
+  /* O cardapio é lido por seção, não como uma lista única: cada categoria
+     ativa vira um bloco com título. O filtro do topo passa a recortar quais
+     blocos aparecem, em vez de misturar tudo em uma lista só. */
+  const gruposDeProdutos = categoriasSalvas
+    .filter((categoria) => categoria.ativo !== false)
+    .filter((categoria) => categoriaAtiva === 'Todos' || categoria.nome === categoriaAtiva)
+    .map((categoria) => ({
+      nome: categoria.nome,
+      itens: produtos.filter((produto) => produto.categoria === categoria.nome)
+    }))
+    .filter((grupo) => grupo.itens.length > 0);
 
   async function abrirCarrinho() {
     setCarrinhoAberto(true);
@@ -1088,8 +1093,12 @@ function Home() {
           ))}
         </div>
 
-        <div className={styles.listaProdutos}>
-          {produtosFiltrados.map((produto) => (
+        {gruposDeProdutos.map((grupo) => (
+          <section className={styles.grupoCategoria} key={grupo.nome}>
+            <h3 className={styles.tituloGrupo}>{grupo.nome}</h3>
+
+            <div className={styles.listaProdutos}>
+              {grupo.itens.map((produto) => (
             <article
               className={styles.cardProduto}
               key={produto.id}
@@ -1117,7 +1126,7 @@ function Home() {
                 )}
 
                 <div>
-                  <h3 className={styles.informacoesProdutoTitulo}>{produto.nome}</h3>
+                  <h4 className={styles.informacoesProdutoTitulo}>{produto.nome}</h4>
                   <p className={styles.informacoesProdutoDescrição}>{produto.descricao}</p>
                 </div>
 
@@ -1147,11 +1156,14 @@ function Home() {
                 aria-label={`Ver detalhes de ${produto.nome}`}
               />
             </article>
-          ))}
-          {produtosFiltrados.length === 0 && (
-            <p className={styles.semResultados} role="status">Nenhum produto disponível nesta categoria.</p>
-          )}
-        </div>
+              ))}
+            </div>
+          </section>
+        ))}
+
+        {gruposDeProdutos.length === 0 && (
+          <p className={styles.semResultados} role="status">Nenhum produto disponível nesta categoria.</p>
+        )}
       </section>
       </main>
 

@@ -923,6 +923,29 @@
 }
 
 
+/* Grupos por categoria: o cardapio e lido por secao ("Hamburgueres",
+   "Bebidas"...), nao como uma lista unica. */
+
+.grupoCategoria {
+  width: 100%;
+  margin-top: 4.5rem;
+}
+
+.grupoCategoria:first-of-type {
+  margin-top: 3rem;
+}
+
+.tituloGrupo {
+  margin: 0 0 1.8rem;
+
+  color: var(--cor-principal);
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
 /* Lista */
 
 .listaProdutos {
@@ -932,6 +955,11 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.3rem;
+}
+
+/* Dentro do grupo quem afasta e o titulo. */
+.grupoCategoria .listaProdutos {
+  margin-top: 0;
 }
 
 /* Card */
@@ -3908,6 +3936,22 @@
     background: color-mix(in srgb, var(--cor-fundo) 92%, transparent);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .grupoCategoria {
+    margin-top: 3rem;
+  }
+
+  .grupoCategoria:first-of-type {
+    margin-top: 0;
+  }
+
+  .tituloGrupo {
+    margin-bottom: 1.2rem;
+
+    color: var(--cor-texto);
+    font-size: 1.7rem;
+    letter-spacing: 0.06em;
   }
 
   .listaProdutos {
