@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import banner from '../../assets/banner.webp';
 import LogoEstabelecimento from '../../components/LogoEstabelecimento';
 import { useApp } from '../../context/appContext';
+import { algumDiaAberto, DIAS_SEMANA, ORDEM_EXIBICAO } from '../../utils/horarios';
 import { usarPlaceholderProduto } from '../../utils/productImage';
 import styles from './index.module.css';
 
@@ -16,6 +17,9 @@ function Home() {
   const [bannerComErro, setBannerComErro] = useState('');
 
   const [indicePromocao, setIndicePromocao] = useState(0);
+
+  const [horariosAbertos, setHorariosAbertos] = useState(false);
+  const horariosRef = useRef(null);
 
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
   const [modalProdutoAberto, setModalProdutoAberto] = useState(false);
@@ -247,6 +251,7 @@ function Home() {
     : configuracao.lojaAberta
       ? 'Só consulta'
       : 'Fechado';
+  const gradeDeHorarios = algumDiaAberto(configuracao.horarios);
   const horarioResumido = String(configuracao.horarioFuncionamento ?? '')
     .split('\n')
     .map((linha) => linha.trim())
@@ -295,6 +300,26 @@ function Home() {
     imagem.src = configuracao.banner;
     return () => { ativo = false; };
   }, [configuracao.banner]);
+
+  useEffect(() => {
+    if (!horariosAbertos) return undefined;
+
+    function fecharForaDoPainel(evento) {
+      if (!horariosRef.current?.contains(evento.target)) setHorariosAbertos(false);
+    }
+
+    function fecharComEsc(evento) {
+      if (evento.key === 'Escape') setHorariosAbertos(false);
+    }
+
+    document.addEventListener('pointerdown', fecharForaDoPainel);
+    document.addEventListener('keydown', fecharComEsc);
+
+    return () => {
+      document.removeEventListener('pointerdown', fecharForaDoPainel);
+      document.removeEventListener('keydown', fecharComEsc);
+    };
+  }, [horariosAbertos]);
   
   function irParaSecao(id) {
   const secao = document.getElementById(id);
@@ -702,9 +727,10 @@ function Home() {
       >
         <div className={styles.conteudoBanner}>
           {/* Identidade da loja no mobile: logo sobre a faixa da foto, nome e
-              os chips que decidem o pedido (status, horario, entrega, minimo).
+              os chips que decidem o pedido. O horario nao ocupa um chip fixo:
+              fica dentro do status, que abre a grade completa da semana.
               No desktop tudo isso ja aparece no selo de status e no rodape. */}
-          <div className={styles.identidadeLoja}>
+          <div className={styles.identidadeLoja} ref={horariosRef}>
             <div className={styles.identidadeLogo}>
               <LogoEstabelecimento configuracao={configuracao} alternativa={iniciaisLoja} loading="lazy" />
             </div>
@@ -716,16 +742,31 @@ function Home() {
             )}
 
             <div className={styles.identidadeInfos}>
-              <span
-                className={`${styles.chipLoja} ${pedidosOnlineDisponiveis ? styles.chipAberto : styles.chipFechado}`}
+              <button
+                type="button"
+                className={`${styles.chipLoja} ${styles.chipStatus} ${pedidosOnlineDisponiveis ? styles.chipAberto : styles.chipFechado}`}
+                onClick={() => setHorariosAbertos((aberto) => !aberto)}
+                aria-expanded={horariosAbertos}
+                aria-controls="horarios-da-loja"
               >
                 <span className={styles.pontoStatus} aria-hidden="true" />
                 {statusCurto}
-              </span>
 
-              {horarioResumido && (
-                <span className={styles.chipLoja}>{horarioResumido}</span>
-              )}
+                <svg
+                  className={`${styles.setaChip} ${horariosAbertos ? styles.setaChipAberta : ''}`}
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M6 9L12 15L18 9"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
 
               {configuracao.entregaAtiva && configuracao.tempoEntrega && (
                 <span className={styles.chipLoja}>Entrega {configuracao.tempoEntrega}</span>
@@ -741,6 +782,37 @@ function Home() {
                 </span>
               )}
             </div>
+
+            {/* Fora da fila de chips: a fila rola na horizontal e recortaria
+                o painel se ele morasse dentro dela. */}
+            {horariosAbertos && (
+              <div className={styles.painelHorarios} id="horarios-da-loja">
+                <span className={styles.tituloHorarios}>Horários</span>
+
+                {/* Sem grade preenchida, o horario da loja e o texto livre que
+                    o administrador escreveu — listar sete "Fechado" mentiria. */}
+                {gradeDeHorarios ? (
+                  <ul>
+                    {ORDEM_EXIBICAO.map((indice) => {
+                      const dia = configuracao.horarios[indice];
+
+                      return (
+                        <li key={indice}>
+                          <span>{DIAS_SEMANA[indice].curto}</span>
+                          <strong className={dia.aberto ? '' : styles.diaFechado}>
+                            {dia.aberto ? `${dia.abre} - ${dia.fecha}` : 'Fechado'}
+                          </strong>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className={styles.horarioLivre}>
+                    {configuracao.horarioFuncionamento || 'Horário ainda não informado.'}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className={`${styles.statusLoja} ${pedidosOnlineDisponiveis ? styles.statusAberta : styles.statusFechada}`} role="status">
