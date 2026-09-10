@@ -867,6 +867,12 @@
   text-align: center;
 }
 
+/* Botao unico com a lista suspensa de categorias: existe so no mobile, onde
+   a fila de chips nao cabe na tela. Ver @media (max-width: 650px). */
+.seletorCategorias {
+  display: none;
+}
+
 .categorias {
   width: 100%;
   max-width: 1400px;
@@ -3674,32 +3680,39 @@
     line-height: 1.4;
   }
 
-  /* Fila unica: os chips ficam lado a lado e rolam na horizontal quando nao
-     cabem, em vez de quebrar em duas linhas. */
+  /* Tudo visivel de uma vez: nada de rolagem lateral. O que nao couber na
+     primeira linha desce para a de baixo, sempre centralizado. */
   .identidadeInfos {
-    --sangria-infos: 1.5rem;
-
-    /* Sem o stretch a fila ficaria do tamanho do conteudo dentro da coluna
-       centralizada, estourando a tela em vez de rolar. */
     align-self: stretch;
-    margin: 1.4rem calc(var(--sangria-infos) * -1) 0;
-    padding: 0.2rem var(--sangria-infos);
+    margin-top: 1.4rem;
 
     display: flex;
     align-items: center;
-    justify-content: flex-start;
-    justify-content: safe center;
-    flex-wrap: nowrap;
-    gap: 0.7rem;
-
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.9rem 1.6rem;
   }
 
-  .identidadeInfos::-webkit-scrollbar {
-    display: none;
+  /* Rotulo discreto + valor em destaque, sem borda em volta: o chip fechado
+     em cada dado ocupava largura demais para caber ao lado do status. */
+  .infoLoja {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.5rem;
+
+    white-space: nowrap;
+  }
+
+  .infoLoja span {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+
+  .infoLoja strong {
+    color: var(--cor-texto);
+    font-size: 1.35rem;
+    font-weight: 700;
   }
 
   .chipLoja {
@@ -3922,20 +3935,110 @@
     min-width: 0;
   }
 
+  /* A fila de chips sai: com muitas categorias ela so aparecia arrastando
+     de lado. O botao abaixo mostra todas de uma vez. */
+  .categorias {
+    display: none;
+  }
+
   /* Filtro fixo abaixo do cabecalho: a categoria escolhida continua a
      vista enquanto a lista rola. */
-  .categorias {
+  .seletorCategorias {
     position: sticky;
     top: 5rem;
     z-index: 900;
 
-    margin-bottom: 1.8rem;
-    padding-top: 1rem;
-    padding-bottom: 1rem;
+    display: block;
+
+    margin: 0 -1.5rem 1.8rem;
+    padding: 1rem 1.5rem;
 
     background: color-mix(in srgb, var(--cor-fundo) 92%, transparent);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .botaoListaCategorias {
+    width: 100%;
+    min-height: 4.4rem;
+    padding: 0 1.6rem;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+
+    color: var(--cor-texto);
+    font-family: inherit;
+    font-size: 1.45rem;
+    font-weight: 700;
+    text-align: left;
+
+    background: var(--cor-card);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 1rem;
+
+    cursor: pointer;
+  }
+
+  .botaoListaCategorias .setaChip {
+    flex: 0 0 auto;
+
+    width: 1.8rem;
+    height: 1.8rem;
+
+    color: var(--cor-principal);
+  }
+
+  .menuCategorias {
+    position: absolute;
+    top: 100%;
+    right: 1.5rem;
+    left: 1.5rem;
+    z-index: 940;
+
+    max-height: 60vh;
+    margin: 0.6rem 0 0;
+    padding: 0.6rem;
+
+    list-style: none;
+    overflow-y: auto;
+
+    background: var(--cor-card-elevado);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 1.2rem;
+
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+  }
+
+  .menuCategorias li + li {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .menuCategorias button {
+    width: 100%;
+    padding: 1.2rem;
+
+    display: block;
+
+    color: rgba(255, 255, 255, 0.78);
+    font-family: inherit;
+    font-size: 1.45rem;
+    font-weight: 600;
+    text-align: left;
+
+    background: none;
+    border: 0;
+    border-radius: 0.8rem;
+
+    cursor: pointer;
+  }
+
+  .menuCategorias .categoriaSelecionada {
+    color: var(--cor-sobre-principal);
+    font-weight: 700;
+
+    background: var(--cor-principal);
   }
 
   .grupoCategoria {

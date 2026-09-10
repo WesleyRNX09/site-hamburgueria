@@ -21,6 +21,9 @@ function Home() {
   const [horariosAbertos, setHorariosAbertos] = useState(false);
   const horariosRef = useRef(null);
 
+  const [listaCategoriasAberta, setListaCategoriasAberta] = useState(false);
+  const listaCategoriasRef = useRef(null);
+
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
   const [modalProdutoAberto, setModalProdutoAberto] = useState(false);
   const [produtoSelecionado, setProdutoSelecionado] = useState(null);
@@ -306,15 +309,21 @@ function Home() {
     return () => { ativo = false; };
   }, [configuracao.banner]);
 
+  /* Os dois paineis suspensos do mobile (horarios e lista de categorias)
+     fecham do mesmo jeito: toque fora ou Esc. */
   useEffect(() => {
-    if (!horariosAbertos) return undefined;
+    if (!horariosAbertos && !listaCategoriasAberta) return undefined;
 
     function fecharForaDoPainel(evento) {
       if (!horariosRef.current?.contains(evento.target)) setHorariosAbertos(false);
+      if (!listaCategoriasRef.current?.contains(evento.target)) setListaCategoriasAberta(false);
     }
 
     function fecharComEsc(evento) {
-      if (evento.key === 'Escape') setHorariosAbertos(false);
+      if (evento.key !== 'Escape') return;
+
+      setHorariosAbertos(false);
+      setListaCategoriasAberta(false);
     }
 
     document.addEventListener('pointerdown', fecharForaDoPainel);
@@ -324,7 +333,7 @@ function Home() {
       document.removeEventListener('pointerdown', fecharForaDoPainel);
       document.removeEventListener('keydown', fecharComEsc);
     };
-  }, [horariosAbertos]);
+  }, [horariosAbertos, listaCategoriasAberta]);
   
   function irParaSecao(id) {
   const secao = document.getElementById(id);
@@ -773,17 +782,13 @@ function Home() {
                 </svg>
               </button>
 
+              {/* So o tempo de entrega acompanha o status: como texto solto ele
+                  cabe na mesma linha, sem obrigar a arrastar a fila. Retirada e
+                  pedido minimo continuam no rodape e no carrinho. */}
               {configuracao.entregaAtiva && configuracao.tempoEntrega && (
-                <span className={styles.chipLoja}>Entrega {configuracao.tempoEntrega}</span>
-              )}
-
-              {configuracao.retiradaAtiva && (
-                <span className={styles.chipLoja}>Retirada no local</span>
-              )}
-
-              {pedidoMinimo > 0 && (
-                <span className={styles.chipLoja}>
-                  Mínimo R$ {pedidoMinimo.toFixed(2).replace('.', ',')}
+                <span className={styles.infoLoja}>
+                  <span>Entrega</span>
+                  <strong>{configuracao.tempoEntrega}</strong>
                 </span>
               )}
             </div>
@@ -1073,6 +1078,56 @@ function Home() {
 
           </div>}
 
+        </div>
+
+        {/* Mobile: a fila de chips exigia arrastar de lado para achar uma
+            categoria. No lugar dela, um botao que abre a lista inteira.
+            No desktop a fila continua, porque ali ela cabe sem rolagem. */}
+        <div className={styles.seletorCategorias} ref={listaCategoriasRef}>
+          <button
+            type="button"
+            className={styles.botaoListaCategorias}
+            onClick={() => setListaCategoriasAberta((aberta) => !aberta)}
+            aria-expanded={listaCategoriasAberta}
+            aria-controls="lista-de-categorias"
+          >
+            {categoriaAtiva === 'Todos' ? 'Lista de categorias' : categoriaAtiva}
+
+            <svg
+              className={`${styles.setaChip} ${listaCategoriasAberta ? styles.setaChipAberta : ''}`}
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                d="M6 9L12 15L18 9"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+
+          {listaCategoriasAberta && (
+            <ul className={styles.menuCategorias} id="lista-de-categorias">
+              {categorias.map((categoria) => (
+                <li key={categoria}>
+                  <button
+                    type="button"
+                    className={categoriaAtiva === categoria ? styles.categoriaSelecionada : ''}
+                    onClick={() => {
+                      setCategoriaAtiva(categoria);
+                      setListaCategoriasAberta(false);
+                    }}
+                    aria-current={categoriaAtiva === categoria ? 'true' : undefined}
+                  >
+                    {categoria}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className={styles.categorias} role="group" aria-label="Filtrar por categoria">
