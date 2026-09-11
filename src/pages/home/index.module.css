@@ -35,6 +35,15 @@
     height 0.3s ease;
 }
 
+/* No escuro a barra nasce transparente e a foto do banner aparece por trás
+   dela. No claro isso deixava o texto escuro sobre a foto e criava a faixa
+   cinza no topo, então aqui ela é sólida desde o começo. */
+@media (prefers-color-scheme: light) {
+  .barraPrincipal {
+    background-color: var(--cor-fundo);
+  }
+}
+
 .conteudoHeader {
   width: 100%;
   max-width: 1500px;
@@ -52,7 +61,7 @@
   height: 7rem; /* antes: 5.5rem */
 
   background-color: color-mix(in srgb, var(--cor-secundaria) 95%, transparent);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 20px var(--sombra-barra);
 
   backdrop-filter: blur(10px);
 }
@@ -83,7 +92,7 @@
   background: color-mix(in srgb, var(--cor-erro) 12%, var(--cor-secundaria));
   padding: 1.4rem 1.6rem;
   color: var(--cor-erro-texto);
-  box-shadow: 0 1.8rem 5rem rgba(0, 0, 0, 0.45);
+  box-shadow: 0 1.8rem 5rem var(--sombra-flutuante);
   transform: translateX(-50%);
 }
 
@@ -229,9 +238,9 @@
 
   background: linear-gradient(
     90deg,
-    rgba(0, 0, 0, 0.95) 0%,
-    rgba(0, 0, 0, 0.75) 35%,
-    rgba(0, 0, 0, 0.2) 65%,
+    color-mix(in srgb, var(--cor-secundaria) 95%, transparent) 0%,
+    color-mix(in srgb, var(--cor-secundaria) 75%, transparent) 35%,
+    color-mix(in srgb, var(--cor-secundaria) 20%, transparent) 65%,
     transparent 100%
   );
 
@@ -315,7 +324,7 @@
   border: 2px solid rgb(from var(--cor-principal-texto) r g b / 0.7);
   border-radius: 50%;
 
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 12px 28px var(--sombra-flutuante);
 }
 
 .identidadeLogo img {
@@ -456,7 +465,7 @@
   border: 1px solid color-mix(in srgb, var(--cor-texto) 12%, transparent);
   border-radius: 1.2rem;
 
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 18px 40px var(--sombra-flutuante);
 }
 
 .tituloHorarios {
@@ -659,7 +668,7 @@
 
 .botaoSecundario {
   color: var(--cor-principal-texto);
-  background-color: rgba(0, 0, 0, 0.25);
+  background-color: color-mix(in srgb, var(--cor-secundaria) 25%, transparent);
   border: 2px solid var(--cor-principal-texto);
 }
 
@@ -776,7 +785,7 @@
 
   overflow: hidden;
 
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 12px 30px var(--sombra-cartao);
 
   transition:
     transform 0.25s ease,
@@ -790,7 +799,7 @@
   border-color: var(--cor-principal-texto);
 
   box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.4),
+    0 18px 40px var(--sombra-cartao-forte),
     0 0 25px rgb(from var(--cor-principal-texto) r g b / 0.08);
 }
 
@@ -1159,7 +1168,7 @@
   border: 1px solid color-mix(in srgb, var(--cor-texto) 12%, transparent);
   border-radius: 1.2rem;
 
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 18px 40px var(--sombra-flutuante);
 }
 
 .menuCategorias li + li {
@@ -1267,7 +1276,7 @@
   border: 1px solid color-mix(in srgb, var(--cor-texto) 7%, transparent);
   border-radius: 1.4rem;
 
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 6px 18px var(--sombra-cartao);
 
   transition:
     transform 0.2s ease,
@@ -1280,7 +1289,7 @@
 
   border-color: rgb(from var(--cor-principal-texto) r g b / 0.45);
 
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 14px 30px var(--sombra-cartao-forte);
 }
 
 /* Imagem: miniatura a direita (a imagem vem antes no DOM). */
@@ -1503,7 +1512,7 @@
   border-radius: 1.5rem;
 
   box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.65);
+    0 30px 80px var(--sombra-flutuante);
 
   overflow-y: auto;
 }
@@ -1759,7 +1768,7 @@
   transform: translateY(-2px);
 
   box-shadow:
-    0 7px 18px rgba(0, 0, 0, 0.2);
+    0 7px 18px var(--sombra-cartao);
 }
 
 
@@ -2191,7 +2200,7 @@
     rgb(from var(--cor-principal-texto) r g b / 0.3);
 
   box-shadow:
-    -15px 0 50px rgba(0, 0, 0, 0.5);
+    -15px 0 50px var(--sombra-flutuante);
 
   transform: translateX(100%);
 
@@ -3385,11 +3394,11 @@
   .banner::before {
     background: linear-gradient(
       to bottom,
-      rgba(0, 0, 0, 0.75) 0,
-      rgba(0, 0, 0, 0.3) 8svh,
-      rgba(0, 0, 0, 0.2) 24svh,
-      rgba(0, 0, 0, 0.55) 36svh,
-      rgba(0, 0, 0, 0.92) 46svh,
+      color-mix(in srgb, var(--cor-secundaria) 75%, transparent) 0,
+      color-mix(in srgb, var(--cor-secundaria) 30%, transparent) 8svh,
+      color-mix(in srgb, var(--cor-secundaria) 20%, transparent) 24svh,
+      color-mix(in srgb, var(--cor-secundaria) 55%, transparent) 36svh,
+      color-mix(in srgb, var(--cor-secundaria) 92%, transparent) 46svh,
       var(--cor-fundo) 56svh
     );
   }
@@ -3808,9 +3817,9 @@
   .banner::before {
     background: linear-gradient(
       to bottom,
-      rgba(0, 0, 0, 0.6) 0,
-      rgba(0, 0, 0, 0.15) 10svh,
-      rgba(0, 0, 0, 0.65) 21svh,
+      color-mix(in srgb, var(--cor-secundaria) 60%, transparent) 0,
+      color-mix(in srgb, var(--cor-secundaria) 15%, transparent) 10svh,
+      color-mix(in srgb, var(--cor-secundaria) 65%, transparent) 21svh,
       var(--cor-fundo) 28svh
     );
   }
@@ -4044,7 +4053,7 @@
   .cardProduto:hover {
     transform: none;
     border-color: color-mix(in srgb, var(--cor-texto) 7%, transparent);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    box-shadow: 0 6px 18px var(--sombra-cartao);
   }
 
   .cardProduto:hover .imagemProduto {

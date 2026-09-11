@@ -8,8 +8,8 @@
   --cor-texto: #FFFFFF;
   --cor-sobre-principal: #0A0A0A;
   --fonte-principal: "Poppins", Arial, sans-serif;
-  /* A cor da marca usada como texto. No tema escuro é a própria cor; no claro
-     o theme.js a escurece até passar do contraste mínimo sobre o fundo. */
+  /* A cor da marca usada como texto, ícone ou contorno — separada da que
+     preenche botões para poder ser ajustada por tema sem mexer nos dois. */
   --cor-principal-texto: var(--cor-principal);
   --cor-texto-suave: #D0D0D0;
   --cor-texto-medio: #BDBDBD;
@@ -18,6 +18,10 @@
   --cor-ok-texto: #6FF0A6;
   --cor-erro: #FF7777;
   --cor-erro-texto: #FF9A9A;
+  --sombra-barra: rgba(0, 0, 0, 0.5);
+  --sombra-cartao: rgba(0, 0, 0, 0.28);
+  --sombra-cartao-forte: rgba(0, 0, 0, 0.4);
+  --sombra-flutuante: rgba(0, 0, 0, 0.6);
   --cor-principal-clara: color-mix(in srgb, var(--cor-principal) 72%, white);
   --cor-card-profundo: color-mix(in srgb, var(--cor-card) 75%, var(--cor-fundo));
   --cor-card-elevado: color-mix(in srgb, var(--cor-card) 92%, var(--cor-texto));
@@ -39,7 +43,7 @@
     --cor-fundo: #FFFFFF;
     --cor-card: #F5F4F1;
     --cor-texto: #1A1A19;
-    --cor-principal-texto: #8A5D00;
+    --cor-principal-texto: var(--cor-principal);
     --cor-texto-suave: #3E3D3A;
     --cor-texto-medio: #55534E;
     --cor-texto-fraco: #6E6C67;
@@ -47,6 +51,12 @@
     --cor-ok-texto: #15703C;
     --cor-erro: #C62828;
     --cor-erro-texto: #A32019;
+    /* Sombra preta forte vira mancha cinza sobre o branco: aqui ela serve
+       só para descolar o elemento do fundo. */
+    --sombra-barra: rgba(0, 0, 0, 0.1);
+    --sombra-cartao: rgba(0, 0, 0, 0.05);
+    --sombra-cartao-forte: rgba(0, 0, 0, 0.09);
+    --sombra-flutuante: rgba(0, 0, 0, 0.14);
     color-scheme: light;
   }
 }

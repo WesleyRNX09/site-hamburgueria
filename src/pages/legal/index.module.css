@@ -12,7 +12,7 @@
   border-radius: 18px;
   background: var(--cor-card-profundo);
   padding: clamp(1.5rem, 4vw, 3.5rem);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 24px 80px var(--sombra-cartao);
 }
 
 .voltar { display: inline-flex; margin-bottom: 2.5rem; color: var(--cor-principal-texto); font-weight: 800; text-decoration: none; }
