@@ -56,6 +56,72 @@ function corDeContraste(corHexadecimal) {
     : '#FFFFFF';
 }
 
+function canais(corHexadecimal) {
+  return [1, 3, 5].map((inicio) =>
+    Number.parseInt(corHexadecimal.slice(inicio, inicio + 2), 16));
+}
+
+function paraHexadecimal(valores) {
+  return `#${valores
+    .map((valor) => Math.round(Math.min(255, Math.max(0, valor))).toString(16).padStart(2, '0'))
+    .join('')}`.toUpperCase();
+}
+
+function misturar(corA, corB, pesoDeB) {
+  const a = canais(corA);
+  const b = canais(corB);
+  return paraHexadecimal(a.map((valor, indice) =>
+    (valor * (1 - pesoDeB)) + (b[indice] * pesoDeB)));
+}
+
+function luminancia(corHexadecimal) {
+  const [vermelho, verde, azul] = canais(corHexadecimal).map((valor) => {
+    const proporcao = valor / 255;
+    return proporcao <= 0.03928
+      ? proporcao / 12.92
+      : ((proporcao + 0.055) / 1.055) ** 2.4;
+  });
+  return (0.2126 * vermelho) + (0.7152 * verde) + (0.0722 * azul);
+}
+
+function contraste(corA, corB) {
+  const claraA = luminancia(corA);
+  const claraB = luminancia(corB);
+  return (Math.max(claraA, claraB) + 0.05) / (Math.min(claraA, claraB) + 0.05);
+}
+
+/* O amarelo da marca some sobre fundo branco (contraste 1,9:1). Para usá-lo
+   como texto no tema claro, escurecemos a cor até passar de 4,5:1 — o mesmo
+   cálculo serve para a cor que qualquer estabelecimento escolher no painel. */
+function corLegivel(corDaMarca, fundo, alvo = 4.5) {
+  const destino = luminancia(fundo) > 0.4 ? '#000000' : '#FFFFFF';
+  let ajustada = corDaMarca;
+  for (let passo = 0; passo < 24 && contraste(ajustada, fundo) < alvo; passo += 1) {
+    ajustada = misturar(ajustada, destino, 0.08);
+  }
+  return ajustada;
+}
+
+const PALETA_CLARA = {
+  corSecundaria: '#FFFFFF',
+  corFundo: '#FFFFFF',
+  corCard: '#F5F4F1',
+  corTexto: '#1A1A19'
+};
+
+export function preferenciaTemaClaro() {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-color-scheme: light)').matches;
+}
+
+/* O tema claro vale só para o cardápio e o checkout. Painel, garçom e
+   superadmin têm fundos escuros fixos no CSS e ficariam ilegíveis.
+   A mesma regra está no index.html, que marca a área no primeiro quadro. */
+export function ehAreaPublica(caminho = '') {
+  return !/^\/(admin|superadmin|garcom)(\/|$)/.test(caminho);
+}
+
 export function normalizarConfiguracaoPublica(recebida = {}) {
   const fonte = normalizarFonte(recebida.fonte);
   const corPrincipal = cor(recebida.corPrincipal, configuracaoInicial.corPrincipal);
@@ -119,22 +185,29 @@ export function normalizarConfiguracaoPublica(recebida = {}) {
   };
 }
 
-export function criarVariaveisTema(configuracao) {
+/* No tema claro as cores do estabelecimento continuam mandando na marca, mas
+   os neutros (fundo, card, texto) passam a ser os claros: as cores escolhidas
+   no painel são escuras e não teriam como ser lidas sobre branco. */
+export function criarVariaveisTema(configuracao, temaClaro = preferenciaTemaClaro()) {
   const segura = normalizarConfiguracaoPublica(configuracao);
+  const neutros = temaClaro ? PALETA_CLARA : segura;
   return {
     '--cor-principal': segura.corPrincipal,
-    '--cor-secundaria': segura.corSecundaria,
-    '--cor-fundo': segura.corFundo,
-    '--cor-card': segura.corCard,
-    '--cor-texto': segura.corTexto,
+    '--cor-secundaria': neutros.corSecundaria,
+    '--cor-fundo': neutros.corFundo,
+    '--cor-card': neutros.corCard,
+    '--cor-texto': neutros.corTexto,
     '--cor-sobre-principal': segura.corSobrePrincipal,
+    '--cor-principal-texto': temaClaro
+      ? corLegivel(segura.corPrincipal, neutros.corFundo)
+      : segura.corPrincipal,
     '--fonte-principal': normalizarFonte(segura.fonte).css
   };
 }
 
-export function aplicarTema(elemento, configuracao) {
+export function aplicarTema(elemento, configuracao, temaClaro = preferenciaTemaClaro()) {
   if (!elemento?.style?.setProperty) return;
-  Object.entries(criarVariaveisTema(configuracao)).forEach(([propriedade, valor]) => {
+  Object.entries(criarVariaveisTema(configuracao, temaClaro)).forEach(([propriedade, valor]) => {
     elemento.style.setProperty(propriedade, valor);
   });
 }

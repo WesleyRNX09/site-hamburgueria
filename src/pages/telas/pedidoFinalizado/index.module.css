@@ -11,7 +11,7 @@
   background:
     radial-gradient(
       circle at 75% 20%,
-      rgb(from var(--cor-principal) r g b / 0.035),
+      rgb(from var(--cor-principal-texto) r g b / 0.035),
       transparent 35%
     ),
     var(--cor-fundo);
@@ -55,7 +55,7 @@
 
 
 .logo {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 2.8rem;
   font-weight: 800;
@@ -73,7 +73,7 @@
 
 
 .menu a {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1.35rem;
   font-weight: 600;
@@ -134,16 +134,16 @@
   display: grid;
   place-items: center;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   background-color:
-    rgb(from var(--cor-principal) r g b / 0.07);
+    rgb(from var(--cor-principal-texto) r g b / 0.07);
 
-  border: 2px solid var(--cor-principal);
+  border: 2px solid var(--cor-principal-texto);
   border-radius: 50%;
 
   box-shadow:
-    0 0 30px rgb(from var(--cor-principal) r g b / 0.12);
+    0 0 30px rgb(from var(--cor-principal-texto) r g b / 0.12);
 }
 
 
@@ -154,7 +154,7 @@
 
 
 .textoConfirmacao > span {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1.05rem;
   font-weight: 800;
@@ -176,7 +176,7 @@
 
 
 .textoConfirmacao h1 strong {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 }
 
 
@@ -185,7 +185,7 @@
 
   margin: 0.8rem 0 0;
 
-  color: #b5b5b5;
+  color: var(--cor-texto-medio);
 
   font-size: 1.35rem;
   font-weight: 500;
@@ -215,7 +215,7 @@
       var(--cor-card-profundo)
     );
 
-  border: 1px solid rgb(from var(--cor-principal) r g b / 0.35);
+  border: 1px solid rgb(from var(--cor-principal-texto) r g b / 0.35);
   border-radius: 1.3rem;
 
   box-shadow:
@@ -240,7 +240,7 @@
 
 .infoPedido:not(:last-child) {
   border-right: 1px solid
-    rgba(255, 255, 255, 0.09);
+    color-mix(in srgb, var(--cor-texto) 9%, transparent);
 }
 
 
@@ -248,7 +248,7 @@
   width: 3.3rem;
   height: 3.3rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   flex-shrink: 0;
 }
@@ -262,7 +262,7 @@
 .infoPedido span {
   display: block;
 
-  color: #a5a5a5;
+  color: var(--cor-texto-medio);
 
   font-size: 1.2rem;
   font-weight: 500;
@@ -273,7 +273,7 @@
 
   margin-top: 0.25rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1.75rem;
   font-weight: 800;
@@ -284,7 +284,7 @@
 .infoPedido p {
   margin: 0.4rem 0 0;
 
-  color: #8f8f8f;
+  color: var(--cor-texto-fraco);
 
   font-size: 1.05rem;
   font-weight: 500;
@@ -305,9 +305,9 @@
   gap: 0.7rem;
   margin: -0.7rem 0 2rem;
   padding: 1.4rem 1.6rem;
-  color: #d8d8d8;
-  background: rgb(from var(--cor-principal) r g b / 0.08);
-  border: 1px solid rgb(from var(--cor-principal) r g b / 0.35);
+  color: var(--cor-texto-suave);
+  background: rgb(from var(--cor-principal-texto) r g b / 0.08);
+  border: 1px solid rgb(from var(--cor-principal-texto) r g b / 0.35);
   border-radius: 1rem;
 }
 
@@ -326,7 +326,7 @@
 .dadosPix button {
   width: fit-content;
   padding: 0.8rem 1rem;
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
   font: inherit;
   font-weight: 800;
   background: var(--cor-principal);
@@ -344,7 +344,7 @@
 
 .dadosPix code {
   overflow-wrap: anywhere;
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   font-family: inherit;
   font-weight: 800;
 }
@@ -374,7 +374,7 @@
     );
 
   border: 1px solid
-    rgb(from var(--cor-principal) r g b / 0.25);
+    rgb(from var(--cor-principal-texto) r g b / 0.25);
 
   border-radius: 1.3rem;
 }
@@ -394,8 +394,8 @@
       to right,
       var(--cor-principal) 0%,
       var(--cor-principal) 34%,
-      #444444 34%,
-      #444444 100%
+      color-mix(in srgb, var(--cor-texto) 21%, var(--cor-fundo)) 34%,
+      color-mix(in srgb, var(--cor-texto) 21%, var(--cor-fundo)) 100%
     );
 }
 
@@ -422,14 +422,14 @@
   display: grid;
   place-items: center;
 
-  color: #999999;
+  color: var(--cor-texto-fraco);
 
   font-size: 1.6rem;
   font-weight: 800;
 
   background-color: var(--cor-card);
 
-  border: 2px solid #555555;
+  border: 2px solid color-mix(in srgb, var(--cor-texto) 27%, var(--cor-fundo));
   border-radius: 50%;
 }
 
@@ -441,27 +441,27 @@
 
 
 .etapaConcluida .circuloStatus {
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
 
   background-color: var(--cor-principal);
 
-  border-color: var(--cor-principal);
+  border-color: var(--cor-principal-texto);
 }
 
 
 .etapaAtual .circuloStatus {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
-  border-color: var(--cor-principal);
+  border-color: var(--cor-principal-texto);
 
   box-shadow:
     0 0 0 5px
-    rgb(from var(--cor-principal) r g b / 0.08);
+    rgb(from var(--cor-principal-texto) r g b / 0.08);
 }
 
 
 .etapaStatus strong {
-  color: #bdbdbd;
+  color: var(--cor-texto-medio);
 
   font-size: 1.35rem;
   font-weight: 800;
@@ -470,7 +470,7 @@
 
 .etapaConcluida strong,
 .etapaAtual strong {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   font-size: 1.4rem;
 }
 
@@ -478,7 +478,7 @@
 .etapaStatus span {
   margin-top: 0.3rem;
 
-  color: #888888;
+  color: var(--cor-texto-fraco);
 
   font-size: 1.05rem;
   font-weight: 500;
@@ -513,7 +513,7 @@
       var(--cor-card-profundo)
     );
 
-  border: 1px solid rgb(from var(--cor-principal) r g b / 0.3);
+  border: 1px solid rgb(from var(--cor-principal-texto) r g b / 0.3);
   border-radius: 1.2rem;
 
   box-shadow:
@@ -557,7 +557,7 @@
   padding: 1rem 0;
 
   border-bottom: 1px solid
-    rgba(255, 255, 255, 0.07);
+    color-mix(in srgb, var(--cor-texto) 7%, transparent);
 }
 
 
@@ -587,7 +587,7 @@
   display: grid;
   place-items: center;
 
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
 
   font-size: 1.05rem;
   font-weight: 800;
@@ -615,7 +615,7 @@
 
   margin: 0.45rem 0 0;
 
-  color: #a5a5a5;
+  color: var(--cor-texto-medio);
 
   font-size: 1.1rem;
   font-weight: 500;
@@ -625,7 +625,7 @@
 
 
 .precoItem {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1.6rem;
   font-weight: 800;
@@ -649,7 +649,7 @@
 
 
 .linhaResumo span {
-  color: #bdbdbd;
+  color: var(--cor-texto-medio);
 
   font-size: 1.2rem;
   font-weight: 500;
@@ -671,7 +671,7 @@
   align-items: center;
   justify-content: space-between;
 
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: 1px solid color-mix(in srgb, var(--cor-texto) 12%, transparent);
 }
 
 
@@ -684,7 +684,7 @@
 
 
 .totalResumo strong {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 2.5rem;
   font-weight: 800;
@@ -711,7 +711,7 @@
       var(--cor-card-profundo)
     );
 
-  border: 1px solid rgb(from var(--cor-principal) r g b / 0.2);
+  border: 1px solid rgb(from var(--cor-principal-texto) r g b / 0.2);
   border-radius: 1.2rem;
 }
 
@@ -725,7 +725,7 @@
 
 
 .beneficios > div:not(:last-child) {
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid color-mix(in srgb, var(--cor-texto) 8%, transparent);
 }
 
 
@@ -736,7 +736,7 @@
   display: grid;
   place-items: center;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 2.4rem;
   font-weight: 800;
@@ -747,7 +747,7 @@
 .beneficios strong {
   display: block;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1.4rem;
   font-weight: 800;
@@ -756,7 +756,7 @@
 .beneficios p {
   margin: 0.35rem 0 0;
 
-  color: #999999;
+  color: var(--cor-texto-fraco);
 
   font-size: 1.1rem;
   font-weight: 500;
@@ -912,7 +912,7 @@
     border-right: none;
 
     border-bottom: 1px solid
-      rgba(255, 255, 255, 0.08);
+      color-mix(in srgb, var(--cor-texto) 8%, transparent);
   }
 
 }

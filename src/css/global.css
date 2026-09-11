@@ -8,6 +8,16 @@
   --cor-texto: #FFFFFF;
   --cor-sobre-principal: #0A0A0A;
   --fonte-principal: "Poppins", Arial, sans-serif;
+  /* A cor da marca usada como texto. No tema escuro é a própria cor; no claro
+     o theme.js a escurece até passar do contraste mínimo sobre o fundo. */
+  --cor-principal-texto: var(--cor-principal);
+  --cor-texto-suave: #D0D0D0;
+  --cor-texto-medio: #BDBDBD;
+  --cor-texto-fraco: #8F8F8F;
+  --cor-ok: #42D981;
+  --cor-ok-texto: #6FF0A6;
+  --cor-erro: #FF7777;
+  --cor-erro-texto: #FF9A9A;
   --cor-principal-clara: color-mix(in srgb, var(--cor-principal) 72%, white);
   --cor-card-profundo: color-mix(in srgb, var(--cor-card) 75%, var(--cor-fundo));
   --cor-card-elevado: color-mix(in srgb, var(--cor-card) 92%, var(--cor-texto));
@@ -15,6 +25,30 @@
   font-family: var(--fonte-principal);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+/* Tema claro: segue a configuração do aparelho de quem abre o cardápio. Vale
+   apenas na área pública — painel, garçom e superadmin têm fundos escuros
+   fixos no CSS e ficariam com texto escuro sobre escuro.
+   As cores do estabelecimento também são recalculadas pelo theme.js, que as
+   aplica inline no <html>; os valores repetidos aqui valem para o primeiro
+   quadro, antes do React montar, e evitam o pisca escuro. */
+@media (prefers-color-scheme: light) {
+  :root[data-area="publica"] {
+    --cor-secundaria: #FFFFFF;
+    --cor-fundo: #FFFFFF;
+    --cor-card: #F5F4F1;
+    --cor-texto: #1A1A19;
+    --cor-principal-texto: #8A5D00;
+    --cor-texto-suave: #3E3D3A;
+    --cor-texto-medio: #55534E;
+    --cor-texto-fraco: #6E6C67;
+    --cor-ok: #1B7F45;
+    --cor-ok-texto: #15703C;
+    --cor-erro: #C62828;
+    --cor-erro-texto: #A32019;
+    color-scheme: light;
+  }
 }
 
 html {
@@ -111,7 +145,7 @@ h6 {
 }
 
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
-  outline: 3px solid var(--cor-principal);
+  outline: 3px solid var(--cor-principal-texto);
   outline-offset: 3px;
 }
 
@@ -129,8 +163,8 @@ h6 {
 .carregamentoAplicacao span {
   width: 38px;
   height: 38px;
-  border: 3px solid rgb(from var(--cor-principal) r g b / 0.2);
-  border-top-color: var(--cor-principal);
+  border: 3px solid rgb(from var(--cor-principal-texto) r g b / 0.2);
+  border-top-color: var(--cor-principal-texto);
   border-radius: 50%;
   animation: giroCarregamento 0.8s linear infinite;
 }

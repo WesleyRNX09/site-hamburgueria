@@ -51,14 +51,14 @@
 .barraRolada {
   height: 7rem; /* antes: 5.5rem */
 
-  background-color: rgba(10, 10, 10, 0.95);
+  background-color: color-mix(in srgb, var(--cor-secundaria) 95%, transparent);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 
   backdrop-filter: blur(10px);
 }
 
 .logo {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   font-size: 2.8rem; /* antes: 2rem */
   font-weight: 600;
   text-decoration: none;
@@ -78,11 +78,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 1.6rem;
-  border: 1px solid rgba(255, 107, 107, 0.45);
+  border: 1px solid color-mix(in srgb, var(--cor-erro) 45%, transparent);
   border-radius: 1.2rem;
-  background: rgba(36, 15, 15, 0.96);
+  background: color-mix(in srgb, var(--cor-erro) 12%, var(--cor-secundaria));
   padding: 1.4rem 1.6rem;
-  color: #ffd0d0;
+  color: var(--cor-erro-texto);
   box-shadow: 0 1.8rem 5rem rgba(0, 0, 0, 0.45);
   transform: translateX(-50%);
 }
@@ -90,16 +90,16 @@
 .erroCatalogo strong,
 .erroCatalogo span { display: block; }
 .erroCatalogo strong { font-size: 1.4rem; }
-.erroCatalogo span { margin-top: 0.3rem; color: #cf9a9a; font-size: 1.2rem; }
-.erroCatalogo button { flex: 0 0 auto; border: 1px solid #ff8181; border-radius: 999px; background: transparent; padding: 0.8rem 1.3rem; color: #ffd0d0; font-weight: 700; }
+.erroCatalogo span { margin-top: 0.3rem; color: var(--cor-erro-texto); font-size: 1.2rem; }
+.erroCatalogo button { flex: 0 0 auto; border: 1px solid var(--cor-erro); border-radius: 999px; background: transparent; padding: 0.8rem 1.3rem; color: var(--cor-erro-texto); font-weight: 700; }
 
 .semResultados {
   grid-column: 1 / -1;
   margin: 0;
-  border: 1px dashed #353535;
+  border: 1px dashed color-mix(in srgb, var(--cor-texto) 15%, var(--cor-fundo));
   border-radius: 1.2rem;
   padding: 3rem 1.8rem;
-  color: #8f8f8f;
+  color: var(--cor-texto-fraco);
   font-size: 1.4rem;
   text-align: center;
 }
@@ -122,7 +122,7 @@
 .menu a {
   position: relative;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   font-size: 1.5rem;
   font-weight: 500;
   text-decoration: none;
@@ -177,12 +177,12 @@
   justify-content: center;
   gap: 0.8rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   font-size: 1.5rem;
   font-weight: 500;
   text-decoration: none;
 
-  border: 2px solid var(--cor-principal);
+  border: 2px solid var(--cor-principal-texto);
   border-radius: 2.5rem;
 
   transition:
@@ -192,7 +192,7 @@
 }
 
 .botaoCarrinho:hover {
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
   background-color: var(--cor-principal);
   transform: translateY(-2px);
 }
@@ -303,7 +303,7 @@
   display: grid;
   place-items: center;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   font-size: 3.8rem;
   font-weight: 800;
   line-height: 1;
@@ -312,7 +312,7 @@
   overflow: hidden;
 
   background: var(--cor-card);
-  border: 2px solid rgb(from var(--cor-principal) r g b / 0.7);
+  border: 2px solid rgb(from var(--cor-principal-texto) r g b / 0.7);
   border-radius: 50%;
 
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
@@ -334,7 +334,7 @@
 }
 
 .identidadeEndereco {
-  color: rgba(255, 255, 255, 0.58);
+  color: color-mix(in srgb, var(--cor-texto) 58%, transparent);
   font-size: 1.25rem;
   font-weight: 500;
   line-height: 1.4;
@@ -360,7 +360,7 @@
 }
 
 .infoLoja span {
-  color: rgba(255, 255, 255, 0.55);
+  color: color-mix(in srgb, var(--cor-texto) 55%, transparent);
   font-size: 1.3rem;
   font-weight: 600;
 }
@@ -383,13 +383,13 @@
   align-items: center;
   gap: 0.6rem;
 
-  color: rgba(255, 255, 255, 0.75);
+  color: color-mix(in srgb, var(--cor-texto) 75%, transparent);
   font-size: 1.35rem;
   font-weight: 600;
   white-space: nowrap;
 
   background: var(--cor-card);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid color-mix(in srgb, var(--cor-texto) 10%, transparent);
   border-radius: 999px;
 }
 
@@ -402,13 +402,13 @@
 }
 
 .chipAberto {
-  color: #6ff0a6;
-  border-color: rgba(66, 217, 129, 0.32);
+  color: var(--cor-ok-texto);
+  border-color: color-mix(in srgb, var(--cor-ok) 32%, transparent);
 }
 
 .chipFechado {
-  color: #ff9a9a;
-  border-color: rgba(255, 119, 119, 0.32);
+  color: var(--cor-erro-texto);
+  border-color: color-mix(in srgb, var(--cor-erro) 32%, transparent);
 }
 
 .pontoStatus {
@@ -453,7 +453,7 @@
   text-align: left;
 
   background: var(--cor-card-elevado);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid color-mix(in srgb, var(--cor-texto) 12%, transparent);
   border-radius: 1.2rem;
 
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
@@ -463,13 +463,13 @@
   display: block;
   padding-bottom: 1rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   font-size: 1.3rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid color-mix(in srgb, var(--cor-texto) 10%, transparent);
 }
 
 .painelHorarios ul {
@@ -489,11 +489,11 @@
 }
 
 .painelHorarios li + li {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid color-mix(in srgb, var(--cor-texto) 6%, transparent);
 }
 
 .painelHorarios li span {
-  color: rgba(255, 255, 255, 0.6);
+  color: color-mix(in srgb, var(--cor-texto) 60%, transparent);
   font-size: 1.3rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -507,7 +507,7 @@
 }
 
 .diaFechado {
-  color: rgba(255, 255, 255, 0.38);
+  color: color-mix(in srgb, var(--cor-texto) 38%, transparent);
   font-weight: 600;
 }
 
@@ -535,14 +535,14 @@
   margin-bottom: 1.6rem;
   max-width: 100%;
 
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid color-mix(in srgb, var(--cor-texto) 14%, transparent);
   border-radius: 999px;
   padding: 0.7rem 1.4rem;
 
-  background: rgba(10, 10, 10, 0.72);
+  background: color-mix(in srgb, var(--cor-secundaria) 72%, transparent);
   backdrop-filter: blur(8px);
 
-  color: rgba(255, 255, 255, 0.72);
+  color: color-mix(in srgb, var(--cor-texto) 72%, transparent);
   font-size: 1.4rem;
   line-height: 1.25;
 }
@@ -554,13 +554,13 @@
 }
 
 .statusAberta .pontoStatus {
-  color: #42d981;
-  box-shadow: 0 0 0 0.4rem rgba(66, 217, 129, 0.18);
+  color: var(--cor-ok);
+  box-shadow: 0 0 0 0.4rem color-mix(in srgb, var(--cor-ok) 18%, transparent);
 }
 
 .statusFechada .pontoStatus {
-  color: #ff7777;
-  box-shadow: 0 0 0 0.4rem rgba(255, 119, 119, 0.18);
+  color: var(--cor-erro);
+  box-shadow: 0 0 0 0.4rem color-mix(in srgb, var(--cor-erro) 18%, transparent);
 }
 
 /* Versao curta (status + horario) so aparece no mobile; ver media query. */
@@ -573,7 +573,7 @@
   display: block;
   margin-bottom: 0.7rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   font-size: 1.25rem;
   font-weight: 800;
 }
@@ -594,11 +594,11 @@
 }
 
 .tituloBranco {
-  color: #D0D0D0;
+  color: var(--cor-texto-suave);
 }
 
 .tituloAmarelo {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 }
 
 .descricaoBanner {
@@ -607,7 +607,7 @@
 
   margin-top: 24px;
 
-  color: #E0E0E0;
+  color: var(--cor-texto-suave);
   font-size: 2rem;
   font-weight: 700;
   line-height: 1.45;
@@ -647,9 +647,9 @@
 }
 
 .botaoPrincipal {
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
   background-color: var(--cor-principal);
-  border: 2px solid var(--cor-principal);
+  border: 2px solid var(--cor-principal-texto);
 }
 
 .botaoPrincipal:hover {
@@ -658,13 +658,13 @@
 }
 
 .botaoSecundario {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   background-color: rgba(0, 0, 0, 0.25);
-  border: 2px solid var(--cor-principal);
+  border: 2px solid var(--cor-principal-texto);
 }
 
 .botaoSecundario:hover {
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
   background-color: var(--cor-principal);
   transform: translateY(-3px);
 }
@@ -693,7 +693,7 @@
 }
 
 .topoPromocoes span {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   font-size: 1.1rem;
   font-weight: 800;
   letter-spacing: 0.05rem;
@@ -710,7 +710,7 @@
 .verTodasPromocoes {
   margin-bottom: 0.25rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1.25rem;
   font-weight: 700;
@@ -771,7 +771,7 @@
     var(--cor-card-profundo)
   );
 
-  border: 1px solid rgb(from var(--cor-principal) r g b / 0.45);
+  border: 1px solid rgb(from var(--cor-principal-texto) r g b / 0.45);
   border-radius: 1.4rem;
 
   overflow: hidden;
@@ -787,11 +787,11 @@
 .cardPromocao:hover {
   transform: translateY(-5px);
 
-  border-color: var(--cor-principal);
+  border-color: var(--cor-principal-texto);
 
   box-shadow:
     0 18px 40px rgba(0, 0, 0, 0.4),
-    0 0 25px rgb(from var(--cor-principal) r g b / 0.08);
+    0 0 25px rgb(from var(--cor-principal-texto) r g b / 0.08);
 }
 
 .indicadoresPromocao {
@@ -811,7 +811,7 @@
 
   padding: 0;
 
-  background-color: #444444;
+  background-color: color-mix(in srgb, var(--cor-texto) 21%, var(--cor-fundo));
 
   border: none;
   border-radius: 50%;
@@ -867,7 +867,7 @@
 
   padding: 0.45rem 0.9rem;
 
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
 
   font-size: 0.8rem;
   font-weight: 800;
@@ -889,7 +889,7 @@
 }
 
 .tipoPromocao {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1rem;
   font-weight: 800;
@@ -909,7 +909,7 @@
 .conteudoPromocao p {
   margin: 0;
 
-  color: #d0d0d0;
+  color: var(--cor-texto-suave);
 
   font-size: 1.45rem;
   font-weight: 500;
@@ -928,7 +928,7 @@
 }
 
 .precoPromocao span {
-  color: #999999;
+  color: var(--cor-texto-fraco);
 
   font-size: 1.2rem;
   font-weight: 600;
@@ -937,7 +937,7 @@
 }
 
 .precoPromocao strong {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 2rem;
   font-weight: 800;
@@ -954,7 +954,7 @@
   margin-top: 0.8rem;
   padding: 0.7rem 1.6rem;
 
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
 
   font-family: inherit;
   font-size: 1.2rem;
@@ -978,7 +978,7 @@
 
   transform: translateY(-2px);
 
-  box-shadow: 0 7px 18px rgb(from var(--cor-principal) r g b / 0.18);
+  box-shadow: 0 7px 18px rgb(from var(--cor-principal-texto) r g b / 0.18);
 }
 
 /* =========================
@@ -1002,11 +1002,11 @@
   display: grid;
   place-items: center;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   background-color: var(--cor-card);
 
-  border: 2px solid var(--cor-principal);
+  border: 2px solid var(--cor-principal-texto);
   border-radius: 50%;
 
   cursor: pointer;
@@ -1028,7 +1028,7 @@
 
 
 .setaPromocao:hover {
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
 
   background-color: var(--cor-principal);
 
@@ -1036,7 +1036,7 @@
 
   box-shadow:
     0 6px 18px
-    rgb(from var(--cor-principal) r g b / 0.18);
+    rgb(from var(--cor-principal-texto) r g b / 0.18);
 }
 /* =========================
    CARDÁPIO
@@ -1064,13 +1064,13 @@
 .cardapio h2 {
   margin: 0;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   font-size: 2.6rem;
   font-weight: 800;
 }
 
 .cardapio p {
-  color: #d0d0d0;
+  color: var(--cor-texto-suave);
   font-size: 1.6rem;
   font-weight: 500;
 }
@@ -1078,7 +1078,7 @@
 .subtituloCardapio {
   margin-top: 0.5rem;
 
-  color: #e0e0e0;
+  color: var(--cor-texto-suave);
   font-size: 1.2rem;
   text-align: center;
 }
@@ -1120,7 +1120,7 @@
   text-align: left;
 
   background: var(--cor-card);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid color-mix(in srgb, var(--cor-texto) 12%, transparent);
   border-radius: 1rem;
 
   cursor: pointer;
@@ -1129,7 +1129,7 @@
 }
 
 .botaoListaCategorias:hover {
-  border-color: rgb(from var(--cor-principal) r g b / 0.45);
+  border-color: rgb(from var(--cor-principal-texto) r g b / 0.45);
 }
 
 .botaoListaCategorias .setaChip {
@@ -1138,7 +1138,7 @@
   width: 1.8rem;
   height: 1.8rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 }
 
 .menuCategorias {
@@ -1156,14 +1156,14 @@
   overflow-y: auto;
 
   background: var(--cor-card-elevado);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid color-mix(in srgb, var(--cor-texto) 12%, transparent);
   border-radius: 1.2rem;
 
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
 }
 
 .menuCategorias li + li {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid color-mix(in srgb, var(--cor-texto) 6%, transparent);
 }
 
 .menuCategorias button {
@@ -1172,7 +1172,7 @@
 
   display: block;
 
-  color: rgba(255, 255, 255, 0.78);
+  color: color-mix(in srgb, var(--cor-texto) 78%, transparent);
   font-family: inherit;
   font-size: 1.45rem;
   font-weight: 600;
@@ -1191,7 +1191,7 @@
 
 .menuCategorias button:hover {
   color: var(--cor-texto);
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--cor-texto) 6%, transparent);
 }
 
 /* O selecionado e o unico elemento solido da lista: le-se de relance. */
@@ -1264,7 +1264,7 @@
   text-align: left;
 
   background: var(--cor-card);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid color-mix(in srgb, var(--cor-texto) 7%, transparent);
   border-radius: 1.4rem;
 
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
@@ -1278,7 +1278,7 @@
 .cardProduto:hover {
   transform: translateY(-3px);
 
-  border-color: rgb(from var(--cor-principal) r g b / 0.45);
+  border-color: rgb(from var(--cor-principal-texto) r g b / 0.45);
 
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.4);
 }
@@ -1330,7 +1330,7 @@
   gap: 0.3rem;
 
   overflow: hidden;
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
   font-size: 1.15rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -1368,7 +1368,7 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
 
-  color: #b0b0b0;
+  color: var(--cor-texto-medio);
   font-size: 1.4rem;
   font-weight: 400;
   line-height: 1.45;
@@ -1396,13 +1396,13 @@
 }
 
 .precoProduto span {
-  color: #bdbdbd;
+  color: var(--cor-texto-medio);
   font-size: 1.3rem;
   font-weight: 600;
 }
 
 .precoProduto strong {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   font-size: 2.1rem;
   font-weight: 800;
   line-height: 1;
@@ -1427,7 +1427,7 @@
   display: grid;
   place-items: center;
 
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
   font-size: 1.9rem;
   font-weight: 800;
   line-height: 1;
@@ -1454,7 +1454,7 @@
 }
 
 .aberturaCardProduto:focus-visible {
-  outline: 2px solid var(--cor-principal);
+  outline: 2px solid var(--cor-principal-texto);
   outline-offset: -2px;
   border-radius: 1.4rem;
 }
@@ -1499,7 +1499,7 @@
     var(--cor-fundo)
   );
 
-  border: 1px solid rgb(from var(--cor-principal) r g b / 0.5);
+  border: 1px solid rgb(from var(--cor-principal-texto) r g b / 0.5);
   border-radius: 1.5rem;
 
   box-shadow:
@@ -1523,7 +1523,7 @@
   padding-bottom: 1.5rem;
 
   border-bottom: 1px solid
-    rgba(255, 255, 255, 0.08);
+    color-mix(in srgb, var(--cor-texto) 8%, transparent);
 }
 
 
@@ -1548,7 +1548,7 @@
 /* PERSONALIZE SEU PEDIDO */
 
 .resumoProdutoModal > div > span {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1.05rem;
   font-weight: 800;
@@ -1577,7 +1577,7 @@
 
   margin: 0;
 
-  color: #aaaaaa;
+  color: var(--cor-texto-medio);
 
   font-size: 1.25rem;
   font-weight: 500;
@@ -1592,7 +1592,7 @@
 
   margin-top: 0.7rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 2.1rem;
   font-weight: 800;
@@ -1617,11 +1617,11 @@
 
   flex-shrink: 0;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   background-color: transparent;
 
-  border: 1.5px solid rgb(from var(--cor-principal) r g b / 0.6);
+  border: 1.5px solid rgb(from var(--cor-principal-texto) r g b / 0.6);
   border-radius: 50%;
 
   cursor: pointer;
@@ -1642,7 +1642,7 @@
 
 
 .fecharModalProduto:hover {
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
 
   background-color: var(--cor-principal);
 
@@ -1674,7 +1674,7 @@
 
 .tituloSecaoModal > div > span,
 .tituloObservacao > div > span {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1rem;
   font-weight: 800;
@@ -1700,7 +1700,7 @@
 /* Escolha seus adicionais */
 
 .tituloSecaoModal > span {
-  color: #888888;
+  color: var(--cor-texto-fraco);
 
   font-size: 1.05rem;
   font-weight: 500;
@@ -1738,7 +1738,7 @@
   background-color: var(--cor-card-elevado);
 
   border: 1px solid
-    rgba(255, 255, 255, 0.1);
+    color-mix(in srgb, var(--cor-texto) 10%, transparent);
 
   border-radius: 0.9rem;
 
@@ -1754,7 +1754,7 @@
 
 .cardAdicional:hover {
   border-color:
-    rgb(from var(--cor-principal) r g b / 0.7);
+    rgb(from var(--cor-principal-texto) r g b / 0.7);
 
   transform: translateY(-2px);
 
@@ -1767,9 +1767,9 @@
 
 .adicionalSelecionado {
   background-color:
-    rgb(from var(--cor-principal) r g b / 0.08);
+    rgb(from var(--cor-principal-texto) r g b / 0.08);
 
-  border-color: var(--cor-principal);
+  border-color: var(--cor-principal-texto);
 }
 
 
@@ -1784,15 +1784,15 @@
   display: grid;
   place-items: center;
 
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
 
   font-size: 1rem;
   font-weight: 900;
 
-  background-color: #292929;
+  background-color: color-mix(in srgb, var(--cor-texto) 9%, var(--cor-fundo));
 
   border: 1px solid
-    rgba(255, 255, 255, 0.15);
+    color-mix(in srgb, var(--cor-texto) 15%, transparent);
 
   border-radius: 0.4rem;
 }
@@ -1800,7 +1800,7 @@
 
 .adicionalSelecionado .checkboxAdicional {
   background-color: var(--cor-principal);
-  border-color: var(--cor-principal);
+  border-color: var(--cor-principal-texto);
 }
 
 
@@ -1824,7 +1824,7 @@
 
   margin-top: 0.25rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1.05rem;
   font-weight: 700;
@@ -1840,7 +1840,7 @@
   padding: 1.8rem 0;
 
   border-top: 1px solid
-    rgba(255, 255, 255, 0.08);
+    color-mix(in srgb, var(--cor-texto) 8%, transparent);
 }
 
 
@@ -1858,7 +1858,7 @@
 /* Contador 0/180 */
 
 .tituloObservacao > span {
-  color: #888888;
+  color: var(--cor-texto-fraco);
 
   font-size: 1rem;
   font-weight: 500;
@@ -1885,7 +1885,7 @@
   background-color: var(--cor-card);
 
   border: 1px solid
-    rgba(255, 255, 255, 0.12);
+    color-mix(in srgb, var(--cor-texto) 12%, transparent);
 
   border-radius: 0.9rem;
 
@@ -1898,18 +1898,18 @@
 
 
 .secaoObservacao textarea::placeholder {
-  color: #8f8f8f;
+  color: var(--cor-texto-fraco);
 
   font-size: 1.1rem;
 }
 
 
 .secaoObservacao textarea:focus {
-  border-color: var(--cor-principal);
+  border-color: var(--cor-principal-texto);
 
   box-shadow:
     0 0 0 3px
-    rgb(from var(--cor-principal) r g b / 0.08);
+    rgb(from var(--cor-principal-texto) r g b / 0.08);
 }
 
 
@@ -1931,7 +1931,7 @@
   gap: 1.8rem;
 
   border-top: 1px solid
-    rgba(255, 255, 255, 0.08);
+    color-mix(in srgb, var(--cor-texto) 8%, transparent);
 }
 
 /* =========================
@@ -1946,7 +1946,7 @@
   grid-template-columns: 3.2rem 1fr 3.2rem;
   align-items: center;
 
-  border: 2px solid var(--cor-principal);
+  border: 2px solid var(--cor-principal-texto);
   border-radius: 2rem;
 
   overflow: hidden;
@@ -1966,7 +1966,7 @@
   display: grid;
   place-items: center;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   background: transparent;
   border: none;
@@ -2028,7 +2028,7 @@
 /* Hover */
 
 .quantidadeModal button:hover {
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
   background-color: var(--cor-principal);
 }
 
@@ -2045,7 +2045,7 @@
 
 
 .totalModal span {
-  color: #888888;
+  color: var(--cor-texto-fraco);
 
   font-size: 1.05rem;
   font-weight: 500;
@@ -2055,7 +2055,7 @@
 /* Preço total */
 
 .totalModal strong {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 2.3rem;
   font-weight: 800;
@@ -2073,7 +2073,7 @@
 
   padding: 0 2rem;
 
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
 
   font-family: inherit;
 
@@ -2101,7 +2101,7 @@
 
   box-shadow:
     0 8px 20px
-    rgb(from var(--cor-principal) r g b / 0.18);
+    rgb(from var(--cor-principal-texto) r g b / 0.18);
 }
 
 /* =========================
@@ -2128,7 +2128,7 @@
   align-items: center;
   justify-content: center;
 
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
   font-size: 0.8rem;
   font-weight: 800;
 
@@ -2188,7 +2188,7 @@
     );
 
   border-left: 1px solid
-    rgb(from var(--cor-principal) r g b / 0.3);
+    rgb(from var(--cor-principal-texto) r g b / 0.3);
 
   box-shadow:
     -15px 0 50px rgba(0, 0, 0, 0.5);
@@ -2214,7 +2214,7 @@
 }
 
 .subtituloCarrinho {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1.1rem;
   font-weight: 800;
@@ -2246,7 +2246,7 @@
 
   flex-shrink: 0;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-family: inherit;
   font-size: 2rem;
@@ -2255,7 +2255,7 @@
 
   background-color: transparent;
 
-  border: 2px solid rgb(from var(--cor-principal) r g b / 0.6);
+  border: 2px solid rgb(from var(--cor-principal-texto) r g b / 0.6);
   border-radius: 50%;
 
   box-sizing: border-box;
@@ -2269,7 +2269,7 @@
 }
 
 .fecharCarrinho:hover {
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
   background-color: var(--cor-principal);
 
   transform: rotate(90deg);
@@ -2280,7 +2280,7 @@
   height: 1px;
   margin: 1.5rem 0;
 
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: color-mix(in srgb, var(--cor-texto) 8%, transparent);
 }
 
 /* Produtos */
@@ -2305,7 +2305,7 @@
 
   background-color: var(--cor-card-elevado);
 
-  border: 1px solid rgb(from var(--cor-principal) r g b / 0.45);
+  border: 1px solid rgb(from var(--cor-principal-texto) r g b / 0.45);
   border-radius: 1.2rem;
 }
 
@@ -2356,11 +2356,11 @@
 
   flex-shrink: 0;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
-  background-color: rgb(from var(--cor-principal) r g b / 0.08);
+  background-color: rgb(from var(--cor-principal-texto) r g b / 0.08);
 
-  border: 1.5px solid rgb(from var(--cor-principal) r g b / 0.65);
+  border: 1.5px solid rgb(from var(--cor-principal-texto) r g b / 0.65);
   border-radius: 50%;
 
   cursor: pointer;
@@ -2379,7 +2379,7 @@
 }
 
 .botaoRemover:hover {
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
   background-color: var(--cor-principal);
 
   transform: rotate(90deg);
@@ -2391,7 +2391,7 @@
 
   margin: 0.45rem 0 0;
 
-  color: #bdbdbd;
+  color: var(--cor-texto-medio);
 
   font-size: 1.25rem;
   font-weight: 500;
@@ -2410,7 +2410,7 @@
 .infoItemCarrinho .precoItemCarrinho {
   margin-top: 0.6rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 2.1rem;
   font-weight: 800;
@@ -2428,7 +2428,7 @@
   grid-template-columns: 3rem 1fr 3rem;
   align-items: center;
 
-  border: 2px solid var(--cor-principal);
+  border: 2px solid var(--cor-principal-texto);
   border-radius: 2rem;
 
   overflow: hidden;
@@ -2444,7 +2444,7 @@
   padding: 0;
   margin: 0;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   background: transparent;
   border: none;
@@ -2492,7 +2492,7 @@
 
 
 .controleQuantidade button:hover {
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
   background-color: var(--cor-principal);
 }
 /* Carrinho vazio */
@@ -2532,7 +2532,7 @@
 
   margin: 1rem 0 2rem;
 
-  color: #999999;
+  color: var(--cor-texto-fraco);
 
   font-size: 1.15rem;
   font-weight: 500;
@@ -2545,7 +2545,7 @@
 
   padding: 0.8rem 2rem;
 
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
 
   font-family: inherit;
   font-size: 1.1rem;
@@ -2575,7 +2575,7 @@
   margin-top: 1.5rem;
 
   border-top: 1px solid
-    rgba(255, 255, 255, 0.1);
+    color-mix(in srgb, var(--cor-texto) 10%, transparent);
 }
 
 .totalCarrinho {
@@ -2601,14 +2601,14 @@
 
   gap: 0.4rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1.05rem;
   font-weight: 600;
 }
 
 .adicionaisCarrinho span strong {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1.05rem;
   font-weight: 800;
@@ -2616,7 +2616,7 @@
 
 .observacaoCarrinho {
   margin: 0.7rem 0 0;
-  color: #d8d8d8;
+  color: var(--cor-texto-suave);
   font-size: 1.1rem;
   font-weight: 500;
   line-height: 1.45;
@@ -2625,24 +2625,24 @@
 
 .avisosCarrinho {
   grid-column: 1 / -1;
-  border: 1px solid rgb(from var(--cor-principal) r g b / 0.45);
+  border: 1px solid rgb(from var(--cor-principal-texto) r g b / 0.45);
   border-radius: 10px;
-  background: rgb(from var(--cor-principal) r g b / 0.08);
+  background: rgb(from var(--cor-principal-texto) r g b / 0.08);
   margin-bottom: 10px;
   padding: 12px;
-  color: #ddd;
+  color: var(--cor-texto-suave);
 }
 
-.avisosCarrinho strong { display: block; margin-bottom: 5px; color: var(--cor-principal); font-size: 13px; }
+.avisosCarrinho strong { display: block; margin-bottom: 5px; color: var(--cor-principal-texto); font-size: 13px; }
 .avisosCarrinho p { margin: 3px 0; font-size: 12px; line-height: 1.45; }
 
 .observacaoCarrinho strong {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   font-weight: 800;
 }
 
 .totalCarrinho span {
-  color: #bbbbbb;
+  color: var(--cor-texto-medio);
   font-size: 1.3rem;
   font-weight: 500;
 }
@@ -2650,14 +2650,14 @@
 .precoItemCarrinho {
   margin-top: 0.6rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 1.4rem;
   font-weight: 800;
 }
 
 .totalCarrinho strong {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
   font-size: 2.2rem;
   font-weight: 800;
 }
@@ -2666,7 +2666,7 @@
   width: 100%;
   height: 4.5rem;
 
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
 
   font-family: inherit;
   font-size: 1.4rem;
@@ -2699,22 +2699,22 @@
   display: grid;
   gap: 0.6rem;
   margin-bottom: 1.2rem;
-  color: #ff9a9a;
+  color: var(--cor-erro-texto);
   font-size: 1.05rem;
 }
 
 .progressoMinimo > div:first-child { display: flex; justify-content: space-between; gap: 1rem; }
-.barraMinimo { height: 0.55rem; overflow: hidden; border-radius: 999px; background: #333; }
-.barraMinimo span { display: block; height: 100%; border-radius: inherit; background: #ff7777; transition: width 0.2s ease; }
-.minimoAtingido { color: #55df8f; }
-.minimoAtingido .barraMinimo span { background: #42d981; }
-.bloqueioCarrinho { margin: 0 0 1rem; color: #ff9a9a; font-size: 1.05rem; text-align: center; }
+.barraMinimo { height: 0.55rem; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--cor-texto) 14%, var(--cor-fundo)); }
+.barraMinimo span { display: block; height: 100%; border-radius: inherit; background: var(--cor-erro); transition: width 0.2s ease; }
+.minimoAtingido { color: var(--cor-ok-texto); }
+.minimoAtingido .barraMinimo span { background: var(--cor-ok); }
+.bloqueioCarrinho { margin: 0 0 1rem; color: var(--cor-erro-texto); font-size: 1.05rem; text-align: center; }
 
 .continuarComprando {
   width: 100%;
   margin-top: 1.2rem;
 
-  color: #bdbdbd;
+  color: var(--cor-texto-medio);
 
   font-family: inherit;
   font-size: 1.1rem;
@@ -2727,7 +2727,7 @@
 }
 
 .continuarComprando:hover {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 }
 
 /* =========================
@@ -2749,7 +2749,7 @@
     );
 
   border-top: 1px solid
-    rgb(from var(--cor-principal) r g b / 0.12);
+    rgb(from var(--cor-principal-texto) r g b / 0.12);
 
   scroll-margin-top: 7rem;
 }
@@ -2787,7 +2787,7 @@
 
   margin-bottom: 2rem;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   font-size: 3rem;
   font-weight: 800;
@@ -2809,14 +2809,14 @@
 
 
 .apresentacaoLoja h2 span {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 }
 
 
 .apresentacaoLoja > p {
   margin: 1.3rem 0 0;
 
-  color: #a5a5a5;
+  color: var(--cor-texto-medio);
 
   font-size: 1.2rem;
   font-weight: 500;
@@ -2860,12 +2860,12 @@
   display: grid;
   place-items: center;
 
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   background-color: var(--cor-card);
 
   border: 1px solid
-    rgb(from var(--cor-principal) r g b / 0.35);
+    rgb(from var(--cor-principal-texto) r g b / 0.35);
 
   border-radius: 50%;
 
@@ -2878,10 +2878,10 @@
 
 
 .iconesSociais a:hover {
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
 
   background-color: var(--cor-principal);
-  border-color: var(--cor-principal);
+  border-color: var(--cor-principal-texto);
 
   transform: translateY(-3px);
 }
@@ -2943,7 +2943,7 @@
 
   padding: 0;
 
-  color: #a5a5a5;
+  color: var(--cor-texto-medio);
 
   font-family: inherit;
   font-size: 1.1rem;
@@ -2963,7 +2963,7 @@
 
 
 .colunaSobre > button:not(.botaoWhatsapp):hover {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 
   transform: translateX(5px);
 }
@@ -2985,7 +2985,7 @@
 
 .horario span,
 .contatoSobre span {
-  color: #999999;
+  color: var(--cor-texto-fraco);
 
   font-size: 0.95rem;
   font-weight: 500;
@@ -2994,7 +2994,7 @@
 
 .horario strong,
 .contatoSobre strong {
-  color: #d7d7d7;
+  color: var(--cor-texto-suave);
 
   font-size: 1.05rem;
   font-weight: 700;
@@ -3025,7 +3025,7 @@
   margin-top: 0.8rem;
   padding: 0.7rem 1.4rem;
 
-  color: var(--cor-fundo);
+  color: var(--cor-sobre-principal);
 
   font-family: inherit;
   font-size: 1rem;
@@ -3033,7 +3033,7 @@
 
   background-color: var(--cor-principal);
 
-  border: 2px solid var(--cor-principal);
+  border: 2px solid var(--cor-principal-texto);
   border-radius: 2rem;
   text-decoration: none;
 
@@ -3052,7 +3052,7 @@
   transform: translateY(-3px);
 
   box-shadow:
-    0 8px 22px rgb(from var(--cor-principal) r g b / 0.14);
+    0 8px 22px rgb(from var(--cor-principal-texto) r g b / 0.14);
 }
 
 
@@ -3074,14 +3074,14 @@
   gap: 2rem;
 
   border-top: 1px solid
-    rgba(255, 255, 255, 0.08);
+    color-mix(in srgb, var(--cor-texto) 8%, transparent);
 }
 
 
 .rodapeFinal p {
   margin: 0;
 
-  color: #8f8f8f;
+  color: var(--cor-texto-fraco);
 
   font-size: 0.95rem;
 }
@@ -3102,7 +3102,7 @@
 
 .informacoesLegais {
   max-width: 75rem;
-  color: #888888;
+  color: var(--cor-texto-fraco);
   font-size: 0.9rem;
   line-height: 1.5;
   white-space: pre-line;
@@ -3110,7 +3110,7 @@
 
 
 .rodapeFinal a {
-  color: #888888;
+  color: var(--cor-texto-fraco);
 
   font-size: 0.95rem;
 
@@ -3121,12 +3121,12 @@
 
 
 .rodapeFinal a:hover {
-  color: var(--cor-principal);
+  color: var(--cor-principal-texto);
 }
 
 
 .rodapeFinal span {
-  color: #444444;
+  color: color-mix(in srgb, var(--cor-texto) 21%, var(--cor-fundo));
 }
 
 
@@ -3464,7 +3464,7 @@
     max-width: 26rem;
     padding-left: 0.9rem;
 
-    border-left: 1px solid rgba(255, 255, 255, 0.18);
+    border-left: 1px solid color-mix(in srgb, var(--cor-texto) 18%, transparent);
 
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3597,7 +3597,7 @@
     display: block;
 
     border-radius: 999px;
-    background: #4a4a4a;
+    background: color-mix(in srgb, var(--cor-texto) 24%, var(--cor-fundo));
     content: '';
 
     transition:
@@ -3752,10 +3752,10 @@
 .semAdicionais {
   grid-column: 1 / -1;
   margin: 0;
-  border: 1px dashed #363636;
+  border: 1px dashed color-mix(in srgb, var(--cor-texto) 15%, var(--cor-fundo));
   border-radius: 10px;
   padding: 18px;
-  color: #929292;
+  color: var(--cor-texto-fraco);
   font-size: 12px;
   text-align: center;
 }
@@ -3981,7 +3981,7 @@
     margin: 0 -1.5rem 1.8rem;
     padding: 1rem 1.5rem;
 
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    border-bottom: 1px solid color-mix(in srgb, var(--cor-texto) 7%, transparent);
   }
 
   .botaoListaCategorias {
@@ -4014,7 +4014,7 @@
   .grupoCategoria:not(:first-of-type) {
     padding-top: 1.8rem;
 
-    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    border-top: 1px solid color-mix(in srgb, var(--cor-texto) 7%, transparent);
   }
 
   .tituloGrupo {
@@ -4043,7 +4043,7 @@
   /* Sem elevacao/zoom no toque: o feedback e o realce do proprio cartao. */
   .cardProduto:hover {
     transform: none;
-    border-color: rgba(255, 255, 255, 0.07);
+    border-color: color-mix(in srgb, var(--cor-texto) 7%, transparent);
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
   }
 
@@ -4054,7 +4054,7 @@
 
   .cardProduto:has(.aberturaCardProduto:active) {
     background: var(--cor-card-elevado);
-    border-color: rgb(from var(--cor-principal) r g b / 0.4);
+    border-color: rgb(from var(--cor-principal-texto) r g b / 0.4);
   }
 
   .areaImagemProduto {

@@ -14,8 +14,17 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Cardápio e pedidos online" />
     <meta name="twitter:description" content="Cardápio e pedidos online para entrega ou retirada." />
-    <meta name="theme-color" content="#111111" />
+    <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
     <title>Cardápio e pedidos online</title>
+    <script>
+      /* Só o cardápio acompanha o claro/escuro do aparelho; painel, garçom e
+         superadmin continuam escuros. Marcar a área antes do React montar evita
+         o pisca escuro em quem está no modo claro. O AppProvider mantém isso
+         atualizado a cada troca de rota. */
+      document.documentElement.dataset.area =
+        /^\/(admin|superadmin|garcom)(\/|$)/.test(location.pathname) ? 'painel' : 'publica';
+    </script>
   </head>
   <body>
     <div id="root"></div>

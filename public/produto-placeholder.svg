@@ -1,8 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img" aria-labelledby="title description">
   <title id="title">Imagem de produto indisponível</title>
-  <desc id="description">Ilustração de um hambúrguer em fundo escuro.</desc>
-  <rect width="640" height="480" rx="32" fill="#15181d"/>
-  <circle cx="320" cy="240" r="170" fill="#101216"/>
+  <desc id="description">Ilustração de um hambúrguer.</desc>
+  <style>
+    .fundo { fill: #15181d; }
+    .recuo { fill: #101216; }
+
+    /* O cardápio segue o aparelho, e um tile preto sobre a página clara
+       destoaria dos cartões; o desenho do lanche continua igual. */
+    @media (prefers-color-scheme: light) {
+      .fundo { fill: #EDEBE6; }
+      .recuo { fill: #E2DFD8; }
+    }
+  </style>
+  <rect class="fundo" width="640" height="480" rx="32"/>
+  <circle class="recuo" cx="320" cy="240" r="170"/>
   <path d="M170 230c7-91 70-142 150-142s143 51 150 142H170Z" fill="#ffc107"/>
   <circle cx="264" cy="151" r="12" fill="#15181d"/>
   <circle cx="330" cy="127" r="12" fill="#15181d"/>

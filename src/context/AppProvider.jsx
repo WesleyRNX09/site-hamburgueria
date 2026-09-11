@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
 import { configuracaoInicial } from '../data/initialData';
 import { estaAbertoNoHorario } from '../utils/horarios';
-import { aplicarTema, normalizarConfiguracaoPublica } from '../utils/theme';
+import { aplicarTema, ehAreaPublica, normalizarConfiguracaoPublica } from '../utils/theme';
 import {
   acompanharPedidoApi,
   adicionarItemComandaApi,
@@ -124,6 +125,7 @@ function normalizarPromocoes(lista, produtos) {
 }
 
 export function AppProvider({ children }) {
+  const { pathname: caminhoAtual } = useLocation();
   const areaSuperadmin = window.location.pathname === '/superadmin'
     || window.location.pathname.startsWith('/superadmin/');
   const [categorias, setCategorias] = useState([]);
@@ -174,7 +176,19 @@ export function AppProvider({ children }) {
     }), 60000);
     return () => clearInterval(timer);
   }, [configuracao.funcionamentoAutomatico]);
-  useLayoutEffect(() => aplicarTema(document.documentElement, configuracao), [configuracao]);
+  /* O cardápio acompanha o aparelho: quem troca entre claro e escuro com a
+     página aberta vê a mudança na hora, sem recarregar. */
+  useLayoutEffect(() => {
+    const publica = ehAreaPublica(caminhoAtual);
+    const preferencia = window.matchMedia('(prefers-color-scheme: light)');
+    const aplicar = () => {
+      document.documentElement.dataset.area = publica ? 'publica' : 'painel';
+      aplicarTema(document.documentElement, configuracao, publica && preferencia.matches);
+    };
+    aplicar();
+    preferencia.addEventListener('change', aplicar);
+    return () => preferencia.removeEventListener('change', aplicar);
+  }, [configuracao, caminhoAtual]);
   useEffect(() => {
     const nome = configuracao.nomeLoja?.trim();
     const titulo = nome ? `${nome} | Cardápio e pedidos` : 'Cardápio e pedidos online';
