@@ -3266,6 +3266,10 @@
   font-weight: 500;
 }
 
+.colunaNavegacao {
+  display: none;
+}
+
 
 /* =========================
    HORÁRIOS
@@ -4005,6 +4009,12 @@
 
   .grupoCategoria:first-of-type {
     margin-top: 0;
+  }
+
+  .grupoCategoria:not(:first-of-type) {
+    padding-top: 1.8rem;
+
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
   }
 
   .tituloGrupo {

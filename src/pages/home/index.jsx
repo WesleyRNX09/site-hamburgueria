@@ -1320,7 +1320,7 @@ function Home() {
 
           {/* NAVEGAÇÃO */}
 
-          <div className={styles.colunaSobre}>
+          <div className={`${styles.colunaSobre} ${styles.colunaNavegacao}`}>
             <h3>Navegação</h3>
 
             <button
@@ -1387,8 +1387,6 @@ function Home() {
             >
               Pedir pelo WhatsApp
             </a>}
-
-            {configuracao.endereco && <div className={styles.contatoSobre}><span>Endereço</span><strong>{configuracao.endereco}</strong></div>}
           </div>
 
         </div>
