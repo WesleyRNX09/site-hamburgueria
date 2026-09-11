@@ -931,65 +931,6 @@ function FinalizarPedidos() {
 
         </form>
 
-
-        {/* =========================
-            BENEFÍCIOS
-        ========================= */}
-
-        <section className={styles.beneficios}>
-
-          <div>
-            <span className={styles.iconeBeneficio}>
-              ✓
-            </span>
-
-            <div>
-              <strong>
-                Formas de pagamento
-              </strong>
-
-              <p>
-                Escolha entre as opções habilitadas pela loja.
-              </p>
-            </div>
-          </div>
-
-
-          <div>
-            <span className={styles.iconeBeneficio}>
-              ◷
-            </span>
-
-            <div>
-              <strong>
-                Entrega rápida
-              </strong>
-
-              <p>
-                Do pedido direto à sua porta.
-              </p>
-            </div>
-          </div>
-
-
-          <div>
-            <span className={styles.iconeBeneficio}>
-              ☰
-            </span>
-
-            <div>
-              <strong>
-                Feito na hora
-              </strong>
-
-              <p>
-                Ingredientes frescos e selecionados.
-              </p>
-            </div>
-          </div>
-
-        </section>
-
       </main>
 
     </div>

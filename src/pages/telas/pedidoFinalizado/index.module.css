@@ -33,10 +33,10 @@
   display: flex;
   align-items: center;
 
-  background-color: color-mix(in srgb, var(--cor-secundaria) 85%, black);
+  background-color: var(--cor-secundaria);
 
   box-shadow:
-    0 5px 20px rgba(0, 0, 0, 0.35);
+    0 5px 20px var(--sombra-barra);
 }
 
 

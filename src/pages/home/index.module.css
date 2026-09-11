@@ -3540,10 +3540,6 @@
     width: 100%;
   }
 
-  .secaoObservacao textarea {
-    font-size: 1.6rem;
-  }
-
 }
 
 .horario strong { white-space: pre-line; line-height: 1.6; }
@@ -4154,6 +4150,34 @@
       color-mix(in srgb, var(--cor-secundaria) 6%, transparent) 10svh,
       color-mix(in srgb, var(--cor-secundaria) 45%, transparent) 21svh,
       var(--cor-fundo) 28svh
+    );
+  }
+}
+
+
+/* =========================
+   AJUSTES DE FUNDO NO TEMA CLARO
+========================= */
+
+/* O chip de status usa o cinza dos cartões, que sobre a página branca lê
+   como uma mancha. Aqui ele volta ao fundo da página, e quando a loja está
+   aberta ganha um fundo do próprio verde para o status saltar. */
+@media (prefers-color-scheme: light) {
+  .chipLoja {
+    background: var(--cor-fundo);
+  }
+
+  .chipAberto {
+    background: color-mix(in srgb, var(--cor-ok) 10%, var(--cor-fundo));
+  }
+
+  /* O rodapé escurece o fim da página misturando a cor de fundo com preto.
+     Partindo do branco isso dava um cinza pesado; um tom de cartão basta. */
+  .sobreLoja {
+    background: linear-gradient(
+      180deg,
+      var(--cor-fundo) 0%,
+      var(--cor-card) 100%
     );
   }
 }

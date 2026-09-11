@@ -47,8 +47,8 @@
     --cor-texto-suave: #3E3D3A;
     --cor-texto-medio: #55534E;
     --cor-texto-fraco: #6E6C67;
-    --cor-ok: #15A44E;
-    --cor-ok-texto: #12924A;
+    --cor-ok: #1FBF63;
+    --cor-ok-texto: #17A94F;
     /* "Elevado" precisa clarear, não escurecer: misturar com a cor de texto
        deixaria o carrinho e o modal cinzas por dentro. */
     --cor-card-elevado: color-mix(in srgb, var(--cor-card) 45%, #FFFFFF);
@@ -61,6 +61,17 @@
     --sombra-cartao-forte: rgba(0, 0, 0, 0.09);
     --sombra-flutuante: rgba(0, 0, 0, 0.14);
     color-scheme: light;
+  }
+}
+
+/* O iOS dá zoom sozinho ao focar um campo com fonte menor que 16px, e a tela
+   fica deslocada depois. 1.6rem é exatamente 16px aqui (a raiz usa 62.5%).
+   Vale só para a área pública; o painel tem os próprios tamanhos. */
+@media (max-width: 750px) {
+  :root[data-area="publica"] input,
+  :root[data-area="publica"] select,
+  :root[data-area="publica"] textarea {
+    font-size: 1.6rem;
   }
 }
 
