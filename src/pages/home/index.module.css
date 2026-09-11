@@ -4108,3 +4108,52 @@
     font-size: 1.8rem;
   }
 }
+
+
+/* =========================
+   VÉU DO BANNER NO TEMA CLARO
+========================= */
+
+/* O véu escurece a foto para o texto branco ser lido. No claro ele vira um
+   véu branco, e na mesma intensidade apagava a foto quase por completo. Como
+   a barra do topo passou a ser sólida, o véu não precisa mais proteger nada
+   ali: fica só o suficiente para a foto se dissolver na página.
+   Estas regras vêm depois das originais de propósito — é o que as faz valer. */
+
+@media (prefers-color-scheme: light) {
+  .banner::before {
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--cor-secundaria) 55%, transparent) 0%,
+      color-mix(in srgb, var(--cor-secundaria) 28%, transparent) 35%,
+      color-mix(in srgb, var(--cor-secundaria) 8%, transparent) 65%,
+      transparent 100%
+    );
+  }
+}
+
+@media (prefers-color-scheme: light) and (max-width: 700px) {
+  .banner::before {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--cor-secundaria) 25%, transparent) 0,
+      color-mix(in srgb, var(--cor-secundaria) 8%, transparent) 8svh,
+      color-mix(in srgb, var(--cor-secundaria) 6%, transparent) 24svh,
+      color-mix(in srgb, var(--cor-secundaria) 38%, transparent) 36svh,
+      color-mix(in srgb, var(--cor-secundaria) 85%, transparent) 46svh,
+      var(--cor-fundo) 56svh
+    );
+  }
+}
+
+@media (prefers-color-scheme: light) and (max-width: 650px) {
+  .banner::before {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--cor-secundaria) 18%, transparent) 0,
+      color-mix(in srgb, var(--cor-secundaria) 6%, transparent) 10svh,
+      color-mix(in srgb, var(--cor-secundaria) 45%, transparent) 21svh,
+      var(--cor-fundo) 28svh
+    );
+  }
+}

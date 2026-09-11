@@ -47,8 +47,11 @@
     --cor-texto-suave: #3E3D3A;
     --cor-texto-medio: #55534E;
     --cor-texto-fraco: #6E6C67;
-    --cor-ok: #1B7F45;
-    --cor-ok-texto: #15703C;
+    --cor-ok: #15A44E;
+    --cor-ok-texto: #12924A;
+    /* "Elevado" precisa clarear, não escurecer: misturar com a cor de texto
+       deixaria o carrinho e o modal cinzas por dentro. */
+    --cor-card-elevado: color-mix(in srgb, var(--cor-card) 45%, #FFFFFF);
     --cor-erro: #C62828;
     --cor-erro-texto: #A32019;
     /* Sombra preta forte vira mancha cinza sobre o branco: aqui ela serve
