@@ -9,16 +9,15 @@ import { usarPlaceholderProduto } from '../../utils/productImage';
 import styles from './index.module.css';
 
 
-/* Achata o texto para comparar: sem acento, sem caixa e com qualquer
-   separador virando um espaço só. É o que faz "x salada" encontrar
-   "X-Salada", e vale nos dois sentidos. */
-function semAcento(texto) {
+/* Achata o texto para comparar: sem acento, sem caixa e sem separador
+   nenhum. Com isso "X-Salada", "x salada" e "xsalada" viram a mesma
+   chave, e a busca acha o produto de qualquer jeito que for digitado. */
+function achatar(texto) {
   return String(texto ?? '')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+    .replace(/[^a-z0-9]+/g, '');
 }
 
 function Home() {
@@ -147,9 +146,9 @@ function Home() {
     return produtoSelecionado.adicionaisIds.some((id) => String(id) === String(adicional.id));
   });
 
-  /* A busca ignora acento e caixa: quem digita "hamburguer" espera achar
-     "Hambúrguer". */
-  const buscaNormalizada = semAcento(busca);
+  /* A busca ignora acento, caixa e separador: quem digita "hamburguer" ou
+     "x salada" espera achar "Hambúrguer" e "X-Salada". */
+  const buscaNormalizada = achatar(busca);
 
   /* O cardapio é lido por seção, não como uma lista única: cada categoria
      ativa vira um bloco com título. O filtro do topo passa a recortar quais
@@ -164,8 +163,8 @@ function Home() {
       itens: produtos
         .filter((produto) => produto.categoria === categoria.nome)
         .filter((produto) => !buscaNormalizada
-          || semAcento(produto.nome).includes(buscaNormalizada)
-          || semAcento(produto.descricao).includes(buscaNormalizada))
+          || achatar(produto.nome).includes(buscaNormalizada)
+          || achatar(produto.descricao).includes(buscaNormalizada))
     }))
     .filter((grupo) => grupo.itens.length > 0);
 
