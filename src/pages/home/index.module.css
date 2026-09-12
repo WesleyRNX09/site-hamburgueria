@@ -219,9 +219,10 @@
   background-repeat: no-repeat;
 }
 
-/* No desktop o texto do banner fica por cima da foto, então o lado esquerdo
-   precisa de um véu forte para ele ser lido; o direito continua limpo.
-   No celular o texto desce para baixo da faixa da foto e o véu afrouxa. */
+/* A foto aparece inteira: no desktop não há véu nenhum sobre ela. Quem
+   garante a leitura é a cor do texto, clara aqui dentro (ver abaixo).
+   No celular o texto desce para baixo da faixa e o ::before volta a ter
+   gradiente, só para a foto se dissolver na página. */
 .banner::before {
   content: "";
 
@@ -229,16 +230,27 @@
   inset: 0;
   z-index: 1;
 
-  background: linear-gradient(
-    90deg,
-    var(--cor-secundaria) 0%,
-    var(--cor-secundaria) 28%,
-    color-mix(in srgb, var(--cor-secundaria) 80%, transparent) 44%,
-    color-mix(in srgb, var(--cor-secundaria) 35%, transparent) 60%,
-    transparent 76%
-  );
-
   pointer-events: none;
+}
+
+/* Acima de 900px o conteúdo do banner fica sobre a foto, então as cores de
+   texto se invertem aqui dentro. Abaixo disso ele desce para baixo da faixa
+   da foto e herda as cores da página normalmente. */
+@media (min-width: 901px) {
+  .conteudoBanner {
+    --cor-texto: #FFFFFF;
+    --cor-texto-suave: #ECECEA;
+    --cor-texto-medio: #D8D8D5;
+  }
+
+  /* Estes têm superfície clara própria e continuam com texto escuro. */
+  .conteudoBanner .chipLoja,
+  .conteudoBanner .painelHorarios,
+  .conteudoBanner .identidadeLogo {
+    --cor-texto: #1A1A19;
+    --cor-texto-suave: #3E3D3A;
+    --cor-texto-medio: #55534E;
+  }
 }
 
 /* Mistura o final do banner com o fundo da página */
