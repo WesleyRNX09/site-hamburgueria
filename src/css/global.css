@@ -39,9 +39,11 @@
    aplica inline no <html>; os valores repetidos aqui valem para o primeiro
    quadro, antes do React montar, e evitam o pisca escuro. */
 :root[data-area="publica"] {
-  --cor-secundaria: #FFFFFF;
-  --cor-fundo: #FFFFFF;
-  --cor-card: #F5F4F1;
+  /* A página usa um branco levemente acinzentado e os cartões ficam no
+     branco puro, que é o que dá relevo a eles. */
+  --cor-secundaria: #F4F5F7;
+  --cor-fundo: #F4F5F7;
+  --cor-card: #FFFFFF;
   --cor-texto: #1A1A19;
   --cor-principal-texto: var(--cor-principal);
   --cor-texto-suave: #3E3D3A;
@@ -51,7 +53,7 @@
   --cor-ok-texto: #17A94F;
   /* "Elevado" precisa clarear, não escurecer: misturar com a cor de texto
      deixaria o carrinho e o modal cinzas por dentro. */
-  --cor-card-elevado: color-mix(in srgb, var(--cor-card) 45%, #FFFFFF);
+  --cor-card-elevado: #FFFFFF;
   --cor-erro: #C62828;
   --cor-erro-texto: #A32019;
   /* Sombra preta forte vira mancha cinza sobre o branco: aqui ela serve

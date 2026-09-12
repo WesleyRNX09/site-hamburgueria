@@ -57,9 +57,9 @@ function corDeContraste(corHexadecimal) {
 }
 
 const PALETA_CLARA = {
-  corSecundaria: '#FFFFFF',
-  corFundo: '#FFFFFF',
-  corCard: '#F5F4F1',
+  corSecundaria: '#F4F5F7',
+  corFundo: '#F4F5F7',
+  corCard: '#FFFFFF',
   corTexto: '#1A1A19'
 };
 

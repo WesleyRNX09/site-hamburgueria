@@ -185,7 +185,7 @@ export function AppProvider({ children }) {
     // A barra do navegador no celular acompanha a paleta da área.
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', publica ? '#FFFFFF' : '#111111');
+      ?.setAttribute('content', publica ? '#F4F5F7' : '#111111');
   }, [configuracao, caminhoAtual]);
   useEffect(() => {
     const nome = configuracao.nomeLoja?.trim();

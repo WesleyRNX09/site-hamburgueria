@@ -231,10 +231,11 @@
 
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--cor-secundaria) 95%, transparent) 0%,
-    color-mix(in srgb, var(--cor-secundaria) 80%, transparent) 35%,
-    color-mix(in srgb, var(--cor-secundaria) 30%, transparent) 65%,
-    transparent 100%
+    var(--cor-secundaria) 0%,
+    var(--cor-secundaria) 28%,
+    color-mix(in srgb, var(--cor-secundaria) 80%, transparent) 44%,
+    color-mix(in srgb, var(--cor-secundaria) 35%, transparent) 60%,
+    transparent 76%
   );
 
   pointer-events: none;
@@ -390,7 +391,7 @@
   font-weight: 600;
   white-space: nowrap;
 
-  background: var(--cor-fundo);
+  background: var(--cor-card);
   border: 1px solid color-mix(in srgb, var(--cor-texto) 10%, transparent);
   border-radius: 999px;
 }
@@ -405,7 +406,7 @@
 
 .chipAberto {
   color: var(--cor-ok-texto);
-  background: color-mix(in srgb, var(--cor-ok) 10%, var(--cor-fundo));
+  background: color-mix(in srgb, var(--cor-ok) 10%, var(--cor-card));
   border-color: color-mix(in srgb, var(--cor-ok) 32%, transparent);
 }
 
@@ -2748,7 +2749,7 @@
     linear-gradient(
       180deg,
       var(--cor-fundo) 0%,
-      var(--cor-card) 100%
+      color-mix(in srgb, var(--cor-texto) 6%, var(--cor-fundo)) 100%
     );
 
   border-top: 1px solid
