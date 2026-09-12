@@ -1294,41 +1294,6 @@ function Home() {
           </div>
 
 
-          {/* NAVEGAÇÃO */}
-
-          <div className={`${styles.colunaSobre} ${styles.colunaNavegacao}`}>
-            <h3>Navegação</h3>
-
-            <button
-              type="button"
-              onClick={() => irParaSecao('inicio')}
-            >
-              Início
-            </button>
-
-            <button
-              type="button"
-              onClick={() => irParaSecao('cardapio')}
-            >
-              Cardápio
-            </button>
-
-            <button
-              type="button"
-              onClick={() => irParaSecao('promocoes')}
-            >
-              Promoções
-            </button>
-
-            <button
-              type="button"
-              onClick={() => irParaSecao('sobre')}
-            >
-              Sobre nós
-            </button>
-          </div>
-
-
           {/* FUNCIONAMENTO */}
 
           <div className={styles.colunaSobre}>

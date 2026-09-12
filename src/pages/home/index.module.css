@@ -2676,7 +2676,7 @@
 .sobreLoja {
   width: 100%;
 
-  padding: 7rem 3rem 2rem;
+  padding: 7rem clamp(2rem, 5vw, 6rem) 2rem;
 
   color: var(--cor-texto);
 
@@ -2700,13 +2700,14 @@
 
 .conteudoSobre {
   width: 100%;
-  max-width: 1450px;
+  /* mesma coluna da barra, da foto e da grade de produtos */
+  max-width: 1280px;
 
   margin: 0 auto;
 
   display: grid;
   grid-template-columns:
-    1.7fr 0.8fr 1fr 1fr;
+    1.7fr 1fr 1fr;
 
   gap: 5rem;
 }
@@ -2870,41 +2871,6 @@
   background-color: var(--cor-principal);
 
   border-radius: 2rem;
-}
-
-
-/* =========================
-   LINKS DE NAVEGAÇÃO
-========================= */
-
-.colunaSobre > button:not(.botaoWhatsapp) {
-  margin-bottom: 1rem;
-
-  padding: 0;
-
-  color: var(--cor-texto-medio);
-
-  font-family: inherit;
-  font-size: 1.1rem;
-  font-weight: 500;
-
-  text-align: left;
-
-  background: none;
-  border: none;
-
-  cursor: pointer;
-
-  transition:
-    color 0.2s ease,
-    transform 0.2s ease;
-}
-
-
-.colunaSobre > button:not(.botaoWhatsapp):hover {
-  color: var(--cor-principal-texto);
-
-  transform: translateX(5px);
 }
 
 
@@ -3197,18 +3163,6 @@
 /* =========================
    NAVEGAÇÃO
 ========================= */
-
-.colunaSobre > button:not(.botaoWhatsapp) {
-  margin-bottom: 1.2rem;
-
-  font-size: 1.3rem;
-  font-weight: 500;
-}
-
-.colunaNavegacao {
-  display: none;
-}
-
 
 /* =========================
    HORÁRIOS

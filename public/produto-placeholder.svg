@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img" aria-labelledby="title description">
   <title id="title">Imagem de produto indisponível</title>
   <desc id="description">Ilustração de um hambúrguer.</desc>
-  <rect width="640" height="480" rx="32" fill="#E9EBEF"/>
-  <circle cx="320" cy="240" r="170" fill="#DCDFE5"/>
+  <rect width="640" height="480" rx="32" fill="#F7F8FA"/>
+  <circle cx="320" cy="240" r="170" fill="#ECEEF2"/>
   <path d="M170 230c7-91 70-142 150-142s143 51 150 142H170Z" fill="#ffc107"/>
   <circle cx="264" cy="151" r="12" fill="#15181d"/>
   <circle cx="330" cy="127" r="12" fill="#15181d"/>
