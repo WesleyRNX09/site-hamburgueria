@@ -2748,11 +2748,6 @@
 }
 
 
-.apresentacaoLoja h2 span {
-  color: var(--cor-principal-texto);
-}
-
-
 .apresentacaoLoja > p {
   margin: 1.3rem 0 0;
 

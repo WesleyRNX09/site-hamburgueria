@@ -1204,14 +1204,9 @@ function Home() {
               <LogoEstabelecimento configuracao={configuracao} alternativa={nomeExibicao} loading="lazy" />
             </Link>
 
-            <h2>
-              {tituloSobre || (
-                <>
-                  Hambúrguer de verdade,
-                  <span> feito do nosso jeito.</span>
-                </>
-              )}
-            </h2>
+            {/* Sem chamada padrão: o título só aparece se o estabelecimento
+                escrever um no painel. */}
+            {tituloSobre && <h2>{tituloSobre}</h2>}
 
             <p>
               {textoSobre}
