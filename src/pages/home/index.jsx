@@ -8,11 +8,23 @@ import { algumDiaAberto, DIAS_SEMANA, ORDEM_EXIBICAO } from '../../utils/horario
 import { usarPlaceholderProduto } from '../../utils/productImage';
 import styles from './index.module.css';
 
-const DESTINOS_BANNER_VALIDOS = new Set(['cardapio', 'promocoes', 'sobre']);
+
+/* Achata o texto para comparar: sem acento, sem caixa e com qualquer
+   separador virando um espaço só. É o que faz "x salada" encontrar
+   "X-Salada", e vale nos dois sentidos. */
+function semAcento(texto) {
+  return String(texto ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
 
 function Home() {
   const [rolouPagina, setRolouPagina] = useState(false);
   const [categoriaAtiva, setCategoriaAtiva] = useState('Todos');
+  const [busca, setBusca] = useState('');
   const [secaoAtiva, setSecaoAtiva] = useState('inicio');
   const [bannerComErro, setBannerComErro] = useState('');
 
@@ -135,15 +147,25 @@ function Home() {
     return produtoSelecionado.adicionaisIds.some((id) => String(id) === String(adicional.id));
   });
 
+  /* A busca ignora acento e caixa: quem digita "hamburguer" espera achar
+     "Hambúrguer". */
+  const buscaNormalizada = semAcento(busca);
+
   /* O cardapio é lido por seção, não como uma lista única: cada categoria
      ativa vira um bloco com título. O filtro do topo passa a recortar quais
-     blocos aparecem, em vez de misturar tudo em uma lista só. */
+     blocos aparecem, em vez de misturar tudo em uma lista só.
+     Com algo digitado na busca, a categoria escolhida deixa de valer: quem
+     procura um produto quer achá-lo esteja ele em que seção estiver. */
   const gruposDeProdutos = categoriasSalvas
     .filter((categoria) => categoria.ativo !== false)
-    .filter((categoria) => categoriaAtiva === 'Todos' || categoria.nome === categoriaAtiva)
+    .filter((categoria) => buscaNormalizada || categoriaAtiva === 'Todos' || categoria.nome === categoriaAtiva)
     .map((categoria) => ({
       nome: categoria.nome,
-      itens: produtos.filter((produto) => produto.categoria === categoria.nome)
+      itens: produtos
+        .filter((produto) => produto.categoria === categoria.nome)
+        .filter((produto) => !buscaNormalizada
+          || semAcento(produto.nome).includes(buscaNormalizada)
+          || semAcento(produto.descricao).includes(buscaNormalizada))
     }))
     .filter((grupo) => grupo.itens.length > 0);
 
@@ -241,37 +263,14 @@ function Home() {
   const pedidosOnlineDisponiveis = Boolean(
     configuracao.lojaAberta && (configuracao.entregaAtiva || configuracao.retiradaAtiva)
   );
-  const formasAtendimento = [
-    configuracao.entregaAtiva ? 'delivery' : null,
-    configuracao.retiradaAtiva ? 'retirada' : null,
-    configuracao.atendimentoGarcomAtivo ? 'salão' : null
-  ].filter(Boolean);
-  const resumoAtendimento = formasAtendimento.length
-    ? `Atendimento: ${formasAtendimento.join(', ')}`
-    : 'Nenhuma modalidade disponível no momento.';
-  const statusCompleto = pedidosOnlineDisponiveis
-    ? 'Aberta para pedidos'
-    : configuracao.lojaAberta
-      ? 'Pedidos online indisponíveis'
-      : 'Fechada no momento';
   const statusCurto = pedidosOnlineDisponiveis
     ? 'Aberto'
     : configuracao.lojaAberta
       ? 'Só consulta'
       : 'Fechado';
   const gradeDeHorarios = algumDiaAberto(configuracao.horarios);
-  const horarioResumido = String(configuracao.horarioFuncionamento ?? '')
-    .split('\n')
-    .map((linha) => linha.trim())
-    .find(Boolean) || '';
   const podeFinalizar = pedidosOnlineDisponiveis && minimoAtingido;
   const nomeExibicao = configuracao.nomeLoja || 'Cardápio online';
-  const bannerTitulo = configuracao.bannerTitulo?.trim() || '';
-  const bannerSubtitulo = configuracao.bannerSubtitulo?.trim() || '';
-  const bannerBotaoTexto = configuracao.bannerBotaoTexto?.trim() || 'Ver Cardápio';
-  const bannerBotaoDestino = DESTINOS_BANNER_VALIDOS.has(configuracao.bannerBotaoDestino)
-    ? configuracao.bannerBotaoDestino
-    : 'cardapio';
   const tituloCardapio = configuracao.tituloCardapio?.trim() || 'Nosso cardápio';
   const textoApresentacao = configuracao.textoApresentacao?.trim() || 'Escolha o seu hambúrguer favorito.';
   const tituloSobre = configuracao.tituloSobre?.trim() || '';
@@ -348,7 +347,9 @@ function Home() {
 
   useEffect(() => {
     function verificarScroll() {
-      setRolouPagina(window.scrollY > 50);
+      /* 160px = a faixa amarela (23rem) menos a altura da barra (7rem): a
+         barra embranquece no instante em que o amarelo sai de tras dela. */
+      setRolouPagina(window.scrollY > 160);
     }
 
     verificarScroll();
@@ -734,65 +735,104 @@ function Home() {
           <button type="button" onClick={() => recarregarCatalogo().catch(() => {})}>Tentar novamente</button>
         </div>
       )}
-      <section
-        id="inicio"
-        className={styles.banner}
-        style={{ backgroundImage: `url(${JSON.stringify(bannerConfigurado)})` }}
-      >
+      <section id="inicio" className={styles.banner}>
+        <div
+          className={styles.fotoBanner}
+          style={{ backgroundImage: `url(${JSON.stringify(bannerConfigurado)})` }}
+          role="img"
+          aria-label={`Foto da ${nomeExibicao}`}
+        />
+
         <div className={styles.conteudoBanner}>
-          {/* Identidade da loja: logo sobre a faixa da foto, nome, chamada
-              configuravel e os dados que decidem o pedido. O horario nao ocupa
-              um chip fixo: fica dentro do status, que abre a grade da semana.
-              Vale nos dois tamanhos — quem abre um cardapio quer saber de que
-              loja ele e, nao ler uma chamada de marketing. */}
+          {/* Identidade da loja: a logo encosta na foto e ao lado dela ficam o
+              nome, o endereco e a linha que decide o pedido. O horario nao
+              ocupa um chip fixo: fica dentro do status, que abre a grade da
+              semana. Quem abre um cardapio quer saber de que loja ele e. */}
           <div className={styles.identidadeLoja} ref={horariosRef}>
             <div className={styles.identidadeLogo}>
               <LogoEstabelecimento configuracao={configuracao} alternativa={iniciaisLoja} loading="lazy" />
             </div>
 
-            <strong className={styles.identidadeNome}>{nomeExibicao}</strong>
+            <div className={styles.identidadeTextos}>
+              <strong className={styles.identidadeNome}>{nomeExibicao}</strong>
 
-            {configuracao.endereco && (
-              <span className={styles.identidadeEndereco}>{configuracao.endereco}</span>
-            )}
-
-            <div className={styles.identidadeInfos}>
-              <button
-                type="button"
-                className={`${styles.chipLoja} ${styles.chipStatus} ${pedidosOnlineDisponiveis ? styles.chipAberto : styles.chipFechado}`}
-                onClick={() => setHorariosAbertos((aberto) => !aberto)}
-                aria-expanded={horariosAbertos}
-                aria-controls="horarios-da-loja"
-              >
-                <span className={styles.pontoStatus} aria-hidden="true" />
-                {statusCurto}
-
-                <svg
-                  className={`${styles.setaChip} ${horariosAbertos ? styles.setaChipAberta : ''}`}
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M6 9L12 15L18 9"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-
-              {/* So o tempo de entrega acompanha o status: como texto solto ele
-                  cabe na mesma linha, sem obrigar a arrastar a fila. Retirada e
-                  pedido minimo continuam no rodape e no carrinho. */}
-              {configuracao.entregaAtiva && configuracao.tempoEntrega && (
-                <span className={styles.infoLoja}>
-                  <span>Entrega</span>
-                  <strong>{configuracao.tempoEntrega}</strong>
-                </span>
+              {configuracao.endereco && (
+                <span className={styles.identidadeEndereco}>{configuracao.endereco}</span>
               )}
+
+              <div className={styles.identidadeInfos}>
+                <button
+                  type="button"
+                  className={`${styles.chipLoja} ${styles.chipStatus} ${pedidosOnlineDisponiveis ? styles.chipAberto : styles.chipFechado}`}
+                  onClick={() => setHorariosAbertos((aberto) => !aberto)}
+                  aria-expanded={horariosAbertos}
+                  aria-controls="horarios-da-loja"
+                >
+                  <span className={styles.pontoStatus} aria-hidden="true" />
+                  {statusCurto}
+
+                  <svg
+                    className={`${styles.setaChip} ${horariosAbertos ? styles.setaChipAberta : ''}`}
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M6 9L12 15L18 9"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+
+                {/* So o tempo de entrega acompanha o status: como texto solto ele
+                    cabe na mesma linha, sem obrigar a arrastar a fila. Retirada e
+                    pedido minimo continuam no rodape e no carrinho. */}
+                {configuracao.entregaAtiva && configuracao.tempoEntrega && (
+                  <span className={styles.infoLoja}>
+                    <span>Entrega</span>
+                    <strong>{configuracao.tempoEntrega}</strong>
+                  </span>
+                )}
+              </div>
             </div>
+
+            {/* Ocupa o vazio ao lado da identidade no desktop; no celular
+                desce para dentro do cartao. Filtra o cardapio inteiro, nao
+                so a categoria aberta. */}
+            <form
+              className={styles.buscaProduto}
+              role="search"
+              onSubmit={(evento) => evento.preventDefault()}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle
+                  cx="11"
+                  cy="11"
+                  r="7"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+                <path
+                  d="M16.5 16.5L21 21"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+
+              <input
+                type="search"
+                value={busca}
+                onChange={(evento) => setBusca(evento.target.value)}
+                placeholder="Busque por um produto"
+                aria-label="Busque por um produto"
+              />
+            </form>
 
             {/* Fora da fila de chips: a fila rola na horizontal e recortaria
                 o painel se ele morasse dentro dela. */}
@@ -826,73 +866,6 @@ function Home() {
             )}
           </div>
 
-          {/* Chamada do banner: existe so no desktop, onde a foto ocupa a tela
-              inteira. No mobile a identidade acima ja leva direto ao cardapio
-              (ver o bloco @media (max-width: 650px) do CSS). */}
-          <div className={`${styles.statusLoja} ${pedidosOnlineDisponiveis ? styles.statusAberta : styles.statusFechada}`} role="status">
-            <span className={styles.pontoStatus} aria-hidden="true" />
-
-            <strong className={styles.statusRotuloLongo}>{statusCompleto}</strong>
-            <strong className={styles.statusRotuloCurto}>{statusCurto}</strong>
-
-            {horarioResumido && (
-              <span className={styles.statusHorario}>{horarioResumido}</span>
-            )}
-
-            <span className={styles.statusDetalhe}>{pedidosOnlineDisponiveis ? `${resumoAtendimento} • Estimativa: ${configuracao.tempoEntrega}` : 'O cardápio continua disponível para consulta.'}</span>
-          </div>
-
-          <span className={styles.textoPequeno}>
-            🔥 FEITO NA HORA
-          </span>
-
-          <h1>
-            {bannerTitulo ? (
-              <span className={styles.tituloAmarelo}>
-                {bannerTitulo}
-              </span>
-            ) : (
-              <>
-                <span className={styles.tituloBranco}>
-                  O Verdadeiro
-                </span>
-
-                <span className={styles.tituloAmarelo}>
-                  Hambúrguer Artesanal
-                </span>
-              </>
-            )}
-          </h1>
-
-          <p className={styles.descricaoBanner}>
-            {bannerSubtitulo || (
-              <>
-                Carne grelhada na hora, cheddar cremoso,{' '}
-                <br className={styles.quebraDesktop} />
-                bacon crocante e ingredientes sempre frescos{' '}
-                <br className={styles.quebraDesktop} />
-                para uma experiência irresistível.
-              </>
-            )}
-          </p>
-
-          <div className={styles.botoesBanner}>
-            <button
-              type="button"
-              className={styles.botaoPrincipal}
-              onClick={abrirCarrinho}
-            >
-              Peça agora
-            </button>
-
-            <button
-              type="button"
-              className={styles.botaoSecundario}
-              onClick={() => irParaSecao(bannerBotaoDestino)}
-            >
-              {bannerBotaoTexto}
-            </button>
-          </div>
         </div>
       </section>
 
@@ -1203,7 +1176,11 @@ function Home() {
         ))}
 
         {gruposDeProdutos.length === 0 && (
-          <p className={styles.semResultados} role="status">Nenhum produto disponível nesta categoria.</p>
+          <p className={styles.semResultados} role="status">
+            {busca.trim()
+              ? `Nenhum produto encontrado para "${busca.trim()}".`
+              : 'Nenhum produto disponível nesta categoria.'}
+          </p>
         )}
       </section>
       </main>

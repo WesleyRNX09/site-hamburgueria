@@ -27,7 +27,11 @@
   display: flex;
   align-items: center;
 
-  background-color: var(--cor-fundo);
+  padding: 0 clamp(2rem, 5vw, 6rem);
+
+  /* A barra é a faixa da marca: tudo que mora nela usa a cor de contraste
+     calculada para o amarelo, nunca o amarelo em cima do amarelo. */
+  background-color: var(--cor-principal);
 
   transition:
     background-color 0.3s ease,
@@ -37,11 +41,11 @@
 
 .conteudoHeader {
   width: 100%;
-  max-width: 1500px;
+  /* mesma coluna da foto e da grade de produtos */
+  max-width: 1280px;
   height: 100%;
 
   margin: 0 auto;
-  padding: 0 3rem;
 
   display: flex;
   align-items: center;
@@ -51,14 +55,14 @@
 .barraRolada {
   height: 7rem; /* antes: 5.5rem */
 
-  background-color: color-mix(in srgb, var(--cor-secundaria) 95%, transparent);
+  background-color: color-mix(in srgb, var(--cor-secundaria) 96%, transparent);
   box-shadow: 0 4px 20px var(--sombra-barra);
 
   backdrop-filter: blur(10px);
 }
 
 .logo {
-  color: var(--cor-principal-texto);
+  color: #FFFFFF;
   font-size: 2.8rem; /* antes: 2rem */
   font-weight: 600;
   text-decoration: none;
@@ -122,7 +126,7 @@
 .menu a {
   position: relative;
 
-  color: var(--cor-principal-texto);
+  color: color-mix(in srgb, #FFFFFF 82%, transparent);
   font-size: 1.5rem;
   font-weight: 500;
   text-decoration: none;
@@ -133,7 +137,7 @@
 }
 
 .menu a:hover {
-  color: var(--cor-texto);
+  color: #FFFFFF;
   transform: translateY(-2px);
 }
 
@@ -151,10 +155,30 @@
   width: 55%;
   height: 0.2rem;
 
-  background-color: var(--cor-principal);
+  background-color: #FFFFFF;
   border-radius: 2rem;
 
   transform: translateX(-50%);
+}
+
+/* Barra rolada: o fundo clareia, entao o conteudo dela escurece junto e o
+   amarelo volta a ser o destaque. */
+.barraRolada .logo,
+.barraRolada .menu a:hover {
+  color: var(--cor-sobre-principal);
+}
+
+.barraRolada .menu a {
+  color: color-mix(in srgb, var(--cor-sobre-principal) 78%, transparent);
+}
+
+.barraRolada .botaoCarrinho {
+  color: var(--cor-sobre-principal);
+  border-color: var(--cor-sobre-principal);
+}
+
+.barraRolada .linkAtivo::after {
+  background-color: var(--cor-principal);
 }
 
 .iconeCarrinho {
@@ -177,12 +201,12 @@
   justify-content: center;
   gap: 0.8rem;
 
-  color: var(--cor-principal-texto);
+  color: #FFFFFF;
   font-size: 1.5rem;
   font-weight: 500;
   text-decoration: none;
 
-  border: 2px solid var(--cor-principal-texto);
+  border: 2px solid #FFFFFF;
   border-radius: 2.5rem;
 
   transition:
@@ -193,7 +217,7 @@
 
 .botaoCarrinho:hover {
   color: var(--cor-sobre-principal);
-  background-color: var(--cor-principal);
+  background-color: var(--cor-card);
   transform: translateY(-2px);
 }
 
@@ -201,78 +225,49 @@
    BANNER
 ========================= */
 
+/* O topo é a ficha da loja, não uma chamada de marketing: a foto é uma faixa
+   com cantos arredondados e, logo abaixo, a logo encostada nela com o nome e
+   os dados do pedido ao lado. O texto nunca fica sobre a foto, então não
+   precisa de véu nem de cor invertida. */
 .banner {
   position: relative;
 
   width: 100%;
-  min-height: 100vh;
-  min-height: 100svh;
 
-  display: flex;
-  align-items: center;
+  /* a barra e fixa: o padding desce a foto para baixo dela. O recuo lateral
+     e o mesmo do cardapio, para a foto nascer na coluna dos produtos. */
+  padding: 8.5rem clamp(2rem, 5vw, 6rem) 0;
 
+  /* a faixa da marca desce por tras do topo da foto, que fica metade sobre
+     o amarelo e metade sobre a pagina */
   background-color: var(--cor-fundo);
+  background-image: linear-gradient(
+    to bottom,
+    var(--cor-principal) 0,
+    var(--cor-principal) 23rem,
+    var(--cor-fundo) 23rem
+  );
+}
+
+.fotoBanner {
+  width: 100%;
+  max-width: 1280px;
+  height: min(42rem, 46vh);
+
+  margin: 0 auto;
+
+  background-color: var(--cor-card);
   background-size: cover;
   /* a foto tem espaco negativo a esquerda: deslocar para 62% deixa o
-     hamburguer inteiro na metade direita, livre do texto */
+     hamburguer inteiro na metade direita */
   background-position: 62% center;
   background-repeat: no-repeat;
-}
 
-/* A foto aparece inteira: no desktop não há véu nenhum sobre ela. Quem
-   garante a leitura é a cor do texto, clara aqui dentro (ver abaixo).
-   No celular o texto desce para baixo da faixa e o ::before volta a ter
-   gradiente, só para a foto se dissolver na página. */
-.banner::before {
-  content: "";
+  /* moldura branca em volta da foto, como um porta-retrato */
+  border: 0.9rem solid var(--cor-card);
+  border-radius: 2.4rem;
 
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-
-  pointer-events: none;
-}
-
-/* Acima de 900px o conteúdo do banner fica sobre a foto, então as cores de
-   texto se invertem aqui dentro. Abaixo disso ele desce para baixo da faixa
-   da foto e herda as cores da página normalmente. */
-@media (min-width: 901px) {
-  .conteudoBanner {
-    --cor-texto: #FFFFFF;
-    --cor-texto-suave: #ECECEA;
-    --cor-texto-medio: #D8D8D5;
-  }
-
-  /* Estes têm superfície clara própria e continuam com texto escuro. */
-  .conteudoBanner .chipLoja,
-  .conteudoBanner .painelHorarios,
-  .conteudoBanner .identidadeLogo {
-    --cor-texto: #1A1A19;
-    --cor-texto-suave: #3E3D3A;
-    --cor-texto-medio: #55534E;
-  }
-}
-
-/* Mistura o final do banner com o fundo da página */
-.banner::after {
-  content: "";
-
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  z-index: 1;
-
-  width: 100%;
-  height: 10rem;
-
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    var(--cor-fundo)
-  );
-
-  pointer-events: none;
+  box-shadow: 0 6px 22px var(--sombra-cartao);
 }
 
 .conteudoBanner {
@@ -280,40 +275,116 @@
   z-index: 2;
 
   width: 100%;
-  max-width: 1500px;
+  max-width: 1280px;
 
   margin: 0 auto;
-  padding: 4rem 3rem 5rem;
+  padding: 0 0 3.5rem;
 }
 
 /* =========================
    IDENTIDADE DA LOJA
 
-   No mobile e o topo inteiro do cardapio: logo sobre a faixa da foto, nome,
-   endereco e a linha com status e tempo de entrega (ver o bloco
-   @media (max-width: 650px)).
-
-   No desktop, onde a foto ocupa a tela toda e a chamada do banner assume,
-   sobra so o circulo da logo acima dessa chamada.
+   O topo inteiro do cardapio: a logo encosta na faixa da foto e, ao lado,
+   ficam o nome, o endereco e a linha com status e tempo de entrega.
+   No celular a mesma coluna vira um cartao centralizado sobre a foto
+   (ver o bloco @media (max-width: 650px)).
 ========================= */
 
 .identidadeLoja {
   position: relative;
+
+  display: flex;
+  align-items: flex-start;
+  gap: 2.4rem;
+
+  /* recuada da borda da foto, para o bloco cair mais para dentro da página
+     sem chegar a ficar centralizado */
+  padding-top: 1.4rem;
+  padding-left: 8%;
 }
 
-.identidadeNome,
-.identidadeEndereco,
-.identidadeInfos,
-.painelHorarios {
-  display: none;
+.identidadeTextos {
+  display: flex;
+  flex-direction: column;
+
+  min-width: 0;
+}
+
+/* =========================
+   BUSCA DE PRODUTO
+========================= */
+
+.buscaProduto {
+  width: min(36rem, 100%);
+  height: 4.8rem;
+
+  /* empurra para o vazio a direita da identidade */
+  margin-left: auto;
+  align-self: center;
+
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+
+  padding: 0 1.6rem;
+
+  background: var(--cor-card);
+  border: 1px solid color-mix(in srgb, var(--cor-texto) 12%, transparent);
+  border-radius: 1.2rem;
+
+  box-shadow: 0 2px 10px var(--sombra-cartao);
+
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.buscaProduto:focus-within {
+  border-color: var(--cor-principal);
+  box-shadow: 0 0 0 3px rgb(from var(--cor-principal) r g b / 0.25);
+}
+
+.buscaProduto svg {
+  width: 1.9rem;
+  height: 1.9rem;
+  flex: 0 0 auto;
+
+  color: var(--cor-texto-fraco);
+}
+
+.buscaProduto input {
+  width: 100%;
+  min-width: 0;
+
+  border: 0;
+  background: transparent;
+  outline: none;
+
+  color: var(--cor-texto);
+  font-family: inherit;
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+
+.buscaProduto input::placeholder {
+  color: var(--cor-texto-fraco);
+  font-weight: 500;
+}
+
+/* o "x" nativo do type=search destoa do resto */
+.buscaProduto input::-webkit-search-cancel-button {
+  appearance: none;
 }
 
 /* Sem logo enviada, o circulo mostra as iniciais da loja (ver JSX). */
 .identidadeLogo {
   width: 11rem;
   height: 11rem;
-  margin-bottom: 2rem;
+  flex: 0 0 auto;
   padding: 1rem;
+
+  /* só a logo sobe para dentro da faixa da foto; o nome fica abaixo dela */
+  margin-top: -6.5rem;
 
   display: grid;
   place-items: center;
@@ -343,23 +414,25 @@
 
 .identidadeNome {
   color: var(--cor-texto);
-  font-size: 2.5rem;
+  font-size: 3.4rem;
   font-weight: 800;
   line-height: 1.15;
 }
 
 .identidadeEndereco {
+  margin-top: 0.4rem;
+
   color: color-mix(in srgb, var(--cor-texto) 58%, transparent);
-  font-size: 1.25rem;
+  font-size: 1.4rem;
   font-weight: 500;
   line-height: 1.4;
 }
 
 .identidadeInfos {
-  margin-top: 1.4rem;
+  margin-top: 1.2rem;
 
+  display: flex;
   align-items: center;
-  justify-content: center;
   flex-wrap: wrap;
   gap: 0.9rem 1.6rem;
 }
@@ -535,154 +608,6 @@
   font-weight: 600;
   line-height: 1.6;
   white-space: pre-line;
-}
-
-/* =========================
-   CHAMADA DO BANNER (desktop)
-========================= */
-
-/* Chip escuro: a cor do status vira um ponto, nao um banho de cor no chip
-   inteiro — assim o selo assenta na foto e no sistema escuro/amarelo. */
-.statusLoja {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.4rem 1rem;
-  margin-bottom: 1.6rem;
-  max-width: 100%;
-
-  border: 1px solid color-mix(in srgb, var(--cor-texto) 14%, transparent);
-  border-radius: 999px;
-  padding: 0.7rem 1.4rem;
-
-  background: color-mix(in srgb, var(--cor-secundaria) 72%, transparent);
-  backdrop-filter: blur(8px);
-
-  color: color-mix(in srgb, var(--cor-texto) 72%, transparent);
-  font-size: 1.4rem;
-  line-height: 1.25;
-}
-
-.statusLoja strong {
-  color: var(--cor-texto);
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-
-.statusAberta .pontoStatus {
-  color: var(--cor-ok);
-  box-shadow: 0 0 0 0.4rem color-mix(in srgb, var(--cor-ok) 18%, transparent);
-}
-
-.statusFechada .pontoStatus {
-  color: var(--cor-erro);
-  box-shadow: 0 0 0 0.4rem color-mix(in srgb, var(--cor-erro) 18%, transparent);
-}
-
-/* Versao curta (status + horario) so aparece no mobile; ver media query. */
-.statusRotuloCurto,
-.statusHorario {
-  display: none;
-}
-
-.textoPequeno {
-  display: block;
-  margin-bottom: 0.7rem;
-
-  color: var(--cor-principal-texto);
-  font-size: 1.25rem;
-  font-weight: 800;
-}
-
-.conteudoBanner h1 {
-  max-width: 1000px;
-  margin: 0;
-
-  font-size: clamp(4rem, 5.5vw, 6rem);
-  font-weight: 800;
-  line-height: 1.05;
-  letter-spacing: -0.08rem;
-}
-
-.tituloBranco,
-.tituloAmarelo {
-  display: block;
-}
-
-.tituloBranco {
-  color: var(--cor-texto-suave);
-}
-
-.tituloAmarelo {
-  color: var(--cor-principal-texto);
-}
-
-.descricaoBanner {
-  width: 100%;
-  max-width: 600px;
-
-  margin-top: 24px;
-
-  color: var(--cor-texto-suave);
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
-.botoesBanner {
-  margin-top: 4.5rem;
-
-  display: flex;
-  align-items: center;
-  gap: 2rem;
-}
-
-.botaoPrincipal,
-.botaoSecundario {
-  width: 21rem;
-  min-height: 5rem;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  font-family: inherit;
-  font-size: 1.7rem;
-  font-weight: 700;
-  line-height: 1;
-  text-decoration: none;
-
-  border-radius: 2rem;
-
-  cursor: pointer;
-
-  transition:
-    transform 0.2s ease,
-    background-color 0.2s ease,
-    color 0.2s ease;
-}
-
-.botaoPrincipal {
-  color: var(--cor-sobre-principal);
-  background-color: var(--cor-principal);
-  border: 2px solid var(--cor-principal-texto);
-}
-
-.botaoPrincipal:hover {
-  background-color: var(--cor-principal-clara);
-  transform: translateY(-3px);
-}
-
-.botaoSecundario {
-  color: var(--cor-principal-texto);
-  background-color: color-mix(in srgb, var(--cor-secundaria) 25%, transparent);
-  border: 2px solid var(--cor-principal-texto);
-}
-
-.botaoSecundario:hover {
-  color: var(--cor-sobre-principal);
-  background-color: var(--cor-principal);
-  transform: translateY(-3px);
 }
 
 /* =========================
@@ -1847,7 +1772,6 @@
 }
 
 
-
 /* =========================
    OBSERVAÇÃO
 ========================= */
@@ -1927,7 +1851,6 @@
     0 0 0 3px
     rgb(from var(--cor-principal-texto) r g b / 0.08);
 }
-
 
 
 /* =========================
@@ -2144,11 +2067,11 @@
   align-items: center;
   justify-content: center;
 
-  color: var(--cor-sobre-principal);
+  color: var(--cor-principal);
   font-size: 0.8rem;
   font-weight: 800;
 
-  background-color: var(--cor-principal);
+  background-color: var(--cor-sobre-principal);
   border-radius: 50%;
 }
 
@@ -3365,11 +3288,6 @@
   .menu {
     display: none;
   }
-
-  .descricaoBanner {
-    max-width: 550px;
-    font-size: 1.2rem;
-  }
 }
 
 /* =========================
@@ -3381,54 +3299,63 @@
 ========================= */
 
 @media (max-width: 900px) {
-  /* Sem altura de tela cheia: com o conteudo alinhado ao topo, o
-     `min-height` sobrava como um vao morto entre os botoes e a secao
-     seguinte. A altura passa a ser a do proprio conteudo. */
   .banner {
-    min-height: auto;
-    align-items: flex-start;
+    padding: 0 clamp(2rem, 5vw, 6rem);
 
-    /* faixa com altura proporcional ao viewport: mantem o mesmo
-       enquadramento de 360px ate 900px, sem estourar no tablet */
-    background-size: auto 34vh;
-    background-size: auto 34svh;
-    background-position: 78% 5rem;
+    background-image: none;
   }
 
-  /* Paradas em `svh` (nao em %): agora que a altura do banner varia, o
-     gradiente continua ancorado na faixa da foto, que tambem e medida
-     em svh. Em 100svh o resultado e identico ao anterior. */
-  .banner::before {
-    background: linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--cor-secundaria) 25%, transparent) 0,
-      color-mix(in srgb, var(--cor-secundaria) 8%, transparent) 8svh,
-      color-mix(in srgb, var(--cor-secundaria) 6%, transparent) 24svh,
-      color-mix(in srgb, var(--cor-secundaria) 38%, transparent) 36svh,
-      color-mix(in srgb, var(--cor-secundaria) 85%, transparent) 46svh,
-      var(--cor-fundo) 56svh
-    );
+  .fotoBanner {
+    height: min(28rem, 32vh);
+
+    background-position: 62% center;
   }
 
-  .banner::after {
-    height: 4rem;
+  .identidadeLoja {
+    gap: 1.6rem;
   }
 
-  /* texto comeca logo abaixo da faixa da foto, sem vazio no meio */
-  .conteudoBanner {
-    padding-top: calc(34vh + 7rem);
-    padding-top: calc(34svh + 7rem);
-    padding-bottom: 5rem;
+  .identidadeLogo {
+    width: 9rem;
+    height: 9rem;
+
+    margin-top: -5.2rem;
+  }
+
+  .identidadeNome {
+    font-size: 2.6rem;
   }
 }
 
 @media (max-width: 700px) {
+  /* No celular a foto abre a tela sozinha: a barra sai de cena no topo e
+     desliza de volta assim que a pagina rola. */
   .barraPrincipal {
     height: 5rem;
+
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-100%);
+
+    transition:
+      background-color 0.3s ease,
+      box-shadow 0.3s ease,
+      opacity 0.25s ease,
+      transform 0.3s ease;
   }
 
-  .conteudoHeader {
-    padding: 0 1rem;
+  .barraRolada {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .banner {
+    padding: 0 1.5rem;
+  }
+
+  .barraPrincipal {
+    padding: 0 1.5rem;
   }
 
   .logo {
@@ -3447,63 +3374,6 @@
 
   .conteudoBanner {
     padding-inline: 1.5rem;
-  }
-
-  .conteudoBanner h1 {
-    font-size: 2.7rem;
-  }
-
-  .descricaoBanner {
-    max-width: 100%;
-    margin-top: 1.5rem;
-    font-size: 1.05rem;
-  }
-
-  /* Selo: no mobile fica so o status + o horario de funcionamento. */
-  .statusLoja {
-    gap: 0.8rem;
-    padding: 0.6rem 1.2rem;
-    font-size: 1.25rem;
-  }
-
-  .statusRotuloLongo,
-  .statusDetalhe {
-    display: none;
-  }
-
-  .statusRotuloCurto {
-    display: inline;
-  }
-
-  .statusHorario {
-    display: inline-block;
-    max-width: 26rem;
-    padding-left: 0.9rem;
-
-    border-left: 1px solid color-mix(in srgb, var(--cor-texto) 18%, transparent);
-
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .quebraDesktop {
-    display: none;
-  }
-
-  .botoesBanner {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
-  }
-
-  .botaoPrincipal,
-  .botaoSecundario {
-    width: 100%;
-    max-width: 22rem;
-    min-height: 4rem;
-
-    font-size: 1.2rem;
   }
 }
 
@@ -3640,9 +3510,7 @@
     min-width: 3.2rem;
     min-height: 3.2rem;
   }
-
   .botaoCarrinho,
-  .descricaoBanner,
   .topoPromocoes span,
   .tipoPromocao,
   .seloProduto,
@@ -3790,10 +3658,6 @@
     padding: 0;
     gap: 0;
   }
-
-  .statusHorario {
-    max-width: 22rem;
-  }
 }
 
 
@@ -3810,21 +3674,20 @@
 ========================= */
 
 @media (max-width: 650px) {
-  /* --- Faixa da foto: mais curta, para a identidade subir para a dobra --- */
-
+  /* No celular a foto ocupa a largura inteira e a identidade vira um cartao
+     que sobe por cima dela, com a logo encaixada na borda de cima. */
   .banner {
-    background-size: auto 23svh;
-    background-position: 50% 5rem;
+    padding: 0;
   }
 
-  .banner::before {
-    background: linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--cor-secundaria) 18%, transparent) 0,
-      color-mix(in srgb, var(--cor-secundaria) 6%, transparent) 10svh,
-      color-mix(in srgb, var(--cor-secundaria) 45%, transparent) 21svh,
-      var(--cor-fundo) 28svh
-    );
+  .fotoBanner {
+    height: 23svh;
+
+    border: 0;
+    border-radius: 0;
+    background-position: 50% center;
+
+    box-shadow: none;
   }
 
   /* z-index acima da barra de categorias (900): o painel de horarios nasce
@@ -3834,42 +3697,58 @@
   .conteudoBanner {
     z-index: 960;
 
-    padding-top: calc(23svh - 3.5rem);
-    padding-bottom: 2rem;
+    padding: 0 0 2rem;
 
     text-align: center;
   }
 
-  /* Os dados da identidade ja dizem status, horario e entrega. */
-  .statusLoja {
-    display: none;
-  }
-
-  /* Coluna centralizada com a logo no topo: e ela que abre o cardapio aqui. */
+  /* Cartao centralizado com a logo encaixada na borda de cima. */
   .identidadeLoja {
-    display: flex;
     flex-direction: column;
     align-items: center;
 
+    margin-top: -3.2rem;
+    padding: 0 1.6rem 1.8rem;
+
+    background: var(--cor-card);
+    border-radius: 2rem;
+    box-shadow: 0 4px 24px var(--sombra-cartao);
+
     text-align: center;
+  }
+
+  .identidadeTextos {
+    align-items: center;
+
+    padding-bottom: 0;
+  }
+
+  /* Sem vazio ao lado: a busca desce para dentro do cartao. */
+  .buscaProduto {
+    width: 100%;
+    height: 4.4rem;
+
+    margin: 1.4rem 0 0;
   }
 
   .identidadeLogo {
     width: 8.6rem;
     height: 8.6rem;
-    margin-bottom: 0;
     padding: 0.8rem;
+
+    /* metade para fora do cartao, encostada na foto */
+    margin-top: -4.3rem;
 
     font-size: 3rem;
   }
 
   .identidadeNome {
-    display: block;
-    margin-top: 1.2rem;
+    margin-top: 1rem;
+
+    font-size: 2.2rem;
   }
 
   .identidadeEndereco {
-    display: block;
     max-width: 30rem;
     margin-top: 0.5rem;
   }
@@ -3879,7 +3758,7 @@
   .identidadeInfos {
     align-self: stretch;
 
-    display: flex;
+    justify-content: center;
   }
 
   .infoLoja span {
@@ -3899,20 +3778,7 @@
 
   .painelHorarios {
     left: 50%;
-
-    display: block;
-
     transform: translateX(-50%);
-  }
-
-  /* A chamada de marketing sai do mobile: depois da identidade o cliente ja
-     cai no cardapio, que e o que ele veio fazer. Os textos continuam
-     configuraveis e aparecem no desktop. */
-  .textoPequeno,
-  .conteudoBanner h1,
-  .descricaoBanner,
-  .botoesBanner {
-    display: none;
   }
 
   /* --- Cardapio --- */
