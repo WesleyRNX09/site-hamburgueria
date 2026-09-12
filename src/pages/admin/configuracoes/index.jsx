@@ -76,7 +76,8 @@ function ConfiguracoesAdmin() {
   const [salvo, setSalvo] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
-  const temaPrevia = useMemo(() => criarVariaveisTema(dados), [dados]);
+  // O cardápio é claro: a prévia precisa mostrar a mesma paleta que o cliente vê.
+  const temaPrevia = useMemo(() => criarVariaveisTema(dados, true), [dados]);
 
   function alterar(campo, valor) {
     setDados((atuais) => ({ ...atuais, [campo]: valor }));

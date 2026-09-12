@@ -31,37 +31,36 @@
   text-rendering: optimizeLegibility;
 }
 
-/* Tema claro: segue a configuração do aparelho de quem abre o cardápio. Vale
-   apenas na área pública — painel, garçom e superadmin têm fundos escuros
-   fixos no CSS e ficariam com texto escuro sobre escuro.
+/* O cardápio é claro sempre, em qualquer aparelho. Vale apenas na área
+   pública — painel, garçom e superadmin têm fundos escuros fixos no CSS e
+   ficariam com texto escuro sobre escuro, por isso seguem com os valores
+   escuros de :root.
    As cores do estabelecimento também são recalculadas pelo theme.js, que as
    aplica inline no <html>; os valores repetidos aqui valem para o primeiro
    quadro, antes do React montar, e evitam o pisca escuro. */
-@media (prefers-color-scheme: light) {
-  :root[data-area="publica"] {
-    --cor-secundaria: #FFFFFF;
-    --cor-fundo: #FFFFFF;
-    --cor-card: #F5F4F1;
-    --cor-texto: #1A1A19;
-    --cor-principal-texto: var(--cor-principal);
-    --cor-texto-suave: #3E3D3A;
-    --cor-texto-medio: #55534E;
-    --cor-texto-fraco: #6E6C67;
-    --cor-ok: #1FBF63;
-    --cor-ok-texto: #17A94F;
-    /* "Elevado" precisa clarear, não escurecer: misturar com a cor de texto
-       deixaria o carrinho e o modal cinzas por dentro. */
-    --cor-card-elevado: color-mix(in srgb, var(--cor-card) 45%, #FFFFFF);
-    --cor-erro: #C62828;
-    --cor-erro-texto: #A32019;
-    /* Sombra preta forte vira mancha cinza sobre o branco: aqui ela serve
-       só para descolar o elemento do fundo. */
-    --sombra-barra: rgba(0, 0, 0, 0.1);
-    --sombra-cartao: rgba(0, 0, 0, 0.05);
-    --sombra-cartao-forte: rgba(0, 0, 0, 0.09);
-    --sombra-flutuante: rgba(0, 0, 0, 0.14);
-    color-scheme: light;
-  }
+:root[data-area="publica"] {
+  --cor-secundaria: #FFFFFF;
+  --cor-fundo: #FFFFFF;
+  --cor-card: #F5F4F1;
+  --cor-texto: #1A1A19;
+  --cor-principal-texto: var(--cor-principal);
+  --cor-texto-suave: #3E3D3A;
+  --cor-texto-medio: #55534E;
+  --cor-texto-fraco: #6E6C67;
+  --cor-ok: #1FBF63;
+  --cor-ok-texto: #17A94F;
+  /* "Elevado" precisa clarear, não escurecer: misturar com a cor de texto
+     deixaria o carrinho e o modal cinzas por dentro. */
+  --cor-card-elevado: color-mix(in srgb, var(--cor-card) 45%, #FFFFFF);
+  --cor-erro: #C62828;
+  --cor-erro-texto: #A32019;
+  /* Sombra preta forte vira mancha cinza sobre o branco: aqui ela serve
+     só para descolar o elemento do fundo. */
+  --sombra-barra: rgba(0, 0, 0, 0.1);
+  --sombra-cartao: rgba(0, 0, 0, 0.05);
+  --sombra-cartao-forte: rgba(0, 0, 0, 0.09);
+  --sombra-flutuante: rgba(0, 0, 0, 0.14);
+  color-scheme: light;
 }
 
 /* O iOS dá zoom sozinho ao focar um campo com fonte menor que 16px, e a tela

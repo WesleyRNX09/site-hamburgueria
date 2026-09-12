@@ -63,12 +63,6 @@ const PALETA_CLARA = {
   corTexto: '#1A1A19'
 };
 
-export function preferenciaTemaClaro() {
-  return typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-color-scheme: light)').matches;
-}
-
 /* O tema claro vale só para o cardápio e o checkout. Painel, garçom e
    superadmin têm fundos escuros fixos no CSS e ficariam ilegíveis.
    A mesma regra está no index.html, que marca a área no primeiro quadro. */
@@ -142,7 +136,7 @@ export function normalizarConfiguracaoPublica(recebida = {}) {
 /* No tema claro as cores do estabelecimento continuam mandando na marca, mas
    os neutros (fundo, card, texto) passam a ser os claros: as cores escolhidas
    no painel são escuras e não teriam como ser lidas sobre branco. */
-export function criarVariaveisTema(configuracao, temaClaro = preferenciaTemaClaro()) {
+export function criarVariaveisTema(configuracao, temaClaro = false) {
   const segura = normalizarConfiguracaoPublica(configuracao);
   const neutros = temaClaro ? PALETA_CLARA : segura;
   return {
@@ -159,7 +153,7 @@ export function criarVariaveisTema(configuracao, temaClaro = preferenciaTemaClar
   };
 }
 
-export function aplicarTema(elemento, configuracao, temaClaro = preferenciaTemaClaro()) {
+export function aplicarTema(elemento, configuracao, temaClaro = false) {
   if (!elemento?.style?.setProperty) return;
   Object.entries(criarVariaveisTema(configuracao, temaClaro)).forEach(([propriedade, valor]) => {
     elemento.style.setProperty(propriedade, valor);

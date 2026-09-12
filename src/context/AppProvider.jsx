@@ -176,18 +176,16 @@ export function AppProvider({ children }) {
     }), 60000);
     return () => clearInterval(timer);
   }, [configuracao.funcionamentoAutomatico]);
-  /* O cardápio acompanha o aparelho: quem troca entre claro e escuro com a
-     página aberta vê a mudança na hora, sem recarregar. */
+  /* O cardápio é sempre claro; o painel, o garçom e o superadmin seguem
+     escuros. O atributo diz ao CSS qual das duas paletas vale. */
   useLayoutEffect(() => {
     const publica = ehAreaPublica(caminhoAtual);
-    const preferencia = window.matchMedia('(prefers-color-scheme: light)');
-    const aplicar = () => {
-      document.documentElement.dataset.area = publica ? 'publica' : 'painel';
-      aplicarTema(document.documentElement, configuracao, publica && preferencia.matches);
-    };
-    aplicar();
-    preferencia.addEventListener('change', aplicar);
-    return () => preferencia.removeEventListener('change', aplicar);
+    document.documentElement.dataset.area = publica ? 'publica' : 'painel';
+    aplicarTema(document.documentElement, configuracao, publica);
+    // A barra do navegador no celular acompanha a paleta da área.
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', publica ? '#FFFFFF' : '#111111');
   }, [configuracao, caminhoAtual]);
   useEffect(() => {
     const nome = configuracao.nomeLoja?.trim();

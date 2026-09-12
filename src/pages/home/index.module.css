@@ -27,21 +27,12 @@
   display: flex;
   align-items: center;
 
-  background-color: transparent;
+  background-color: var(--cor-fundo);
 
   transition:
     background-color 0.3s ease,
     box-shadow 0.3s ease,
     height 0.3s ease;
-}
-
-/* No escuro a barra nasce transparente e a foto do banner aparece por trás
-   dela. No claro isso deixava o texto escuro sobre a foto e criava a faixa
-   cinza no topo, então aqui ela é sólida desde o começo. */
-@media (prefers-color-scheme: light) {
-  .barraPrincipal {
-    background-color: var(--cor-fundo);
-  }
 }
 
 .conteudoHeader {
@@ -228,7 +219,9 @@
   background-repeat: no-repeat;
 }
 
-/* Escurece o lado esquerdo para o texto aparecer */
+/* No desktop o texto do banner fica por cima da foto, então o lado esquerdo
+   precisa de um véu forte para ele ser lido; o direito continua limpo.
+   No celular o texto desce para baixo da faixa da foto e o véu afrouxa. */
 .banner::before {
   content: "";
 
@@ -239,8 +232,8 @@
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--cor-secundaria) 95%, transparent) 0%,
-    color-mix(in srgb, var(--cor-secundaria) 75%, transparent) 35%,
-    color-mix(in srgb, var(--cor-secundaria) 20%, transparent) 65%,
+    color-mix(in srgb, var(--cor-secundaria) 80%, transparent) 35%,
+    color-mix(in srgb, var(--cor-secundaria) 30%, transparent) 65%,
     transparent 100%
   );
 
@@ -397,7 +390,7 @@
   font-weight: 600;
   white-space: nowrap;
 
-  background: var(--cor-card);
+  background: var(--cor-fundo);
   border: 1px solid color-mix(in srgb, var(--cor-texto) 10%, transparent);
   border-radius: 999px;
 }
@@ -412,6 +405,7 @@
 
 .chipAberto {
   color: var(--cor-ok-texto);
+  background: color-mix(in srgb, var(--cor-ok) 10%, var(--cor-fundo));
   border-color: color-mix(in srgb, var(--cor-ok) 32%, transparent);
 }
 
@@ -2754,7 +2748,7 @@
     linear-gradient(
       180deg,
       var(--cor-fundo) 0%,
-      color-mix(in srgb, var(--cor-secundaria) 85%, black) 100%
+      var(--cor-card) 100%
     );
 
   border-top: 1px solid
@@ -3394,11 +3388,11 @@
   .banner::before {
     background: linear-gradient(
       to bottom,
-      color-mix(in srgb, var(--cor-secundaria) 75%, transparent) 0,
-      color-mix(in srgb, var(--cor-secundaria) 30%, transparent) 8svh,
-      color-mix(in srgb, var(--cor-secundaria) 20%, transparent) 24svh,
-      color-mix(in srgb, var(--cor-secundaria) 55%, transparent) 36svh,
-      color-mix(in srgb, var(--cor-secundaria) 92%, transparent) 46svh,
+      color-mix(in srgb, var(--cor-secundaria) 25%, transparent) 0,
+      color-mix(in srgb, var(--cor-secundaria) 8%, transparent) 8svh,
+      color-mix(in srgb, var(--cor-secundaria) 6%, transparent) 24svh,
+      color-mix(in srgb, var(--cor-secundaria) 38%, transparent) 36svh,
+      color-mix(in srgb, var(--cor-secundaria) 85%, transparent) 46svh,
       var(--cor-fundo) 56svh
     );
   }
@@ -3813,9 +3807,9 @@
   .banner::before {
     background: linear-gradient(
       to bottom,
-      color-mix(in srgb, var(--cor-secundaria) 60%, transparent) 0,
-      color-mix(in srgb, var(--cor-secundaria) 15%, transparent) 10svh,
-      color-mix(in srgb, var(--cor-secundaria) 65%, transparent) 21svh,
+      color-mix(in srgb, var(--cor-secundaria) 18%, transparent) 0,
+      color-mix(in srgb, var(--cor-secundaria) 6%, transparent) 10svh,
+      color-mix(in srgb, var(--cor-secundaria) 45%, transparent) 21svh,
       var(--cor-fundo) 28svh
     );
   }
@@ -4105,79 +4099,3 @@
   }
 }
 
-
-/* =========================
-   VÉU DO BANNER NO TEMA CLARO
-========================= */
-
-/* O véu escurece a foto para o texto branco ser lido. No claro ele vira um
-   véu branco, e na mesma intensidade apagava a foto quase por completo. Como
-   a barra do topo passou a ser sólida, o véu não precisa mais proteger nada
-   ali: fica só o suficiente para a foto se dissolver na página.
-   Estas regras vêm depois das originais de propósito — é o que as faz valer. */
-
-@media (prefers-color-scheme: light) {
-  .banner::before {
-    background: linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--cor-secundaria) 55%, transparent) 0%,
-      color-mix(in srgb, var(--cor-secundaria) 28%, transparent) 35%,
-      color-mix(in srgb, var(--cor-secundaria) 8%, transparent) 65%,
-      transparent 100%
-    );
-  }
-}
-
-@media (prefers-color-scheme: light) and (max-width: 700px) {
-  .banner::before {
-    background: linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--cor-secundaria) 25%, transparent) 0,
-      color-mix(in srgb, var(--cor-secundaria) 8%, transparent) 8svh,
-      color-mix(in srgb, var(--cor-secundaria) 6%, transparent) 24svh,
-      color-mix(in srgb, var(--cor-secundaria) 38%, transparent) 36svh,
-      color-mix(in srgb, var(--cor-secundaria) 85%, transparent) 46svh,
-      var(--cor-fundo) 56svh
-    );
-  }
-}
-
-@media (prefers-color-scheme: light) and (max-width: 650px) {
-  .banner::before {
-    background: linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--cor-secundaria) 18%, transparent) 0,
-      color-mix(in srgb, var(--cor-secundaria) 6%, transparent) 10svh,
-      color-mix(in srgb, var(--cor-secundaria) 45%, transparent) 21svh,
-      var(--cor-fundo) 28svh
-    );
-  }
-}
-
-
-/* =========================
-   AJUSTES DE FUNDO NO TEMA CLARO
-========================= */
-
-/* O chip de status usa o cinza dos cartões, que sobre a página branca lê
-   como uma mancha. Aqui ele volta ao fundo da página, e quando a loja está
-   aberta ganha um fundo do próprio verde para o status saltar. */
-@media (prefers-color-scheme: light) {
-  .chipLoja {
-    background: var(--cor-fundo);
-  }
-
-  .chipAberto {
-    background: color-mix(in srgb, var(--cor-ok) 10%, var(--cor-fundo));
-  }
-
-  /* O rodapé escurece o fim da página misturando a cor de fundo com preto.
-     Partindo do branco isso dava um cinza pesado; um tom de cartão basta. */
-  .sobreLoja {
-    background: linear-gradient(
-      180deg,
-      var(--cor-fundo) 0%,
-      var(--cor-card) 100%
-    );
-  }
-}
