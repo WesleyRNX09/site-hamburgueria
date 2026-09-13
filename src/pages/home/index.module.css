@@ -6,7 +6,6 @@
 
 #inicio,
 #cardapio,
-#promocoes,
 #sobre {
   scroll-margin-top: 8rem;
 }
@@ -117,68 +116,64 @@
   object-fit: contain;
 }
 
+/* O menu nao navega por ancoras: cada botao abre um painel (promocoes do
+   dia ou o pedido em andamento). */
 .menu {
   display: flex;
   align-items: center;
-  gap: 3.5rem;
+  gap: 4rem;
 }
 
-.menu a {
-  position: relative;
+.menu button {
+  height: 4.4rem;
+  padding: 0 1.8rem;
 
-  color: color-mix(in srgb, #FFFFFF 82%, transparent);
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+
+  color: #FFFFFF;
+  font-family: inherit;
   font-size: 1.5rem;
-  font-weight: 500;
-  text-decoration: none;
+  font-weight: 700;
+
+  background-color: transparent;
+  border: 0;
+  border-radius: 2.5rem;
+
+  cursor: pointer;
 
   transition:
-    color 0.2s ease,
-    transform 0.2s ease;
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
 
-.menu a:hover {
-  color: #FFFFFF;
-  transform: translateY(-2px);
+.menu button svg {
+  width: 2.1rem;
+  height: 2.1rem;
+  flex: 0 0 auto;
 }
 
-.menu .linkAtivo {
-  font-weight: 700;
-}
-
-.menu .linkAtivo::after {
-  content: "";
-
-  position: absolute;
-  left: 50%;
-  bottom: -0.7rem;
-
-  width: 55%;
-  height: 0.2rem;
-
-  background-color: #FFFFFF;
-  border-radius: 2rem;
-
-  transform: translateX(-50%);
+.menu button:hover,
+.menu button[aria-expanded="true"] {
+  background-color: rgb(255 255 255 / 0.18);
 }
 
 /* Barra rolada: o fundo clareia, entao o conteudo dela escurece junto e o
    amarelo volta a ser o destaque. */
 .barraRolada .logo,
-.barraRolada .menu a:hover {
+.barraRolada .menu button {
   color: var(--cor-sobre-principal);
 }
 
-.barraRolada .menu a {
-  color: color-mix(in srgb, var(--cor-sobre-principal) 78%, transparent);
+.barraRolada .menu button:hover,
+.barraRolada .menu button[aria-expanded="true"] {
+  background-color: rgb(from var(--cor-principal) r g b / 0.22);
 }
 
 .barraRolada .botaoCarrinho {
   color: var(--cor-sobre-principal);
   border-color: var(--cor-sobre-principal);
-}
-
-.barraRolada .linkAtivo::after {
-  background-color: var(--cor-principal);
 }
 
 .iconeCarrinho {
@@ -318,8 +313,8 @@
   width: min(36rem, 100%);
   height: 4.8rem;
 
-  /* empurra para o vazio a direita da identidade */
-  margin-left: auto;
+  /* centrada no vazio a direita da identidade, na altura dos textos */
+  margin-inline: auto;
   align-self: center;
 
   display: flex;
@@ -610,375 +605,6 @@
   white-space: pre-line;
 }
 
-/* =========================
-   PROMOÇÕES
-========================= */
-.areaPromocoes {
-  width: 100%;
-  max-width: 1280px;
-
-  margin: 3rem auto 4rem;
-
-  text-align: left;
-  scroll-margin-top: 9rem;
-}
-
-.topoPromocoes {
-  margin-bottom: 1.5rem;
-
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-
-  gap: 2rem;
-}
-
-.topoPromocoes span {
-  color: var(--cor-principal-texto);
-  font-size: 1.1rem;
-  font-weight: 800;
-  letter-spacing: 0.05rem;
-}
-
-.topoPromocoes h3 {
-  margin: 0.3rem 0 0;
-
-  color: var(--cor-texto);
-  font-size: 2.8rem;
-  font-weight: 800;
-}
-
-.verTodasPromocoes {
-  margin-bottom: 0.25rem;
-
-  color: var(--cor-principal-texto);
-
-  font-size: 1.25rem;
-  font-weight: 700;
-
-  text-decoration: none;
-
-  transition:
-    color 0.2s ease,
-    transform 0.2s ease;
-}
-
-.verTodasPromocoes:hover {
-  color: var(--cor-texto);
-  transform: translateX(4px);
-}
-
-/* Cards */
-
-.carrosselPromocoes {
-  width: 100%;
-  padding-top: 0.6rem;
-  overflow: visible;
-}
-
-.listaPromocoes {
-  width: 100%;
-
-  display: flex;
-  gap: 1.5rem;
-
-  /* overflow-x rolavel forca overflow-y a recortar: o padding vertical
-     abre espaco para o hover levantar o card sem cortar a sombra */
-  padding: 0.6rem 0 1.4rem;
-
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.listaPromocoes::-webkit-scrollbar {
-  display: none;
-}
-
-.cardPromocao {
-  flex: 0 0 calc((100% - 1.5rem) / 2);
-  scroll-snap-align: start;
-
-  min-height: 200px;
-
-  display: grid;
-  grid-template-columns: 40% 60%;
-
-  background: linear-gradient(
-    135deg,
-    var(--cor-card-elevado),
-    var(--cor-card-profundo)
-  );
-
-  border: 1px solid rgb(from var(--cor-principal-texto) r g b / 0.45);
-  border-radius: 1.4rem;
-
-  overflow: hidden;
-
-  box-shadow: 0 12px 30px var(--sombra-cartao);
-
-  transition:
-    transform 0.25s ease,
-    border-color 0.25s ease,
-    box-shadow 0.25s ease;
-}
-
-.cardPromocao:hover {
-  transform: translateY(-5px);
-
-  border-color: var(--cor-principal-texto);
-
-  box-shadow:
-    0 18px 40px var(--sombra-cartao-forte),
-    0 0 25px rgb(from var(--cor-principal-texto) r g b / 0.08);
-}
-
-.indicadoresPromocao {
-  margin-top: 1.5rem;
-
-  display: none;
-  align-items: center;
-  justify-content: center;
-
-  gap: 0.7rem;
-}
-
-
-.indicadoresPromocao button {
-  width: 0.7rem;
-  height: 0.7rem;
-
-  padding: 0;
-
-  background-color: color-mix(in srgb, var(--cor-texto) 21%, var(--cor-fundo));
-
-  border: none;
-  border-radius: 50%;
-
-  cursor: pointer;
-
-  transition:
-    width 0.2s ease,
-    background-color 0.2s ease;
-}
-
-
-.indicadoresPromocao
-.indicadorAtivo {
-  width: 2.2rem;
-
-  background-color: var(--cor-principal);
-
-  border-radius: 2rem;
-}
-
-/* Imagem */
-
-.imagemPromocao {
-  position: relative;
-
-  width: 100%;
-  height: 100%;
-
-  overflow: hidden;
-}
-
-.imagemPromocao img {
-  width: 100%;
-  height: 100%;
-
-  object-fit: cover;
-
-  display: block;
-
-  transition: transform 0.4s ease;
-}
-
-.cardPromocao:hover .imagemPromocao img {
-  transform: scale(1.06);
-}
-
-.seloPromocao {
-  position: absolute;
-
-  top: 1rem;
-  left: 1rem;
-
-  padding: 0.45rem 0.9rem;
-
-  color: var(--cor-sobre-principal);
-
-  font-size: 0.8rem;
-  font-weight: 800;
-
-  background-color: var(--cor-principal);
-
-  border-radius: 2rem;
-}
-
-
-/* Informações */
-
-.conteudoPromocao {
-  padding: 1.2rem 1.4rem;
-
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.tipoPromocao {
-  color: var(--cor-principal-texto);
-
-  font-size: 1rem;
-  font-weight: 800;
-
-  letter-spacing: 0.05rem;
-}
-
-.conteudoPromocao h4 {
-  margin: 0.4rem 0 0.7rem;
-
-  color: var(--cor-texto);
-
-  font-size: 2.2rem;
-  font-weight: 800;
-}
-
-.conteudoPromocao p {
-  margin: 0;
-
-  color: var(--cor-texto-suave);
-
-  font-size: 1.45rem;
-  font-weight: 500;
-
-  line-height: 1.45;
-}
-
-
-/* Preço */
-
-.precoPromocao {
-  margin-top: auto;
-
-  display: flex;
-  flex-direction: column;
-}
-
-.precoPromocao span {
-  color: var(--cor-texto-fraco);
-
-  font-size: 1.2rem;
-  font-weight: 600;
-
-  text-decoration: line-through;
-}
-
-.precoPromocao strong {
-  color: var(--cor-principal-texto);
-
-  font-size: 2rem;
-  font-weight: 800;
-
-  line-height: 1.1;
-}
-
-/* Botão */
-
-.conteudoPromocao button {
-  min-width: 15rem;
-  min-height: 3.8rem;
-
-  margin-top: 0.8rem;
-  padding: 0.7rem 1.6rem;
-
-  color: var(--cor-sobre-principal);
-
-  font-family: inherit;
-  font-size: 1.2rem;
-  font-weight: 800;
-
-  background-color: var(--cor-principal);
-
-  border: none;
-  border-radius: 2rem;
-
-  cursor: pointer;
-
-  transition:
-    transform 0.2s ease,
-    background-color 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.conteudoPromocao button:hover {
-  background-color: var(--cor-principal-clara);
-
-  transform: translateY(-2px);
-
-  box-shadow: 0 7px 18px rgb(from var(--cor-principal-texto) r g b / 0.18);
-}
-
-/* =========================
-   SETAS DAS PROMOÇÕES
-========================= */
-
-.controlesPromocao {
-  display: flex;
-  align-items: center;
-
-  gap: 0.8rem;
-}
-
-
-.setaPromocao {
-  width: 3.8rem;
-  height: 3.8rem;
-
-  padding: 0;
-
-  display: grid;
-  place-items: center;
-
-  color: var(--cor-principal-texto);
-
-  background-color: var(--cor-card);
-
-  border: 2px solid var(--cor-principal-texto);
-  border-radius: 50%;
-
-  cursor: pointer;
-
-  transition:
-    color 0.2s ease,
-    background-color 0.2s ease,
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-
-.setaPromocao svg {
-  width: 1.6rem;
-  height: 1.6rem;
-
-  display: block;
-}
-
-
-.setaPromocao:hover {
-  color: var(--cor-sobre-principal);
-
-  background-color: var(--cor-principal);
-
-  transform: scale(1.08);
-
-  box-shadow:
-    0 6px 18px
-    rgb(from var(--cor-principal-texto) r g b / 0.18);
-}
 /* =========================
    CARDÁPIO
 ========================= */
@@ -1398,6 +1024,18 @@
   outline: 2px solid var(--cor-principal-texto);
   outline-offset: -2px;
   border-radius: 1.4rem;
+}
+
+/* Produto sem foto: o texto ocupa a largura e o "+" fica sozinho na coluna
+   da direita. Dois seletores para vencer a coluna fixa do celular. */
+.cardProduto.cardProdutoSemFoto {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.cardProdutoSemFoto > .indicadorAdicionar {
+  position: static;
+  grid-column: 2;
+  grid-row: 1;
 }
 
 /* =========================
@@ -2670,561 +2308,72 @@
 }
 
 /* =========================
-   SOBRE A LOJA / RODAPÉ
+   RODAPÉ
+   Faixa unica na cor principal da loja: direitos a esquerda e a
+   assinatura da plataforma a direita.
 ========================= */
 
-.sobreLoja {
+.rodapeLoja {
   width: 100%;
-
-  padding: 7rem clamp(2rem, 5vw, 6rem) 2rem;
-
-  color: var(--cor-texto);
-
-  background:
-    linear-gradient(
-      180deg,
-      var(--cor-fundo) 0%,
-      color-mix(in srgb, var(--cor-texto) 6%, var(--cor-fundo)) 100%
-    );
-
-  border-top: 1px solid
-    rgb(from var(--cor-principal-texto) r g b / 0.12);
-
-  scroll-margin-top: 7rem;
-}
-
-
-/* =========================
-   CONTEÚDO
-========================= */
-
-.conteudoSobre {
-  width: 100%;
-  /* mesma coluna da barra, da foto e da grade de produtos */
-  max-width: 1280px;
-
-  margin: 0 auto;
-
-  display: grid;
-  grid-template-columns:
-    1.7fr 1fr 1fr;
-
-  gap: 5rem;
-}
-
-
-/* =========================
-   APRESENTAÇÃO
-========================= */
-
-.apresentacaoLoja {
-  max-width: 450px;
-}
-
-
-.logoRodape {
-  display: inline-block;
-
-  margin-bottom: 2rem;
-
-  color: var(--cor-principal-texto);
-
-  font-size: 3rem;
-  font-weight: 800;
-
-  text-decoration: none;
-}
-
-
-.apresentacaoLoja h2 {
-  margin: 0;
-
-  color: var(--cor-texto);
-
-  font-size: 2.5rem;
-  font-weight: 800;
-
-  line-height: 1.15;
-}
-
-
-.apresentacaoLoja > p {
-  margin: 1.3rem 0 0;
-
-  color: var(--cor-texto-medio);
-
-  font-size: 1.2rem;
-  font-weight: 500;
-
-  line-height: 1.65;
-}
-
-
-/* =========================
-   REDES SOCIAIS
-========================= */
-
-.redesSociais {
-  margin-top: 3rem;
-}
-
-
-.redesSociais > span {
-  display: block;
-
-  margin-bottom: 1rem;
-
-  color: var(--cor-texto);
-
-  font-size: 1.05rem;
-  font-weight: 700;
-}
-
-
-.iconesSociais {
-  display: flex;
-
-  gap: 0.8rem;
-}
-
-
-.iconesSociais a {
-  width: 3.2rem;
-  height: 3.2rem;
-
-  display: grid;
-  place-items: center;
-
-  color: var(--cor-principal-texto);
-
-  background-color: var(--cor-card);
-
-  border: 1px solid
-    rgb(from var(--cor-principal-texto) r g b / 0.35);
-
-  border-radius: 50%;
-
-  transition:
-    color 0.2s ease,
-    background-color 0.2s ease,
-    transform 0.2s ease,
-    border-color 0.2s ease;
-}
-
-
-.iconesSociais a:hover {
-  color: var(--cor-sobre-principal);
-
-  background-color: var(--cor-principal);
-  border-color: var(--cor-principal-texto);
-
-  transform: translateY(-3px);
-}
-
-
-.iconesSociais svg {
-  width: 1.4rem;
-  height: 1.4rem;
-}
-
-
-/* =========================
-   COLUNAS
-========================= */
-
-.colunaSobre {
-  display: flex;
-  flex-direction: column;
-
-  align-items: flex-start;
-}
-
-
-.colunaSobre h3 {
-  position: relative;
-
-  margin: 0 0 1.8rem;
-
-  color: var(--cor-texto);
-
-  font-size: 1.5rem;
-  font-weight: 800;
-}
-
-
-.colunaSobre h3::after {
-  content: "";
-
-  position: absolute;
-
-  left: 0;
-  bottom: -0.6rem;
-
-  width: 2.5rem;
-  height: 0.2rem;
-
-  background-color: var(--cor-principal);
-
-  border-radius: 2rem;
-}
-
-
-/* =========================
-   HORÁRIOS
-========================= */
-
-.horario {
-  margin-bottom: 1.4rem;
-
-  display: flex;
-  flex-direction: column;
-
-  gap: 0.25rem;
-}
-
-
-.horario span,
-.contatoSobre span {
-  color: var(--cor-texto-fraco);
-
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-
-
-.horario strong,
-.contatoSobre strong {
-  color: var(--cor-texto-suave);
-
-  font-size: 1.05rem;
-  font-weight: 700;
-}
-
-
-/* =========================
-   CONTATO
-========================= */
-
-.contatoSobre {
-  margin-bottom: 1.4rem;
-
-  display: flex;
-  flex-direction: column;
-
-  gap: 0.3rem;
-}
-
-
-.botaoWhatsapp {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 13rem;
-  min-height: 3.4rem;
-
-  margin-top: 0.8rem;
-  padding: 0.7rem 1.4rem;
-
-  color: var(--cor-sobre-principal);
-
-  font-family: inherit;
-  font-size: 1rem;
-  font-weight: 800;
-
-  background-color: var(--cor-principal);
-
-  border: 2px solid var(--cor-principal-texto);
-  border-radius: 2rem;
-  text-decoration: none;
-
-  cursor: pointer;
-
-  transition:
-    background-color 0.2s ease,
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-
-.botaoWhatsapp:hover {
-  background-color: var(--cor-principal-clara);
-
-  transform: translateY(-3px);
-
-  box-shadow:
-    0 8px 22px rgb(from var(--cor-principal-texto) r g b / 0.14);
-}
-
-
-/* =========================
-   RODAPÉ INFERIOR
-========================= */
-
-.rodapeFinal {
-  width: 100%;
-  max-width: 1450px;
-
-  margin: 5rem auto 0;
-  padding-top: 2rem;
 
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.8rem 2rem;
 
-  gap: 2rem;
+  padding: 2rem clamp(2rem, 3vw, 3.2rem);
 
-  border-top: 1px solid
-    color-mix(in srgb, var(--cor-texto) 8%, transparent);
+  color: var(--cor-sobre-principal);
+  background-color: var(--cor-principal);
+
+  scroll-margin-top: 7rem;
 }
 
-
-.rodapeFinal p {
+.rodapeLoja p {
   margin: 0;
 
-  color: var(--cor-texto-fraco);
-
-  font-size: 0.95rem;
+  font-size: 1.3rem;
+  font-weight: 500;
 }
 
+.rodapeLoja strong {
+  font-weight: 800;
+}
 
-.rodapeFinal > div {
+.linksRodape {
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
 
-  gap: 0.8rem;
+  font-size: 1.3rem;
 }
 
-.rodapeFinal > .direitosRodape {
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-
-.informacoesLegais {
-  max-width: 75rem;
-  color: var(--cor-texto-fraco);
-  font-size: 0.9rem;
-  line-height: 1.5;
-  white-space: pre-line;
-}
-
-
-.rodapeFinal a {
-  color: var(--cor-texto-fraco);
-
-  font-size: 0.95rem;
-
+.linksRodape a {
+  color: inherit;
+  font-weight: 600;
   text-decoration: none;
-
-  transition: color 0.2s ease;
 }
 
-
-.rodapeFinal a:hover {
-  color: var(--cor-principal-texto);
+.linksRodape a:hover {
+  text-decoration: underline;
 }
 
-
-.rodapeFinal span {
-  color: color-mix(in srgb, var(--cor-texto) 21%, var(--cor-fundo));
+.linksRodape span {
+  opacity: 0.6;
 }
-
-
-/* =========================
-   RESPONSIVO
-========================= */
-
-@media (max-width: 1100px) {
-
-  .conteudoSobre {
-    grid-template-columns:
-      repeat(2, 1fr);
-
-    gap: 4rem;
-  }
-
-}
-
 
 @media (max-width: 700px) {
-
-  .sobreLoja {
-    padding:
-      5rem 1.5rem
-      1.5rem;
-  }
-
-
-  .conteudoSobre {
-    grid-template-columns: 1fr;
-
-    gap: 3rem;
-  }
-
-
-  .apresentacaoLoja {
-    max-width: 100%;
-  }
-
-
-  .apresentacaoLoja h2 {
-    font-size: 2rem;
-  }
-
-
-  .rodapeFinal {
-    margin-top: 3rem;
-
-    align-items: flex-start;
+  .rodapeLoja {
     flex-direction: column;
+    justify-content: center;
+
+    padding: 1.8rem 1.5rem;
+
+    text-align: center;
   }
-
-
-  .rodapeFinal > div {
-    flex-wrap: wrap;
-  }
-
-}
-
-/* =========================
-   FONTES MAIORES - SOBRE A LOJA
-========================= */
-
-/* Logo */
-.logoRodape {
-  font-size: 3.5rem;
-  font-weight: 800;
-}
-
-
-/* Título principal */
-.apresentacaoLoja h2 {
-  font-size: 3rem;
-  font-weight: 800;
-  line-height: 1.15;
-}
-
-
-/* Descrição da hamburgueria */
-.apresentacaoLoja > p {
-  max-width: 520px;
-
-  margin-top: 1.5rem;
-
-  font-size: 1.4rem;
-  font-weight: 500;
-  line-height: 1.6;
-}
-
-
-/* "Siga a gente" */
-.redesSociais > span {
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
-
-/* Ícones */
-.iconesSociais a {
-  width: 3.8rem;
-  height: 3.8rem;
-}
-
-.iconesSociais svg {
-  width: 1.7rem;
-  height: 1.7rem;
-}
-
-
-/* =========================
-   TÍTULOS DAS COLUNAS
-========================= */
-
-.colunaSobre h3 {
-  margin-bottom: 2rem;
-
-  font-size: 1.8rem;
-  font-weight: 800;
-}
-
-
-/* Linha amarela embaixo dos títulos */
-.colunaSobre h3::after {
-  width: 3rem;
-  height: 0.22rem;
-}
-
-
-/* =========================
-   NAVEGAÇÃO
-========================= */
-
-/* =========================
-   HORÁRIOS
-========================= */
-
-.horario {
-  margin-bottom: 1.6rem;
-}
-
-
-/* Segunda a Quinta etc */
-.horario span,
-.contatoSobre span {
-  font-size: 1.1rem;
-  font-weight: 500;
-}
-
-
-/* Horários */
-.horario strong,
-.contatoSobre strong {
-  font-size: 1.3rem;
-  font-weight: 700;
-}
-
-
-/* =========================
-   CONTATO
-========================= */
-
-.contatoSobre {
-  margin-bottom: 1.6rem;
-}
-
-
-/* Botão WhatsApp */
-.botaoWhatsapp {
-  min-width: 16rem;
-  min-height: 4rem;
-
-  margin-top: 1rem;
-
-  padding: 0.8rem 1.6rem;
-
-  font-size: 1.2rem;
-  font-weight: 800;
-
-  border-radius: 2.5rem;
-}
-
-
-/* =========================
-   PARTE INFERIOR
-========================= */
-
-.rodapeFinal p {
-  font-size: 1.05rem;
-  font-weight: 500;
-}
-
-.rodapeFinal a {
-  font-size: 1.05rem;
-  font-weight: 500;
-}
-
-.rodapeFinal span {
-  font-size: 1rem;
 }
 
 /* =========================
@@ -3232,10 +2381,12 @@
 ========================= */
 
 @media (max-width: 1000px) {
-  /* Cabecalho fica so com logo e carrinho: a navegacao por ancoras
-     continua disponivel no rodape e pelo proprio scroll da pagina. */
   .menu {
-    display: none;
+    gap: 1.6rem;
+  }
+
+  .menu button {
+    padding: 0 1.1rem;
   }
 }
 
@@ -3368,85 +2519,10 @@
 
 }
 
-.horario strong { white-space: pre-line; line-height: 1.6; }
-
 @media (max-width: 700px) {
   .cardapio {
     min-height: auto;
     padding: 4rem 1.5rem 6rem;
-  }
-
-  .topoPromocoes {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  /* No mobile a interacao e o swipe: as setas saem e os pontos entram. */
-  .controlesPromocao {
-    display: none;
-  }
-
-  .listaPromocoes {
-    --sangria-promocoes: 1.5rem;
-
-    margin-inline: calc(var(--sangria-promocoes) * -1);
-    padding-inline: var(--sangria-promocoes);
-    scroll-padding-inline: var(--sangria-promocoes);
-
-    gap: 1.2rem;
-    scroll-snap-type: x mandatory;
-  }
-
-  /* card nao ocupa a largura toda: o pedaco do proximo indica o swipe */
-  .cardPromocao {
-    flex: 0 0 86%;
-  }
-
-  .indicadoresPromocao {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0;
-  }
-
-  .indicadoresPromocao button,
-  .indicadoresPromocao button.indicadorAtivo {
-    width: 4.4rem;
-    height: 4.4rem;
-
-    display: grid;
-    place-items: center;
-
-    background: transparent;
-  }
-
-  /* o alvo de toque tem 4.4rem; o ponto visivel e o ::before */
-  .indicadoresPromocao button::before {
-    width: 0.7rem;
-    height: 0.7rem;
-
-    display: block;
-
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--cor-texto) 24%, var(--cor-fundo));
-    content: '';
-
-    transition:
-      width 0.2s ease,
-      background-color 0.2s ease;
-  }
-
-  .indicadoresPromocao button.indicadorAtivo::before {
-    width: 2.2rem;
-    background: var(--cor-principal);
-  }
-
-  .cardPromocao {
-    grid-template-columns: 1fr;
-  }
-
-  .imagemPromocao {
-    min-height: 18rem;
   }
 
   .pagina button {
@@ -3460,38 +2536,250 @@
     min-height: 3.2rem;
   }
   .botaoCarrinho,
-  .topoPromocoes span,
-  .tipoPromocao,
   .seloProduto,
   .subtituloCarrinho,
-  .continuarComprando,
-  .horario span,
-  .contatoSobre span,
-  .rodapeFinal p,
-  .rodapeFinal a {
+  .continuarComprando {
     font-size: 1.4rem;
   }
 
-  .numeroCarrinho,
-  .seloPromocao {
+  .numeroCarrinho {
     font-size: 1.2rem;
-  }
-
-  .horario strong,
-  .contatoSobre strong {
-    font-size: 1.5rem;
   }
 }
 
-/* Abaixo de 900px o card de promocao domina a area visivel: um por vez,
-   com um pedaco do proximo aparecendo. */
-@media (max-width: 900px) {
-  .listaPromocoes {
-    scroll-snap-type: x mandatory;
+/* =========================
+   PAINEL DO MENU (promoções e pedidos)
+   Cabecalho claro com titulo e botao de fechar, corpo cinza com uma grade
+   de cartoes simples.
+========================= */
+
+.overlayPainel {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+
+  padding: 2rem;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background-color: rgba(0, 0, 0, 0.55);
+}
+
+.painelMenu {
+  width: 100%;
+  max-width: 128rem;
+  max-height: calc(100vh - 4rem);
+
+  display: flex;
+  flex-direction: column;
+
+  overflow: hidden;
+
+  color: var(--cor-texto);
+  background-color: var(--cor-fundo);
+
+  border-radius: 1.4rem;
+  box-shadow: 0 24px 60px var(--sombra-flutuante);
+}
+
+.topoPainel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+
+  padding: 1.6rem 2rem;
+
+  background-color: var(--cor-card);
+  border-bottom: 1px solid color-mix(in srgb, var(--cor-texto) 10%, transparent);
+}
+
+.topoPainel h2 {
+  margin: 0;
+
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.fecharPainel {
+  width: 3.6rem;
+  height: 3.6rem;
+  flex: 0 0 auto;
+  padding: 0;
+
+  display: grid;
+  place-items: center;
+
+  color: var(--cor-texto-medio);
+  background-color: color-mix(in srgb, var(--cor-texto) 9%, var(--cor-card));
+
+  border: 0;
+  border-radius: 50%;
+
+  cursor: pointer;
+
+  transition: background-color 0.2s ease;
+}
+
+.fecharPainel:hover {
+  background-color: color-mix(in srgb, var(--cor-texto) 16%, var(--cor-card));
+}
+
+.fecharPainel svg {
+  width: 1.9rem;
+  height: 1.9rem;
+}
+
+.corpoPainel {
+  padding: 2rem;
+
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 34rem), 1fr));
+  align-content: start;
+  gap: 1.6rem;
+
+  overflow-y: auto;
+}
+
+.cartaoPainel {
+  min-height: 11rem;
+  padding: 1.6rem;
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.6rem;
+
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+
+  background-color: var(--cor-card);
+  border: 1px solid color-mix(in srgb, var(--cor-texto) 12%, transparent);
+  border-radius: 1rem;
+
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+button.cartaoPainel {
+  cursor: pointer;
+}
+
+button.cartaoPainel:hover {
+  border-color: var(--cor-principal);
+  box-shadow: 0 4px 14px var(--sombra-cartao);
+}
+
+.nomeCartaoPainel {
+  color: var(--cor-texto);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.precosPainel {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+}
+
+/* Cartao de promocao: foto a esquerda quando existir; sem foto, so o texto
+   ocupa o cartao, com nome no alto e precos embaixo. */
+.cartaoPromocaoPainel {
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.fotoCartaoPainel {
+  width: 8rem;
+  height: 8rem;
+  flex: 0 0 auto;
+  align-self: center;
+
+  display: block;
+
+  object-fit: cover;
+
+  border-radius: 0.8rem;
+}
+
+.textosCartaoPainel {
+  flex: 1 1 auto;
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.6rem;
+}
+
+.precoAtualPainel {
+  color: var(--cor-ok-texto);
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.precoAntigoPainel {
+  color: var(--cor-texto-fraco);
+  font-size: 1.3rem;
+  text-decoration: line-through;
+}
+
+.descontoPainel,
+.statusPainel {
+  padding: 0.3rem 0.8rem;
+
+  color: var(--cor-ok-texto);
+  font-size: 1.15rem;
+  font-weight: 700;
+
+  background-color: color-mix(in srgb, var(--cor-ok) 14%, var(--cor-card));
+  border-radius: 0.5rem;
+}
+
+.acompanharPedido {
+  height: 4rem;
+  padding: 0 1.8rem;
+
+  color: var(--cor-sobre-principal);
+  font-family: inherit;
+  font-size: 1.3rem;
+  font-weight: 700;
+
+  background-color: var(--cor-principal);
+  border: 0;
+  border-radius: 2rem;
+
+  cursor: pointer;
+}
+
+.acompanharPedido:hover {
+  background-color: var(--cor-principal-clara);
+}
+
+/* No celular o painel sobe da base da tela. */
+@media (max-width: 650px) {
+  .overlayPainel {
+    padding: 0;
+    align-items: flex-end;
   }
 
-  .cardPromocao {
-    flex: 0 0 86%;
+  .painelMenu {
+    max-height: 85vh;
+    margin-top: 0;
+
+    border-radius: 1.6rem 1.6rem 0 0;
+  }
+
+  .topoPainel,
+  .corpoPainel {
+    padding-inline: 1.5rem;
   }
 }
 
@@ -3747,58 +3035,6 @@
     font-size: 1.4rem;
   }
 
-  /* Sem promocao cadastrada a secao inteira sai: um bloco vazio no meio
-     do cardapio parece defeito. No desktop o aviso continua. */
-  .areaPromocoes:has(.semResultados) {
-    display: none;
-  }
-
-  .topoPromocoes h3 {
-    font-size: 2rem;
-  }
-
-  /* Destaque compacto: a foto encolhe e a descricao fica em duas linhas,
-     entao foto, preco e acao cabem juntos sem empurrar o cardapio. */
-  .cardPromocao {
-    flex: 0 0 78%;
-    min-height: 0;
-  }
-
-  .imagemPromocao {
-    min-height: 12rem;
-  }
-
-  .conteudoPromocao {
-    padding: 1.2rem;
-  }
-
-  .conteudoPromocao h4 {
-    margin: 0.3rem 0 0.5rem;
-    font-size: 1.8rem;
-  }
-
-  .conteudoPromocao p {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden;
-
-    font-size: 1.3rem;
-  }
-
-  .precoPromocao {
-    margin-top: 1rem;
-
-    flex-direction: row;
-    align-items: baseline;
-    gap: 0.7rem;
-  }
-
-  .conteudoPromocao button {
-    width: 100%;
-    min-width: 0;
-  }
-
   /* Sangra ate a borda da tela e o botao ocupa a largura toda: em tela
      estreita o alvo de toque vale mais que a economia de largura. */
   .seletorCategorias {
@@ -3927,3 +3163,38 @@
   }
 }
 
+
+/* Celular estreito: o menu empilha icone e texto para caber ao lado da
+   logo, e o carrinho fica so com o icone e o contador. */
+@media (max-width: 480px) {
+  .menu {
+    gap: 0;
+  }
+
+  .menu button {
+    height: 4.4rem;
+    padding: 0 0.8rem;
+
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.2rem;
+
+    font-size: 1.1rem;
+  }
+
+  .menu button svg {
+    width: 1.8rem;
+    height: 1.8rem;
+  }
+
+  .textoCarrinho {
+    display: none;
+  }
+
+  .botaoCarrinho {
+    width: 4rem;
+    min-width: 4rem;
+    padding: 0;
+    gap: 0;
+  }
+}

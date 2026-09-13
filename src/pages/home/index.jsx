@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { BadgePercent, ShoppingBag, X } from 'lucide-react';
 
 import banner from '../../assets/banner.webp';
 import LogoEstabelecimento from '../../components/LogoEstabelecimento';
 import { useApp } from '../../context/appContext';
 import { algumDiaAberto, DIAS_SEMANA, ORDEM_EXIBICAO } from '../../utils/horarios';
-import { usarPlaceholderProduto } from '../../utils/productImage';
+import { imagemProdutoPadrao, usarPlaceholderProduto } from '../../utils/productImage';
 import styles from './index.module.css';
 
+/* Assinatura exibida no rodapé público de todas as lojas. */
+const NOME_PLATAFORMA = 'Cardápio Online';
 
 /* Achata o texto para comparar: sem acento, sem caixa e sem separador
    nenhum. Com isso "X-Salada", "x salada" e "xsalada" viram a mesma
@@ -20,14 +23,29 @@ function achatar(texto) {
     .replace(/[^a-z0-9]+/g, '');
 }
 
+/* Os precos chegam formatados ("49,90"); para calcular o desconto exibido
+   eles voltam a ser numero. So exibicao: o valor cobrado sai do backend. */
+function paraNumero(valor) {
+  if (typeof valor === 'number') return valor;
+  return Number(String(valor ?? '').replace(/\./g, '').replace(',', '.'));
+}
+
+function percentualDesconto(promocao) {
+  const antigo = paraNumero(promocao.precoAntigo);
+  const atual = paraNumero(promocao.preco);
+  if (!(antigo > 0) || !(atual >= 0) || atual >= antigo) return 0;
+  return Math.round((1 - atual / antigo) * 100);
+}
+
 function Home() {
   const [rolouPagina, setRolouPagina] = useState(false);
   const [categoriaAtiva, setCategoriaAtiva] = useState('Todos');
   const [busca, setBusca] = useState('');
-  const [secaoAtiva, setSecaoAtiva] = useState('inicio');
+  /* painel aberto pelo menu do topo: 'promocoes', 'pedidos' ou null */
+  const [painelMenu, setPainelMenu] = useState(null);
   const [bannerComErro, setBannerComErro] = useState('');
-
-  const [indicePromocao, setIndicePromocao] = useState(0);
+  /* fotos que falharam ao carregar: o cartao passa a ser exibido sem foto */
+  const [fotosComErro, setFotosComErro] = useState(() => new Set());
 
   const [horariosAbertos, setHorariosAbertos] = useState(false);
   const horariosRef = useRef(null);
@@ -42,7 +60,8 @@ function Home() {
   const fecharModalRef = useRef(null);
   const carrinhoRef = useRef(null);
   const fecharCarrinhoRef = useRef(null);
-  const trilhoPromocoesRef = useRef(null);
+  const painelMenuRef = useRef(null);
+  const fecharPainelRef = useRef(null);
 
   const [observacao, setObservacao] = useState('');
   const [quantidadeModal, setQuantidadeModal] = useState(1);
@@ -59,7 +78,8 @@ function Home() {
     erroApi,
     recarregarCatalogo,
     revalidarCarrinho,
-    avisosCarrinho
+    avisosCarrinho,
+    pedidoAtual
   } = useApp();
 
   const [adicionaisSelecionados, setAdicionaisSelecionados] =
@@ -69,74 +89,6 @@ function Home() {
 
   const produtos = produtosSalvos.filter((produto) => produto.ativo !== false);
   const promocoes = promocoesSalvas.filter((promocao) => promocao.disponivel !== false);
-
-  function cartoesDoTrilho() {
-    const trilho = trilhoPromocoesRef.current;
-    if (!trilho) return [];
-    return [...trilho.children].filter((filho) => filho.tagName === 'ARTICLE');
-  }
-
-  /* O indicador acompanha a rolagem: cartao cuja posicao esta mais
-     proxima do inicio da area visivel. */
-  function aoRolarPromocoes() {
-    const cartoes = cartoesDoTrilho();
-    if (cartoes.length === 0) return;
-
-    const inicio = cartoes[0].offsetLeft;
-    const rolagem = trilhoPromocoesRef.current.scrollLeft;
-
-    let maisProximo = 0;
-    let menorDistancia = Infinity;
-
-    cartoes.forEach((cartao, indice) => {
-      const distancia = Math.abs(cartao.offsetLeft - inicio - rolagem);
-      if (distancia < menorDistancia) {
-        menorDistancia = distancia;
-        maisProximo = indice;
-      }
-    });
-
-    setIndicePromocao(maisProximo);
-  }
-
-  function irParaPromocao(indice) {
-    const cartoes = cartoesDoTrilho();
-    const alvo = cartoes[indice];
-    if (!alvo) return;
-
-    trilhoPromocoesRef.current.scrollTo({
-      left: alvo.offsetLeft - cartoes[0].offsetLeft,
-      behavior: 'smooth'
-    });
-  }
-
-  /* As setas andam um cartao por vez e continuam dando a volta no fim,
-     como antes — agora movendo a rolagem em vez de trocar a janela. */
-  function rolarPromocoes(direcao) {
-    const trilho = trilhoPromocoesRef.current;
-    const cartoes = cartoesDoTrilho();
-    if (!trilho || cartoes.length < 2) return;
-
-    const passo = cartoes[1].offsetLeft - cartoes[0].offsetLeft;
-    const limite = trilho.scrollWidth - trilho.clientWidth;
-    let destino = trilho.scrollLeft + direcao * passo;
-
-    if (destino > limite + 1) destino = 0;
-    else if (destino < -1) destino = limite;
-
-    trilho.scrollTo({
-      left: Math.max(0, Math.min(destino, limite)),
-      behavior: 'smooth'
-    });
-  }
-
-  function proximaPromocao() {
-    rolarPromocoes(1);
-  }
-
-  function promocaoAnterior() {
-    rolarPromocoes(-1);
-  }
 
   const adicionais = adicionaisSalvos;
 
@@ -175,6 +127,27 @@ function Home() {
 
   function fecharCarrinho() {
     setCarrinhoAberto(false);
+  }
+
+  function fecharPainelMenu() {
+    setPainelMenu(null);
+  }
+
+  /* Sem foto cadastrada o catalogo entrega a imagem padrao; nos cartoes do
+     cardapio e das promocoes ela nao aparece, e o cartao fica so com texto. */
+  function fotoValida(imagem) {
+    return Boolean(imagem) && imagem !== imagemProdutoPadrao && !fotosComErro.has(imagem);
+  }
+
+  function marcarFotoComErro(imagem) {
+    setFotosComErro((anteriores) => new Set(anteriores).add(imagem));
+  }
+
+  /* A promocao escolhida no painel segue o mesmo caminho do cardapio: abre
+     o modal de personalizacao e dali vai para o carrinho. */
+  function escolherPromocao(promocao) {
+    setPainelMenu(null);
+    abrirModalProduto(promocao);
   }
 
   function abrirModalProduto(produto) {
@@ -272,14 +245,6 @@ function Home() {
   const nomeExibicao = configuracao.nomeLoja || 'Cardápio online';
   const tituloCardapio = configuracao.tituloCardapio?.trim() || 'Nosso cardápio';
   const textoApresentacao = configuracao.textoApresentacao?.trim() || 'Escolha o seu hambúrguer favorito.';
-  const tituloSobre = configuracao.tituloSobre?.trim() || '';
-  const textoSobre = configuracao.textoSobre?.trim()
-    || 'Trabalhamos com ingredientes selecionados, hambúrguer artesanal preparado na hora e muito sabor em cada pedido.';
-  const mensagemRodape = configuracao.mensagemRodape?.trim() || '';
-  const digitosWhatsapp = String(configuracao.whatsapp ?? '').replace(/\D/g, '');
-  const whatsappUrl = digitosWhatsapp.length >= 10
-    ? `https://wa.me/${digitosWhatsapp.length <= 11 ? `55${digitosWhatsapp}` : digitosWhatsapp}`
-    : '';
   const bannerConfigurado = configuracao.banner && configuracao.banner !== bannerComErro
     ? configuracao.banner
     : banner;
@@ -361,13 +326,17 @@ function Home() {
   }, []);
 
   useEffect(() => {
-    if (!modalProdutoAberto && !carrinhoAberto) return undefined;
+    if (!modalProdutoAberto && !carrinhoAberto && !painelMenu) return undefined;
 
     const focoAnterior = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
-    const container = modalProdutoAberto ? modalProdutoRef.current : carrinhoRef.current;
-    const alvoInicial = modalProdutoAberto ? fecharModalRef.current : fecharCarrinhoRef.current;
+    const container = modalProdutoAberto
+      ? modalProdutoRef.current
+      : painelMenu ? painelMenuRef.current : carrinhoRef.current;
+    const alvoInicial = modalProdutoAberto
+      ? fecharModalRef.current
+      : painelMenu ? fecharPainelRef.current : fecharCarrinhoRef.current;
     const overflowAnterior = document.body.style.overflow;
     const animacao = window.requestAnimationFrame(() => alvoInicial?.focus());
 
@@ -380,6 +349,8 @@ function Home() {
         setObservacao('');
         setQuantidadeModal(1);
         setAdicionaisSelecionados([]);
+      } else if (painelMenu) {
+        setPainelMenu(null);
       } else {
         setCarrinhoAberto(false);
       }
@@ -417,133 +388,7 @@ function Home() {
       document.body.style.overflow = overflowAnterior;
       focoAnterior?.focus();
     };
-  }, [carrinhoAberto, modalProdutoAberto]);
-
-  useEffect(() => {
-    function verificarSecaoAtual() {
-      const cardapio = document.getElementById('cardapio');
-      const promocoes = document.getElementById('promocoes');
-      const sobre = document.getElementById('sobre');
-
-      const linhaMenu = 200;
-
-      const elementoScroll =
-        document.scrollingElement || document.documentElement;
-
-      const scrollAtual = elementoScroll.scrollTop;
-      const alturaPagina = elementoScroll.scrollHeight;
-      const alturaTela = window.innerHeight;
-
-      const chegouNoFinal =
-        scrollAtual + alturaTela >= alturaPagina - 20;
-
-      /*
-        SOBRE
-        Ativa quando:
-        1. chegou no final da página
-        OU
-        2. o Sobre já entrou bastante na tela
-      */
-      if (sobre) {
-        const posicaoSobre =
-          sobre.getBoundingClientRect();
-
-        if (
-          chegouNoFinal ||
-          (
-            posicaoSobre.top <= alturaTela * 0.75 &&
-            posicaoSobre.bottom > linhaMenu
-          )
-        ) {
-          setSecaoAtiva('sobre');
-          return;
-        }
-      }
-
-      /*
-        PROMOÇÕES
-      */
-      if (promocoes) {
-        const posicaoPromocoes =
-          promocoes.getBoundingClientRect();
-
-        if (
-          posicaoPromocoes.top <= linhaMenu &&
-          posicaoPromocoes.bottom > linhaMenu
-        ) {
-          setSecaoAtiva('promocoes');
-          return;
-        }
-      }
-
-      /*
-        CARDÁPIO
-      */
-      if (cardapio) {
-        const posicaoCardapio =
-          cardapio.getBoundingClientRect();
-
-        if (
-          posicaoCardapio.top <= linhaMenu &&
-          posicaoCardapio.bottom > linhaMenu
-        ) {
-          setSecaoAtiva('cardapio');
-          return;
-        }
-      }
-
-      /*
-        INÍCIO
-      */
-      setSecaoAtiva('inicio');
-    }
-
-
-    // Scroll normal da página
-    window.addEventListener(
-      'scroll',
-      verificarSecaoAtual,
-      { passive: true }
-    );
-
-    /*
-      Também detecta scroll caso algum elemento
-      esteja sendo responsável pela rolagem.
-    */
-    document.addEventListener(
-      'scroll',
-      verificarSecaoAtual,
-      true
-    );
-
-    window.addEventListener(
-      'resize',
-      verificarSecaoAtual
-    );
-
-
-    // Verifica assim que a página carregar
-    verificarSecaoAtual();
-
-
-    return () => {
-      window.removeEventListener(
-        'scroll',
-        verificarSecaoAtual
-      );
-
-      document.removeEventListener(
-        'scroll',
-        verificarSecaoAtual,
-        true
-      );
-
-      window.removeEventListener(
-        'resize',
-        verificarSecaoAtual
-      );
-    };
-  }, []);
+  }, [carrinhoAberto, modalProdutoAberto, painelMenu]);
 
   const precoProdutoSelecionado = produtoSelecionado
     ? Number(produtoSelecionado.preco.replace(',', '.'))
@@ -612,81 +457,25 @@ function Home() {
             className={styles.menu}
             aria-label="Navegação principal"
           >
-            <a
-              href="#inicio"
-              className={
-                secaoAtiva === 'inicio'
-                  ? styles.linkAtivo
-                  : ''
-              }
-              onClick={(e) => {
-                e.preventDefault();
-                irParaSecao('inicio');
-              }}
+            <button
+              type="button"
+              onClick={() => setPainelMenu('promocoes')}
+              aria-haspopup="dialog"
+              aria-expanded={painelMenu === 'promocoes'}
             >
-              Início
-            </a>
+              <BadgePercent aria-hidden="true" strokeWidth={1.8} />
+              <span className={styles.textoMenu}>Promoções</span>
+            </button>
 
-            <a
-              href="#cardapio"
-              className={
-                secaoAtiva === 'cardapio'
-                  ? styles.linkAtivo
-                  : ''
-              }
-              onClick={(e) => {
-                e.preventDefault();
-                irParaSecao('cardapio');
-              }}
+            <button
+              type="button"
+              onClick={() => setPainelMenu('pedidos')}
+              aria-haspopup="dialog"
+              aria-expanded={painelMenu === 'pedidos'}
             >
-              Cardápio
-            </a>
-
-            <a
-              href="#promocoes"
-              className={
-                secaoAtiva === 'promocoes'
-                  ? styles.linkAtivo
-                  : ''
-              }
-              onClick={(e) => {
-                e.preventDefault();
-                irParaSecao('promocoes');
-              }}
-            >
-              Promoções
-            </a>
-
-           <a
-              href="#sobre"
-              className={
-                secaoAtiva === 'sobre'
-                  ? styles.linkAtivo
-                  : ''
-              }
-              onClick={(e) => {
-                e.preventDefault();
-                irParaSecao('sobre');
-              }}
-            >
-              Sobre
-            </a>
-
-            <a
-              href="#sobre"
-              className={
-                secaoAtiva === 'sobre'
-                  ? styles.linkAtivo
-                  : ''
-              }
-              onClick={(e) => {
-                e.preventDefault();
-                irParaSecao('sobre');
-              }}
-            >
-              Contato
-            </a>
-
+              <ShoppingBag aria-hidden="true" strokeWidth={1.8} />
+              <span className={styles.textoMenu}>Pedidos</span>
+            </button>
           </nav>
 
           <button
@@ -877,185 +666,6 @@ function Home() {
 
         <p>{textoApresentacao}</p>
 
-        {/* PROMOÇÕES */}
-        <div
-          id="promocoes"
-          className={styles.areaPromocoes}
-        >
-
-          <div className={styles.topoPromocoes}>
-
-            <div>
-              <span>
-                🔥 OFERTAS ESPECIAIS
-              </span>
-
-              <h3>
-                Promoções do dia
-              </h3>
-            </div>
-
-
-            <div className={styles.controlesPromocao}>
-
-              <button
-                type="button"
-                className={styles.setaPromocao}
-                onClick={promocaoAnterior}
-                aria-label="Promoção anterior"
-              >
-                <svg viewBox="0 0 24 24">
-                  <path
-                    d="M15 5L8 12L15 19"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-
-
-              <button
-                type="button"
-                className={styles.setaPromocao}
-                onClick={proximaPromocao}
-                aria-label="Próxima promoção"
-              >
-                <svg viewBox="0 0 24 24">
-                  <path
-                    d="M9 5L16 12L9 19"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-
-            </div>
-
-          </div>
-
-
-          <div className={styles.carrosselPromocoes}>
-
-            <div
-              className={styles.listaPromocoes}
-              ref={trilhoPromocoesRef}
-              onScroll={aoRolarPromocoes}
-              role="group"
-              aria-label="Promoções do dia"
-            >
-
-              {promocoes.map((promocao) => (
-
-                <article
-                  key={promocao.id}
-                  className={styles.cardPromocao}
-                >
-
-                  <div className={styles.imagemPromocao}>
-
-                    <img
-                      src={promocao.imagem}
-                      alt={promocao.nome}
-                      onError={usarPlaceholderProduto}
-                      loading="lazy"
-                      decoding="async"
-                    />
-
-
-                    <span className={styles.seloPromocao}>
-                      {promocao.destaque}
-                    </span>
-
-                  </div>
-
-
-                  <div className={styles.conteudoPromocao}>
-
-                    <span className={styles.tipoPromocao}>
-                      {promocao.tipo}
-                    </span>
-
-
-                    <h4>
-                      {promocao.nome}
-                    </h4>
-
-
-                    <p>
-                      {promocao.descricao}
-                    </p>
-
-
-                    <div className={styles.precoPromocao}>
-
-                      <span>
-                        De R$ {promocao.precoAntigo}
-                      </span>
-
-                      <strong>
-                        R$ {promocao.preco}
-                      </strong>
-
-                    </div>
-
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        abrirModalProduto(promocao)
-                      }
-                    >
-                      Aproveitar oferta
-                    </button>
-
-                  </div>
-
-                </article>
-
-              ))}
-
-              {promocoes.length === 0 && (
-                <p className={styles.semResultados}>Nenhuma promoção disponível no momento.</p>
-              )}
-
-            </div>
-
-          </div>
-
-
-          {/* INDICADOR */}
-
-          {promocoes.length > 0 && <div className={styles.indicadoresPromocao}>
-
-            {promocoes.map((promocao, indice) => (
-
-              <button
-                key={promocao.id}
-                type="button"
-                aria-label={`Ir para promoção ${indice + 1}`}
-                onClick={() =>
-                  irParaPromocao(indice)
-                }
-                className={
-                  indicePromocao === indice
-                    ? styles.indicadorAtivo
-                    : ''
-                }
-                aria-current={indicePromocao === indice ? 'true' : undefined}
-              />
-
-            ))}
-
-          </div>}
-
-        </div>
-
         {/* A fila de chips exigia arrastar de lado para achar uma categoria e,
             com muitas categorias, escondia a maior parte delas. No lugar dela,
             um botao unico que abre a lista inteira. */}
@@ -1113,23 +723,28 @@ function Home() {
             <div className={styles.listaProdutos}>
               {grupo.itens.map((produto) => (
             <article
-              className={styles.cardProduto}
+              className={`${styles.cardProduto} ${fotoValida(produto.imagem) ? '' : styles.cardProdutoSemFoto}`}
               key={produto.id}
             >
-              <div className={styles.areaImagemProduto}>
-                <img
-                  src={produto.imagem}
-                  alt={produto.nome}
-                  onError={usarPlaceholderProduto}
-                  className={styles.imagemProduto}
-                  loading="lazy"
-                  decoding="async"
-                />
+              {/* A linha inteira e o alvo de toque; o "+" e apenas o indicativo
+                  visual de que da para adicionar. Sem foto, ele ocupa sozinho
+                  o lugar da miniatura. */}
+              {fotoValida(produto.imagem) ? (
+                <div className={styles.areaImagemProduto}>
+                  <img
+                    src={produto.imagem}
+                    alt={produto.nome}
+                    onError={() => marcarFotoComErro(produto.imagem)}
+                    className={styles.imagemProduto}
+                    loading="lazy"
+                    decoding="async"
+                  />
 
-                {/* No mobile a linha inteira e o alvo de toque; este "+"
-                    e apenas o indicativo visual de que da para adicionar. */}
+                  <span className={styles.indicadorAdicionar} aria-hidden="true">+</span>
+                </div>
+              ) : (
                 <span className={styles.indicadorAdicionar} aria-hidden="true">+</span>
-              </div>
+              )}
 
               <div className={styles.informacoesProduto}>
                 {produto.destaque && (
@@ -1184,175 +799,132 @@ function Home() {
       </section>
       </main>
 
-      {/* =========================
-          SOBRE A LOJA
-      ========================= */}
-
+      {/* Rodapé enxuto: uma faixa na cor principal da loja com os direitos
+          de um lado e a assinatura da plataforma do outro. */}
       <footer
         id="sobre"
-        className={styles.sobreLoja}
+        className={styles.rodapeLoja}
       >
-        <div className={styles.conteudoSobre}>
+        <p>{nomeExibicao} - {new Date().getFullYear()}. Todos os direitos reservados</p>
 
-          {/* PARTE PRINCIPAL */}
-
-          <div className={styles.apresentacaoLoja}>
-            <Link
-              to="/"
-              className={styles.logoRodape}
-            >
-              <LogoEstabelecimento configuracao={configuracao} alternativa={nomeExibicao} loading="lazy" />
-            </Link>
-
-            {/* Sem chamada padrão: o título só aparece se o estabelecimento
-                escrever um no painel. */}
-            {tituloSobre && <h2>{tituloSobre}</h2>}
-
-            <p>
-              {textoSobre}
-            </p>
-
-            {(configuracao.instagramUrl || configuracao.facebookUrl || whatsappUrl) && <div className={styles.redesSociais}>
-              <span>Siga a gente</span>
-
-              <div className={styles.iconesSociais}>
-
-                {configuracao.instagramUrl && <a
-                  href={configuracao.instagramUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="Instagram"
-                >
-                  <svg viewBox="0 0 24 24">
-                    <rect
-                      x="3"
-                      y="3"
-                      width="18"
-                      height="18"
-                      rx="5"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    />
-
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="4"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    />
-
-                    <circle
-                      cx="17.5"
-                      cy="6.5"
-                      r="1"
-                      fill="currentColor"
-                    />
-                  </svg>
-                </a>}
-
-                {configuracao.facebookUrl && <a
-                  href={configuracao.facebookUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="Facebook"
-                >
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      d="M14 8h3V4h-3c-3 0-5 2-5 5v3H6v4h3v5h4v-5h3l1-4h-4V9c0-.7.3-1 1-1Z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                </a>}
-
-                {whatsappUrl && <a
-                  href={whatsappUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="WhatsApp"
-                >
-                  <svg viewBox="0 0 24 24">
-                    <path
-                      d="M20 11.5A8 8 0 0 1 8.2 18.6L4 20l1.4-4.1A8 8 0 1 1 20 11.5Z"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </a>}
-
-              </div>
-            </div>}
-          </div>
-
-
-          {/* FUNCIONAMENTO */}
-
-          <div className={styles.colunaSobre}>
-            <h3>Funcionamento</h3>
-
-            <div className={styles.horario}>
-              <strong>{configuracao.horarioFuncionamento || 'Horário ainda não configurado.'}</strong>
-            </div>
-          </div>
-
-
-          {/* CONTATO */}
-
-          <div className={styles.colunaSobre}>
-            <h3>Fale com a gente</h3>
-
-            <div className={styles.contatoSobre}>
-              <span>Telefone</span>
-              <strong>{configuracao.telefone || 'Não informado'}</strong>
-            </div>
-
-            <div className={styles.contatoSobre}>
-              <span>E-mail</span>
-              <strong>{configuracao.email || 'Não informado'}</strong>
-            </div>
-
-            {whatsappUrl && <a
-              href={whatsappUrl}
-              target="_blank"
-              rel="noreferrer"
-              className={styles.botaoWhatsapp}
-            >
-              Pedir pelo WhatsApp
-            </a>}
-          </div>
-
+        <div className={styles.linksRodape}>
+          <Link to="/politica-de-privacidade">Política de Privacidade</Link>
+          <span aria-hidden="true">•</span>
+          <Link to="/termos-de-uso">Termos de Uso</Link>
+          <span aria-hidden="true">•</span>
+          <p>
+            Plataforma fornecida por <strong>{NOME_PLATAFORMA}</strong>
+          </p>
         </div>
-
-
-        {/* PARTE INFERIOR */}
-
-        <div className={styles.rodapeFinal}>
-          <div className={styles.direitosRodape}>
-            {mensagemRodape && <p>{mensagemRodape}</p>}
-            <p>© {new Date().getFullYear()} {nomeExibicao}. Todos os direitos reservados.</p>
-            {configuracao.informacoesLegais && (
-              <small className={styles.informacoesLegais}>{configuracao.informacoesLegais}</small>
-            )}
-          </div>
-
-          <div>
-            <Link to="/politica-de-privacidade">
-              Política de Privacidade
-            </Link>
-
-            <span>•</span>
-
-            <Link to="/termos-de-uso">
-              Termos de Uso
-            </Link>
-          </div>
-        </div>
-
       </footer>
+
+      {/* Painel do menu do topo: lista as promocoes disponiveis ou mostra o
+          pedido feito nesta sessao. */}
+      {painelMenu && (
+        <div
+          className={styles.overlayPainel}
+          onClick={fecharPainelMenu}
+        >
+          <div
+            className={styles.painelMenu}
+            ref={painelMenuRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-painel-menu"
+            onClick={(evento) => evento.stopPropagation()}
+          >
+            <div className={styles.topoPainel}>
+              <h2 id="titulo-painel-menu">
+                {painelMenu === 'promocoes' ? 'Promoções' : 'Pedidos'}
+              </h2>
+
+              <button
+                type="button"
+                className={styles.fecharPainel}
+                ref={fecharPainelRef}
+                onClick={fecharPainelMenu}
+                aria-label="Fechar"
+              >
+                <X aria-hidden="true" strokeWidth={2.2} />
+              </button>
+            </div>
+
+            <div className={styles.corpoPainel}>
+              {painelMenu === 'promocoes' && promocoes.map((promocao) => {
+                const desconto = percentualDesconto(promocao);
+
+                return (
+                  <button
+                    type="button"
+                    key={promocao.id}
+                    className={`${styles.cartaoPainel} ${styles.cartaoPromocaoPainel}`}
+                    onClick={() => escolherPromocao(promocao)}
+                  >
+                    {fotoValida(promocao.imagem) && (
+                      <img
+                        className={styles.fotoCartaoPainel}
+                        src={promocao.imagem}
+                        alt=""
+                        onError={() => marcarFotoComErro(promocao.imagem)}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    )}
+
+                    <span className={styles.textosCartaoPainel}>
+                      <strong className={styles.nomeCartaoPainel}>{promocao.nome}</strong>
+
+                      <span className={styles.precosPainel}>
+                        <span className={styles.precoAtualPainel}>R$ {promocao.preco}</span>
+
+                        {promocao.precoAntigo && (
+                          <span className={styles.precoAntigoPainel}>R$ {promocao.precoAntigo}</span>
+                        )}
+
+                        {desconto > 0 && (
+                          <span className={styles.descontoPainel}>-{desconto}%</span>
+                        )}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+
+              {painelMenu === 'promocoes' && promocoes.length === 0 && (
+                <p className={styles.semResultados}>Nenhuma promoção disponível no momento.</p>
+              )}
+
+              {painelMenu === 'pedidos' && (pedidoAtual ? (
+                <div className={styles.cartaoPainel}>
+                  <strong className={styles.nomeCartaoPainel}>
+                    Pedido #{pedidoAtual.numero ?? pedidoAtual.id}
+                  </strong>
+
+                  <span className={styles.precosPainel}>
+                    <span className={styles.statusPainel}>{pedidoAtual.status ?? 'Recebido'}</span>
+
+                    {pedidoAtual.total != null && (
+                      <span className={styles.precoAtualPainel}>
+                        R$ {Number(pedidoAtual.total).toFixed(2).replace('.', ',')}
+                      </span>
+                    )}
+                  </span>
+
+                  <button
+                    type="button"
+                    className={styles.acompanharPedido}
+                    onClick={() => navigate('/pedido-finalizado')}
+                  >
+                    Acompanhar pedido
+                  </button>
+                </div>
+              ) : (
+                <p className={styles.semResultados}>Você ainda não fez nenhum pedido por aqui.</p>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {modalProdutoAberto && produtoSelecionado && (
         <div
