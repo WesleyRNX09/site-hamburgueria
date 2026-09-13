@@ -41,9 +41,9 @@
 }
 
 .livre {
-  border-color: #3a3a3a;
-  background: #2a2a2a;
-  color: #b4b4b4;
+  border-color: var(--cor-borda-forte);
+  background: var(--cor-superficie);
+  color: var(--cor-texto-medio);
 }
 
 .aberta {
@@ -71,13 +71,13 @@
 /* Ocupada por outro funcionário: hachura discreta em vez de uma cor
    própria — é uma mesa indisponível, não um estágio do atendimento. */
 .outro {
-  border-color: #3a3a3a;
+  border-color: var(--cor-borda-forte);
   background: repeating-linear-gradient(
     -45deg,
-    #232323 0 6px,
-    #2c2c2c 6px 12px
+    var(--cor-borda) 0 6px,
+    var(--cor-borda-forte) 6px 12px
   );
-  color: #6f6f6f;
+  color: var(--cor-texto-fraco);
 }
 
 .legenda {
@@ -93,7 +93,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  color: #9a9a9a;
+  color: var(--cor-texto-fraco);
   font-size: 12px;
   font-weight: 700;
 }

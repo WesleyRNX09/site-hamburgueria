@@ -63,11 +63,16 @@ const PALETA_CLARA = {
   corTexto: '#1A1A19'
 };
 
-/* O tema claro vale só para o cardápio e o checkout. Painel, garçom e
-   superadmin têm fundos escuros fixos no CSS e ficariam ilegíveis.
-   A mesma regra está no index.html, que marca a área no primeiro quadro. */
+/* Área pública: cardápio, checkout e páginas legais. As mesmas regras estão
+   no index.html, que marca a área no primeiro quadro. */
 export function ehAreaPublica(caminho = '') {
   return !/^\/(admin|superadmin|garcom)(\/|$)/.test(caminho);
+}
+
+/* O tema claro vale para a área pública e para o painel do estabelecimento,
+   que usa a mesma paleta do cardápio. Garçom e superadmin seguem escuros. */
+export function usaTemaClaro(caminho = '') {
+  return !/^\/(superadmin|garcom)(\/|$)/.test(caminho);
 }
 
 export function normalizarConfiguracaoPublica(recebida = {}) {

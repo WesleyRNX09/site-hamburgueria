@@ -18,6 +18,12 @@
   --cor-ok-texto: #6FF0A6;
   --cor-erro: #FF7777;
   --cor-erro-texto: #FF9A9A;
+  --cor-info-texto: #6D9DFF;
+  /* Neutros de apoio do painel: bordas, campos e superfícies internas. */
+  --cor-borda: #292929;
+  --cor-borda-forte: #3A3A3A;
+  --cor-campo: #111111;
+  --cor-superficie: #222222;
   --sombra-barra: rgba(0, 0, 0, 0.5);
   --sombra-cartao: rgba(0, 0, 0, 0.28);
   --sombra-cartao-forte: rgba(0, 0, 0, 0.4);
@@ -31,14 +37,13 @@
   text-rendering: optimizeLegibility;
 }
 
-/* O cardápio é claro sempre, em qualquer aparelho. Vale apenas na área
-   pública — painel, garçom e superadmin têm fundos escuros fixos no CSS e
-   ficariam com texto escuro sobre escuro, por isso seguem com os valores
-   escuros de :root.
+/* O cardápio e o painel do estabelecimento são claros sempre, em qualquer
+   aparelho. Garçom e superadmin seguem com os valores escuros de :root.
    As cores do estabelecimento também são recalculadas pelo theme.js, que as
    aplica inline no <html>; os valores repetidos aqui valem para o primeiro
    quadro, antes do React montar, e evitam o pisca escuro. */
-:root[data-area="publica"] {
+:root[data-area="publica"],
+:root[data-area="admin"] {
   /* A página usa um branco levemente acinzentado e os cartões ficam no
      branco puro, que é o que dá relevo a eles. */
   --cor-secundaria: #F4F5F7;
@@ -56,6 +61,11 @@
   --cor-card-elevado: #FFFFFF;
   --cor-erro: #C62828;
   --cor-erro-texto: #A32019;
+  --cor-info-texto: #2F6FDB;
+  --cor-borda: #E6E7EA;
+  --cor-borda-forte: #D3D5DA;
+  --cor-campo: #F9FAFB;
+  --cor-superficie: #EEF0F3;
   /* Sombra preta forte vira mancha cinza sobre o branco: aqui ela serve
      só para descolar o elemento do fundo. */
   --sombra-barra: rgba(0, 0, 0, 0.1);

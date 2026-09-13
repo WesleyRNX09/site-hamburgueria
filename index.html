@@ -17,11 +17,12 @@
     <meta name="theme-color" content="#F4F5F7" />
     <title>Cardápio e pedidos online</title>
     <script>
-      /* O cardápio é claro; painel, garçom e superadmin são escuros. Marcar a
-         área antes do React montar evita o pisca escuro no cardápio. O
-         AppProvider mantém isso atualizado a cada troca de rota. */
+      /* Cardápio e painel do estabelecimento são claros; garçom e superadmin
+         são escuros. Marcar a área antes do React montar evita o pisca de
+         paleta. O AppProvider mantém isso atualizado a cada troca de rota. */
       document.documentElement.dataset.area =
-        /^\/(admin|superadmin|garcom)(\/|$)/.test(location.pathname) ? 'painel' : 'publica';
+        /^\/(superadmin|garcom)(\/|$)/.test(location.pathname) ? 'painel'
+          : /^\/admin(\/|$)/.test(location.pathname) ? 'admin' : 'publica';
     </script>
   </head>
   <body>

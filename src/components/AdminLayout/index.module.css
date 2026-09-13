@@ -14,7 +14,7 @@
   width: 242px;
   flex-direction: column;
   border-right: 1px solid rgb(from var(--cor-principal) r g b / 0.22);
-  background: color-mix(in srgb, var(--cor-secundaria) 85%, black);
+  background: var(--cor-campo);
   padding: 28px 16px 22px;
 }
 
@@ -93,7 +93,7 @@
   min-height: 42px;
   border-radius: 10px;
   padding: 0 12px;
-  color: #a5a5a5;
+  color: var(--cor-texto-medio);
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;
@@ -128,10 +128,10 @@
   gap: 12px;
   margin-top: 28px;
   border: 0;
-  border-top: 1px solid #242424;
+  border-top: 1px solid var(--cor-borda);
   background: transparent;
   padding: 20px 12px 0;
-  color: #8e8e8e;
+  color: var(--cor-texto-fraco);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -163,7 +163,7 @@
 
 .cabecalho p {
   margin: 7px 0 0;
-  color: #8d8d8d;
+  color: var(--cor-texto-fraco);
   font-size: 14px;
 }
 
@@ -194,7 +194,7 @@
 .perfil strong,
 .perfil small { display: block; }
 .perfil strong { font-size: 14px; }
-.perfil small { margin-top: 2px; color: #8e8e8e; }
+.perfil small { margin-top: 2px; color: var(--cor-texto-fraco); }
 .conteudo { width: 100%; }
 
 .alertaPedido {
@@ -211,7 +211,7 @@
   border-radius: 13px;
   background: color-mix(in srgb, var(--cor-principal) 20%, var(--cor-fundo));
   padding: 14px;
-  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 16px 45px var(--sombra-flutuante);
   color: var(--cor-principal);
   animation: entrarAlerta 0.25s ease-out;
 }
@@ -219,9 +219,9 @@
 .alertaPedido strong,
 .alertaPedido span { display: block; }
 .alertaPedido strong { color: var(--cor-texto); font-size: 14px; }
-.alertaPedido span { overflow: hidden; margin-top: 3px; color: #b5b5b5; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.alertaPedido button { display: grid; width: 36px; height: 36px; place-items: center; border: 0; border-radius: 8px; background: transparent; color: #aaa; cursor: pointer; }
-.alertaPedido button:hover { background: rgba(255, 255, 255, 0.06); color: var(--cor-texto); }
+.alertaPedido span { overflow: hidden; margin-top: 3px; color: var(--cor-texto-medio); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.alertaPedido button { display: grid; width: 36px; height: 36px; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--cor-texto-medio); cursor: pointer; }
+.alertaPedido button:hover { background: color-mix(in srgb, var(--cor-texto) 6%, transparent); color: var(--cor-texto); }
 
 @keyframes entrarAlerta {
   from { opacity: 0; transform: translateY(-10px); }
@@ -263,7 +263,7 @@
     place-items: center;
     border: 0;
     background: transparent;
-    color: #aaa;
+    color: var(--cor-texto-medio);
   }
   .principal { margin-left: 0; padding: 82px 18px 36px; }
   .principal { width: 100%; }

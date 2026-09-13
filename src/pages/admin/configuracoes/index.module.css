@@ -35,9 +35,9 @@
   grid-template-columns: minmax(0, 1fr) 130px 130px;
   align-items: end;
   gap: 12px;
-  border: 1px solid #292929;
+  border: 1px solid var(--cor-borda);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--cor-secundaria) 82%, black);
+  background: var(--cor-campo);
   padding: 12px 16px;
 }
 
@@ -61,9 +61,9 @@
   height: 20px;
   place-items: center;
   appearance: none;
-  border: 1.5px solid #3d3d3d;
+  border: 1.5px solid var(--cor-borda-forte);
   border-radius: 6px;
-  background: #151515;
+  background: var(--cor-campo);
   cursor: pointer;
   transition: 0.18s ease;
 }
@@ -72,8 +72,8 @@
   content: '';
   width: 10px;
   height: 6px;
-  border-bottom: 2px solid #111;
-  border-left: 2px solid #111;
+  border-bottom: 2px solid var(--cor-campo);
+  border-left: 2px solid var(--cor-campo);
   opacity: 0;
   transform: rotate(-45deg) scale(0.6);
   transition: 0.18s ease;
@@ -90,7 +90,7 @@
 
 .previaSite {
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--cor-principal) 35%, #333);
+  border: 1px solid color-mix(in srgb, var(--cor-principal) 35%, var(--cor-borda-forte));
   border-radius: 14px;
   background: var(--cor-fundo);
   color: var(--cor-texto);
@@ -121,7 +121,7 @@
 .previaConteudo button { min-height: 36px; border: 0; border-radius: 9px; background: var(--cor-principal); color: var(--cor-sobre-principal); font: inherit; font-size: 11px; font-weight: 900; pointer-events: none; }
 
 .listaSeguranca { display: grid; gap: 13px; margin: 0; padding: 0; list-style: none; }
-.listaSeguranca li { display: flex; align-items: flex-start; gap: 9px; color: #aaa; font-size: 12px; line-height: 1.55; }
+.listaSeguranca li { display: flex; align-items: flex-start; gap: 9px; color: var(--cor-texto-medio); font-size: 12px; line-height: 1.55; }
 .listaSeguranca svg { flex: 0 0 auto; margin-top: 1px; color: var(--cor-principal); }
 
 .barraSalvar {
@@ -134,15 +134,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border: 1px solid #343434;
+  border: 1px solid var(--cor-borda);
   border-radius: 14px;
   background: color-mix(in srgb, var(--cor-card) 92%, transparent);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 14px 40px var(--sombra-cartao-forte);
   padding: 12px 14px;
   backdrop-filter: blur(16px);
 }
 
-.barraSalvar > div { min-width: 0; color: #aaa; font-size: 12px; }
+.barraSalvar > div { min-width: 0; color: var(--cor-texto-medio); font-size: 12px; }
 .barraSalvar > div > div { margin: 0; }
 .barraSalvar button { flex: 0 0 auto; }
 

@@ -44,7 +44,7 @@
 
 .cabecalhoColuna p {
   margin: 5px 0 0;
-  color: #8d8d8d;
+  color: var(--cor-texto-fraco);
   font-size: 12px;
 }
 
@@ -63,7 +63,7 @@
 .aberta { background: var(--cor-principal); color: var(--cor-sobre-principal); }
 .pendente { background: #b98cff; color: #240b45; }
 .conta { background: #ff6b5e; color: #3a0b06; }
-.livre { background: #2a2a2a; color: #b4b4b4; }
+.livre { background: var(--cor-superficie); color: var(--cor-texto-medio); }
 
 /* =========================
    COMANDA
@@ -75,7 +75,7 @@
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  border-top: 1px solid #292929;
+  border-top: 1px solid var(--cor-borda);
 }
 
 .tabelaCabecalho,
@@ -91,11 +91,11 @@
   top: 0;
   z-index: 1;
 
-  border-bottom: 1px solid #292929;
+  border-bottom: 1px solid var(--cor-borda);
   background: var(--cor-card-profundo);
   padding: 10px 8px;
 
-  color: #8d8d8d;
+  color: var(--cor-texto-fraco);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.6px;
@@ -107,7 +107,7 @@
 .tabelaCabecalho span:nth-child(3) { text-align: center; }
 
 .linha {
-  border-bottom: 1px solid #232323;
+  border-bottom: 1px solid var(--cor-borda);
   border-radius: 8px;
   padding: 10px 8px;
 }
@@ -124,10 +124,10 @@
   font-weight: 700;
 }
 
-.marcaLancado { color: #7d7d7d; }
+.marcaLancado { color: var(--cor-texto-fraco); }
 
 .hora {
-  color: #8d8d8d;
+  color: var(--cor-texto-fraco);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -145,13 +145,13 @@
 }
 
 .descricao small {
-  color: #8d8d8d;
+  color: var(--cor-texto-fraco);
   font-size: 11px;
   line-height: 1.4;
 }
 
 .numero {
-  color: #c8c8c8;
+  color: var(--cor-texto-medio);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -183,10 +183,10 @@
   width: 28px;
   height: 28px;
   place-items: center;
-  border: 1px solid #353535;
+  border: 1px solid var(--cor-borda);
   border-radius: 8px;
   background: var(--cor-card);
-  color: #aaa;
+  color: var(--cor-texto-medio);
   cursor: pointer;
   transition: 0.2s ease;
 }
@@ -198,7 +198,7 @@
 
 .remover:hover:not(:disabled) {
   border-color: rgba(255, 91, 91, 0.5);
-  color: #ff7777;
+  color: var(--cor-erro-texto);
 }
 
 .controleQuantidade button:disabled,
@@ -210,7 +210,7 @@
 .tabelaVazia {
   margin: 0;
   padding: 34px 12px;
-  color: #8d8d8d;
+  color: var(--cor-texto-fraco);
   font-size: 12px;
   line-height: 1.6;
   text-align: center;
@@ -231,7 +231,7 @@
 }
 
 .totais dt {
-  color: #8d8d8d;
+  color: var(--cor-texto-fraco);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.6px;
@@ -263,7 +263,7 @@
 .abrirComanda {
   display: grid;
   gap: 12px;
-  border-top: 1px solid #292929;
+  border-top: 1px solid var(--cor-borda);
   padding-top: 15px;
 }
 
@@ -279,7 +279,7 @@
   justify-items: center;
   gap: 8px;
   padding: 34px 14px;
-  color: #8d8d8d;
+  color: var(--cor-texto-fraco);
   text-align: center;
 }
 
@@ -312,9 +312,9 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  border: 1px solid #2d2d2d;
+  border: 1px solid var(--cor-borda);
   border-radius: 12px;
-  background: #111;
+  background: var(--cor-campo);
   padding: 14px;
 }
 
@@ -325,7 +325,7 @@
 
 .barraCardapio p {
   margin: 5px 0 0;
-  color: #8d8d8d;
+  color: var(--cor-texto-fraco);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -369,14 +369,14 @@
 
 .modalTopo p {
   margin: 6px 0 0;
-  color: #8d8d8d;
+  color: var(--cor-texto-fraco);
   font-size: 12px;
 }
 
 .fecharModal {
   border: 0;
   background: transparent;
-  color: #999;
+  color: var(--cor-texto-fraco);
   cursor: pointer;
   line-height: 0;
 }
@@ -391,11 +391,11 @@
 }
 
 .categoriaCardapio {
-  border: 1px solid #303030;
+  border: 1px solid var(--cor-borda);
   border-radius: 999px;
-  background: #151515;
+  background: var(--cor-campo);
   padding: 7px 14px;
-  color: #b5b5b5;
+  color: var(--cor-texto-medio);
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
@@ -419,9 +419,9 @@
   grid-template-columns: 54px minmax(0, 1fr);
   align-items: center;
   gap: 11px;
-  border: 1px solid #2d2d2d;
+  border: 1px solid var(--cor-borda);
   border-radius: 12px;
-  background: #131313;
+  background: var(--cor-campo);
   padding: 10px;
   text-align: left;
   cursor: pointer;
@@ -429,7 +429,7 @@
 
 .cardProduto:hover:not(:disabled) {
   border-color: var(--cor-principal);
-  background: #181818;
+  background: var(--cor-campo);
 }
 
 .cardProduto:disabled {
@@ -457,7 +457,7 @@
 
 .cardProdutoTexto small {
   overflow: hidden;
-  color: #8d8d8d;
+  color: var(--cor-texto-fraco);
   font-size: 11px;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -476,13 +476,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  border-top: 1px solid #303030;
+  border-top: 1px solid var(--cor-borda);
   padding-top: 14px;
 }
 
 .resumoCardapio {
   margin: 0;
-  color: #b5b5b5;
+  color: var(--cor-texto-medio);
   font-size: 12px;
 }
 
@@ -509,14 +509,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid #2d2d2d;
+  border: 1px solid var(--cor-borda);
   border-radius: 10px;
   background: rgb(from var(--cor-principal) r g b / 0.08);
   padding: 10px 12px;
 }
 
 .listaConfirmacao strong { color: var(--cor-texto); font-size: 13px; }
-.listaConfirmacao small { display: block; margin-top: 3px; color: #8d8d8d; font-size: 11px; }
+.listaConfirmacao small { display: block; margin-top: 3px; color: var(--cor-texto-fraco); font-size: 11px; }
 
 .acoesConfirmacao { display: flex; gap: 10px; }
 
@@ -566,7 +566,7 @@
 }
 
 .totalPagamento span {
-  color: #8d8d8d;
+  color: var(--cor-texto-fraco);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.6px;
@@ -588,10 +588,10 @@
 
 .formaPagamento {
   min-height: 46px;
-  border: 1px solid #333;
+  border: 1px solid var(--cor-borda-forte);
   border-radius: 11px;
-  background: #131313;
-  color: #cfcfcf;
+  background: var(--cor-campo);
+  color: var(--cor-texto-medio);
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
@@ -623,7 +623,7 @@
 }
 
 .troco { color: var(--cor-principal); }
-.trocoInvalido { color: #ff8e8e; }
+.trocoInvalido { color: var(--cor-erro-texto); }
 
 @media (max-width: 900px) {
   .area {

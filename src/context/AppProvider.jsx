@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 
 import { configuracaoInicial } from '../data/initialData';
 import { estaAbertoNoHorario } from '../utils/horarios';
-import { aplicarTema, ehAreaPublica, normalizarConfiguracaoPublica } from '../utils/theme';
+import { aplicarTema, ehAreaPublica, normalizarConfiguracaoPublica, usaTemaClaro } from '../utils/theme';
 import {
   acompanharPedidoApi,
   adicionarItemComandaApi,
@@ -176,16 +176,17 @@ export function AppProvider({ children }) {
     }), 60000);
     return () => clearInterval(timer);
   }, [configuracao.funcionamentoAutomatico]);
-  /* O cardápio é sempre claro; o painel, o garçom e o superadmin seguem
-     escuros. O atributo diz ao CSS qual das duas paletas vale. */
+  /* Cardápio e painel do estabelecimento são claros; garçom e superadmin
+     seguem escuros. O atributo diz ao CSS qual paleta vale. */
   useLayoutEffect(() => {
     const publica = ehAreaPublica(caminhoAtual);
-    document.documentElement.dataset.area = publica ? 'publica' : 'painel';
-    aplicarTema(document.documentElement, configuracao, publica);
+    const claro = usaTemaClaro(caminhoAtual);
+    document.documentElement.dataset.area = publica ? 'publica' : claro ? 'admin' : 'painel';
+    aplicarTema(document.documentElement, configuracao, claro);
     // A barra do navegador no celular acompanha a paleta da área.
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', publica ? '#F4F5F7' : '#111111');
+      ?.setAttribute('content', claro ? '#F4F5F7' : '#111111');
   }, [configuracao, caminhoAtual]);
   useEffect(() => {
     const nome = configuracao.nomeLoja?.trim();

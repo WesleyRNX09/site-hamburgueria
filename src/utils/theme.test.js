@@ -4,8 +4,22 @@ import test from 'node:test';
 import {
   aplicarTema,
   criarVariaveisTema,
+  ehAreaPublica,
+  usaTemaClaro,
   normalizarConfiguracaoPublica
 } from './theme.js';
+
+test('usa o tema claro no cardápio e no painel, e o escuro no garçom e no superadmin', () => {
+  assert.equal(usaTemaClaro('/'), true);
+  assert.equal(usaTemaClaro('/finalizar-pedido'), true);
+  assert.equal(usaTemaClaro('/admin/dashboard'), true);
+  assert.equal(usaTemaClaro('/admin/login'), true);
+  assert.equal(usaTemaClaro('/garcom/mesas'), false);
+  assert.equal(usaTemaClaro('/superadmin/estabelecimentos'), false);
+  assert.equal(usaTemaClaro('/administrativo'), true);
+  assert.equal(ehAreaPublica('/admin/dashboard'), false);
+  assert.equal(ehAreaPublica('/'), true);
+});
 
 test('normaliza o tema público e rejeita valores configuráveis inseguros', () => {
   const configuracao = normalizarConfiguracaoPublica({

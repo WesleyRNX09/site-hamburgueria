@@ -516,12 +516,14 @@ Evitar múltiplas requisições idênticas para carregar a mesma configuração.
 
 Manter o padrão visual atual:
 
-- fundo escuro;
+- tema claro, com a mesma paleta do cardápio online (fundo #F4F5F7, cards
+  brancos); garçom e superadmin seguem no tema escuro;
+- cores por variáveis CSS de `src/css/global.css` (`--cor-texto-fraco`,
+  `--cor-borda`, `--cor-campo` etc.), nunca cinzas fixos;
 - destaque amarelo;
-- cards escuros;
 - bordas discretas;
 - botões arredondados;
-- textos claros;
+- texto escuro sobre fundo claro;
 - visual clean;
 - responsividade;
 - CSS Modules.

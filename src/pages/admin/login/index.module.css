@@ -164,7 +164,7 @@
 .tituloArea p {
     margin: 5px 0 0;
 
-    color: #9a9a9a;
+    color: var(--cor-texto-fraco);
 
     font-size: 13px;
 }
@@ -183,12 +183,12 @@
         var(--cor-card-profundo)
     );
 
-    border: 1px solid #323232;
+    border: 1px solid var(--cor-borda);
     border-radius: 12px;
 
     padding: 30px;
 
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.22);
+    box-shadow: 0 20px 40px var(--sombra-cartao-forte);
 
     position: relative;
 
@@ -230,7 +230,7 @@
 
     margin-bottom: 25px;
 
-    border-bottom: 1px solid #303030;
+    border-bottom: 1px solid var(--cor-borda);
 }
 
 
@@ -257,7 +257,7 @@
 .cardCabecalho p {
     margin: 0;
 
-    color: #858585;
+    color: var(--cor-texto-fraco);
 
     font-size: 12px;
 }
@@ -324,7 +324,7 @@
 
     background: var(--cor-card-profundo);
 
-    border: 1px solid #343434;
+    border: 1px solid var(--cor-borda);
     border-radius: 7px;
 
     outline: none;
@@ -340,12 +340,12 @@
 
 
 .grupoCampo input::placeholder {
-    color: #707070;
+    color: var(--cor-texto-fraco);
 }
 
 
 .grupoCampo input:hover {
-    border-color: #484848;
+    border-color: var(--cor-borda-forte);
 }
 
 
@@ -410,7 +410,7 @@
     border: 1px solid rgba(229, 57, 53, 0.3);
     border-radius: 6px;
 
-    color: #ff6b6b;
+    color: var(--cor-erro-texto);
 
     font-size: 12px;
 }
@@ -485,7 +485,7 @@
 
     padding-top: 17px;
 
-    border-top: 1px solid #303030;
+    border-top: 1px solid var(--cor-borda);
 
     display: flex;
     align-items: center;
@@ -493,7 +493,7 @@
 
     gap: 6px;
 
-    color: #929292;
+    color: var(--cor-texto-fraco);
 
     font-size: 10px;
 }
@@ -605,7 +605,7 @@
     border-top: 1px solid rgb(from var(--cor-principal) r g b / 0.12);
     margin-top: 18px;
     padding-top: 17px;
-    color: #929292;
+    color: var(--cor-texto-fraco);
     font-size: 11px;
 }
 
