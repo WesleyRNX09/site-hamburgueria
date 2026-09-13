@@ -1553,7 +1553,7 @@ async function servirUploadIsolado({
   requisicao.estabelecimento = estabelecimento;
 
   const isolado = caminho.match(
-    /^\/uploads\/estabelecimentos\/([1-9]\d*)\/((?:produto|logo|banner)-[a-f0-9-]+\.(?:jpg|png|webp))$/
+    /^\/uploads\/estabelecimentos\/([1-9]\d*)\/((?:produto|promocao|logo|banner)-[a-f0-9-]+\.(?:jpg|png|webp))$/
   );
   if (isolado) {
     if (Number(isolado[1]) !== estabelecimento.id) {

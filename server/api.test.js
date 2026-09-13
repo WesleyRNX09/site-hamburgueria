@@ -95,6 +95,7 @@ test('serve uploads somente no host do estabelecimento proprietário', async () 
   const pngMinimo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
   const urlA = await salvarImagemDataUrl(pngMinimo, pasta, 11, 'logo');
   const urlB = await salvarImagemDataUrl(pngMinimo, pasta, 22, 'produto');
+  const urlPromocaoA = await salvarImagemDataUrl(pngMinimo, pasta, 11, 'promocao');
   const nomeLegado = `logo-${randomUUID()}.png`;
   const urlLegada = `/uploads/${nomeLegado}`;
   await writeFile(join(pasta, nomeLegado), Buffer.from('89504e470d0a1a0a', 'hex'));
@@ -129,12 +130,14 @@ test('serve uploads somente no host do estabelecimento proprietário', async () 
     await Promise.all([aguardarServidor(servidorA, 0), aguardarServidor(servidorB, 0)]);
     const baseA = `http://127.0.0.1:${servidorA.address().port}`;
     const baseB = `http://127.0.0.1:${servidorB.address().port}`;
-    const [propriaA, cruzadaA, propriaB, legadaA, legadaB] = await Promise.all([
+    const [propriaA, cruzadaA, propriaB, legadaA, legadaB, promocaoA, promocaoCruzada] = await Promise.all([
       fetch(`${baseA}${urlA}`),
       fetch(`${baseB}${urlA}`),
       fetch(`${baseB}${urlB}`),
       fetch(`${baseA}${urlLegada}`),
-      fetch(`${baseB}${urlLegada}`)
+      fetch(`${baseB}${urlLegada}`),
+      fetch(`${baseA}${urlPromocaoA}`),
+      fetch(`${baseB}${urlPromocaoA}`)
     ]);
     assert.equal(propriaA.status, 200);
     assert.equal(propriaA.headers.get('content-type'), 'image/png');
@@ -142,6 +145,9 @@ test('serve uploads somente no host do estabelecimento proprietário', async () 
     assert.equal(propriaB.status, 200);
     assert.equal(legadaA.status, 200);
     assert.equal(legadaB.status, 404);
+    // A foto da promoção é servida para a própria loja e continua isolada das outras.
+    assert.equal(promocaoA.status, 200);
+    assert.equal(promocaoCruzada.status, 404);
   } finally {
     await Promise.all([fecharServidor(servidorA), fecharServidor(servidorB)]);
     await rm(pasta, { recursive: true, force: true });
