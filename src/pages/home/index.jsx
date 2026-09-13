@@ -726,9 +726,9 @@ function Home() {
               className={`${styles.cardProduto} ${fotoValida(produto.imagem) ? '' : styles.cardProdutoSemFoto}`}
               key={produto.id}
             >
-              {/* A linha inteira e o alvo de toque; o "+" e apenas o indicativo
-                  visual de que da para adicionar. Sem foto, ele ocupa sozinho
-                  o lugar da miniatura. */}
+              {/* A linha inteira e o alvo de toque. Com foto, nada fica por
+                  cima dela; sem foto, o "+" ocupa sozinho o lugar da miniatura
+                  como indicativo de que da para adicionar. */}
               {fotoValida(produto.imagem) ? (
                 <div className={styles.areaImagemProduto}>
                   <img
@@ -739,8 +739,6 @@ function Home() {
                     loading="lazy"
                     decoding="async"
                   />
-
-                  <span className={styles.indicadorAdicionar} aria-hidden="true">+</span>
                 </div>
               ) : (
                 <span className={styles.indicadorAdicionar} aria-hidden="true">+</span>

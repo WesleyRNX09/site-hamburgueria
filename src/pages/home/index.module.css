@@ -824,7 +824,7 @@
   padding: 1.4rem;
 
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 11rem;
+  grid-template-columns: minmax(0, 1fr) 13.8rem;
   column-gap: 1.6rem;
   align-items: center;
 
@@ -857,11 +857,14 @@
   grid-column: 2;
   grid-row: 1;
 
-  width: 11rem;
-  height: 11rem;
+  /* A foto avanca sobre o padding do cartao (margem negativa) e fica a
+     0.6rem da borda em cima, embaixo e a direita; o texto nao se mexe. */
+  width: 14.6rem;
+  height: 14.6rem;
+  margin: -0.8rem -0.8rem -0.8rem 0;
 
   overflow: hidden;
-  border-radius: 1.1rem;
+  border-radius: 0.8rem;
 }
 
 .imagemProduto {
@@ -977,7 +980,8 @@
 }
 
 /* O cartao inteiro e o alvo de clique (.aberturaCardProduto); o botao
-   "Adicionar" sai e da lugar ao "+" sobre a miniatura. */
+   "Adicionar" sai. O "+" so aparece em produto sem foto: com foto, a
+   imagem fica livre. */
 .botaoAdicionar {
   display: none;
 }
@@ -3099,7 +3103,7 @@ button.cartaoPainel:hover {
   .cardProduto {
     padding: 1.1rem;
 
-    grid-template-columns: minmax(0, 1fr) 9.4rem;
+    grid-template-columns: minmax(0, 1fr) 11.6rem;
     column-gap: 1.2rem;
   }
 
@@ -3121,8 +3125,9 @@ button.cartaoPainel:hover {
   }
 
   .areaImagemProduto {
-    width: 9.4rem;
-    height: 9.4rem;
+    width: 12.2rem;
+    height: 12.2rem;
+    margin: -0.6rem -0.6rem -0.6rem 0;
   }
 
   .informacoesProdutoTitulo {
