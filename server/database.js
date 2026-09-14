@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import mysql from 'mysql2/promise';
 
+import { concederPermissoesPadrao } from './permissoes.js';
 import { criarHashSenha, criarIndiceSenhaGarcom } from './security.js';
 import { checksumMigration } from './db/migration-utils.js';
 import {
@@ -182,10 +183,13 @@ export async function criarAdministradorInicial(banco, administrador, idEstabele
   `, [idTenant]);
   const existente = linhas[0];
   if (!existente) {
-    await banco.execute(`
-      INSERT INTO administradores (id_estabelecimento, usuario, email, nome, senha_hash)
-      VALUES (?, ?, ?, ?, ?)
-    `, [idTenant, administrador.usuario, administrador.email, administrador.nome, criarHashSenha(administrador.senha)]);
+    await executarTransacao(banco, async (conexao) => {
+      const [resultado] = await conexao.execute(`
+        INSERT INTO administradores (id_estabelecimento, usuario, email, nome, senha_hash)
+        VALUES (?, ?, ?, ?, ?)
+      `, [idTenant, administrador.usuario, administrador.email, administrador.nome, criarHashSenha(administrador.senha)]);
+      await concederPermissoesPadrao(conexao, idTenant, resultado.insertId);
+    });
     return;
   }
 

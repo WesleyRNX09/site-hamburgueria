@@ -199,9 +199,15 @@ contatos, atendimento, pagamentos, entrega e textos legais — e não aceita um
 - `GET|DELETE /api/admin/sessao`
 - `GET /api/admin/dados`
 - `GET /api/admin/dashboard/indicadores?periodo=hoje|7dias|30dias|mes` (ticket médio e produtos mais vendidos do tenant da sessão)
+
+Cada rota `/api/admin/*` exige uma permissão do administrador, declarada em
+`server/permissoes.js` (lista fixa em `src/utils/permissoes.js`). Rota não
+declarada não é atendida, e `GET /api/admin/dados` devolve só as partes que o
+administrador pode usar.
 - CRUD de `/api/admin/produtos`, `/api/admin/adicionais`, `/api/admin/promocoes` e `/api/admin/funcionarios`
 - criação/edição/status de `/api/admin/categorias`
 - criação/status de `/api/admin/administradores` e `PUT /api/admin/senha`
+- `PUT /api/admin/administradores/:id/permissoes`, `POST /api/admin/administradores/:id/arquivar`, `POST /api/admin/administradores/:id/desarquivar` e `DELETE /api/admin/administradores/:id`
 - `PATCH /api/admin/pedidos/:codigo/status`
 - `POST /api/admin/pedidos/:codigo/pagamento/confirmar`
 - `POST /api/admin/pedidos/:codigo/pagamento/estornar`

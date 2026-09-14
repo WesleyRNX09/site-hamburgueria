@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
@@ -20,6 +20,7 @@ import {
   intervaloIndicadores,
   salvarConfiguracao
 } from './operations.js';
+import { concederPermissoesPadrao } from './permissoes.js';
 import { aguardarServidor, fecharServidor } from './runtime.js';
 import { adicionaisSeed, mesasSeed, pedidosSeed, produtosSeed } from './seed.js';
 import { criarHashSenha, criarJwt, verificarJwt, verificarSenha } from './security.js';
@@ -33,6 +34,7 @@ import {
   identificarEstabelecimentoPeloHost,
   resolverEstabelecimento
 } from './tenant.js';
+import { CHAVES_PERMISSOES } from '../src/utils/permissoes.js';
 
 const JWT_SECRET_TESTE = 'segredo-jwt-exclusivo-para-testes-com-mais-de-32-bytes';
 
@@ -794,6 +796,7 @@ test('cria estabelecimento e primeiro administrador na mesma transação global'
     async execute(sql, parametros = []) {
       comandos.push({ sql, parametros });
       if (sql.includes('INSERT INTO estabelecimentos')) return [{ insertId: 44 }];
+      if (sql.includes('INSERT INTO administradores')) return [{ insertId: 91 }];
       return [{ affectedRows: 1 }];
     }
   };
@@ -825,6 +828,10 @@ test('cria estabelecimento e primeiro administrador na mesma transação global'
   const insertAdmin = comandos.find(({ sql }) => sql.includes('INSERT INTO administradores'));
   assert.equal(insertAdmin.parametros[0], 44);
   assert.notEqual(insertAdmin.parametros[4], 'senha-admin-segura');
+  const insertPermissoes = comandos.find(({ sql }) => sql.includes('INSERT INTO administrador_permissoes'));
+  assert.equal(insertPermissoes.parametros.length, 13 * 3);
+  assert.deepEqual([...new Set(insertPermissoes.parametros.filter((_, indice) => indice % 3 === 0))], [44]);
+  assert.deepEqual([...new Set(insertPermissoes.parametros.filter((_, indice) => indice % 3 === 1))], [91]);
   assert.equal(comandos.some(({ sql }) => sql.includes('INSERT INTO auditoria_superadmin')), true);
   assert.equal(comandos.some(({ sql }) => sql === 'COMMIT'), true);
   assert.equal(comandos.some(({ sql }) => /SELECT\s+\*/i.test(sql)), false);
@@ -873,6 +880,7 @@ test('API bloqueia JWT de perfil ou estabelecimento diferente antes de consultar
         }]];
       }
       if (sql.includes('DELETE FROM sessoes_admin')) return [{ affectedRows: 0 }];
+      if (sql.includes('FROM administrador_permissoes ap')) return [[{ permissao: 'pedidos.visualizar' }]];
       if (sql.includes('FROM sessoes_admin s')) {
         return [[{
           id: 7,
@@ -1984,7 +1992,7 @@ if (!executarIntegracao) {
     taxaEntrega: 7.9,
     tempoEntrega: '30–45 min',
     pedidoMinimo: 20,
-    lojaAberta: true,
+    lojaAbertaManual: true,
     entregaAtiva: true,
     aceitaCartao: true,
     aceitaDinheiro: true,
@@ -2234,7 +2242,7 @@ if (!executarIntegracao) {
   });
 
   test('bloqueia pedido com loja fechada e abaixo do mínimo', async () => {
-    const fechadaConfigurada = await salvarConfiguracaoTeste({ lojaAberta: false });
+    const fechadaConfigurada = await salvarConfiguracaoTeste({ lojaAbertaManual: false });
     assert.equal(fechadaConfigurada.status, 200);
     const fechada = await chamar('/api/pedidos', {
       metodo: 'POST',
@@ -3201,5 +3209,261 @@ if (!executarIntegracao) {
     } finally {
       await fecharServidor(servidorLimitado);
     }
+  });
+
+  /* Permissões por administrador. Ficam por último porque criam contas e
+     provocam logins recusados de propósito. */
+  async function criarAdministradorPeloPainel(prefixo, senha) {
+    const usuario = `${prefixo}-${randomUUID().slice(0, 8)}`;
+    const criado = await chamar('/api/admin/administradores', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { nome: `Conta ${usuario}`, usuario, email: `${usuario}@teste.local`, senha, confirmacaoSenha: senha }
+    });
+    assert.equal(criado.status, 201);
+    return { id: criado.corpo.administrador.id, usuario };
+  }
+
+  function entrarComo(usuario, senha) {
+    return chamar('/api/admin/login', { metodo: 'POST', dados: { usuario, senha } });
+  }
+
+  async function permissoesNoBanco(administradorId) {
+    const [linhas] = await banco.execute(
+      'SELECT permissao FROM administrador_permissoes WHERE administrador_id = ?',
+      [administradorId]
+    );
+    return linhas.map((linha) => linha.permissao).sort();
+  }
+
+  async function idDaLoja(slug) {
+    const [[linha]] = await banco.execute('SELECT id_estabelecimento FROM estabelecimentos WHERE slug = ?', [slug]);
+    return Number(linha.id_estabelecimento);
+  }
+
+  const todasAsPermissoes = [...CHAVES_PERMISSOES].sort();
+
+  test('migration 017: conta criada antes das permissões volta a ter exatamente o acesso completo', async () => {
+    const idTenantA = await idDaLoja('estabelecimento-padrao');
+    const usuario = `legado-${randomUUID().slice(0, 8)}`;
+    const senha = 'senha-legada-segura';
+    // Conta como existia antes da migration: a linha em administradores, sem nenhuma permissão.
+    const [criado] = await banco.execute(`
+      INSERT INTO administradores (id_estabelecimento, usuario, email, nome, senha_hash)
+      VALUES (?, ?, ?, 'Conta legada', ?)
+    `, [idTenantA, usuario, `${usuario}@teste.local`, criarHashSenha(senha)]);
+    const idLegado = Number(criado.insertId);
+    assert.deepEqual(await permissoesNoBanco(idLegado), []);
+
+    const login = await entrarComo(usuario, senha);
+    assert.equal(login.status, 200);
+    const tokenLegado = login.corpo.token;
+    assert.equal((await chamar('/api/admin/dashboard/indicadores?periodo=30dias', { token: tokenLegado })).status, 403);
+
+    // Aplica a concessão exatamente como está escrita na migration.
+    const migration = await readFile(new URL('../database/migrations/017_permissoes_administradores.sql', import.meta.url), 'utf8');
+    const concessao = migration
+      .split(/;\s*(?:\r?\n|$)/)
+      .map((instrucao) => instrucao.trim())
+      .find((instrucao) => instrucao.startsWith('INSERT INTO administrador_permissoes'));
+    assert.ok(concessao);
+    await banco.query(concessao);
+
+    assert.deepEqual(await permissoesNoBanco(idLegado), todasAsPermissoes);
+    // Mesmo token, sem novo login: o acesso volta na hora.
+    const sessao = await chamar('/api/admin/sessao', { token: tokenLegado });
+    assert.deepEqual([...sessao.corpo.admin.permissoes].sort(), todasAsPermissoes);
+    assert.equal((await chamar('/api/admin/dashboard/indicadores?periodo=30dias', { token: tokenLegado })).status, 200);
+    const painel = await chamar('/api/admin/dados', { token: tokenLegado });
+    assert.equal(painel.status, 200);
+    assert.ok(painel.corpo.administradores.length > 0);
+    assert.ok(painel.corpo.acessoGarcom);
+    assert.ok(painel.corpo.mesas.length > 0);
+
+    // Todo administrador em uso fica com o conjunto completo, sem nada a mais.
+    const [contagens] = await banco.execute(`
+      SELECT a.id, COUNT(ap.permissao) AS total
+      FROM administradores a
+      LEFT JOIN administrador_permissoes ap
+        ON ap.administrador_id = a.id AND ap.id_estabelecimento = a.id_estabelecimento
+      WHERE a.id_estabelecimento IS NOT NULL AND a.arquivado_em IS NULL
+      GROUP BY a.id
+    `);
+    assert.ok(contagens.length > 0);
+    assert.ok(contagens.every((linha) => Number(linha.total) === CHAVES_PERMISSOES.length));
+  });
+
+  test('administrador da loja A não altera, arquiva, desarquiva nem apaga administrador da loja B', async () => {
+    const idTenantB = await idDaLoja('loja-b');
+    const usuarioB = `admin-b-${randomUUID().slice(0, 8)}`;
+    const [criadoB] = await banco.execute(`
+      INSERT INTO administradores (id_estabelecimento, usuario, email, nome, senha_hash)
+      VALUES (?, ?, ?, 'Administrador da loja B', ?)
+    `, [idTenantB, usuarioB, `${usuarioB}@teste.local`, criarHashSenha('senha-da-loja-b-segura')]);
+    const idAdminB = Number(criadoB.insertId);
+    await concederPermissoesPadrao(banco, idTenantB, idAdminB);
+
+    for (const [metodo, caminho, dados] of [
+      ['PUT', `/api/admin/administradores/${idAdminB}/permissoes`, { permissoes: [] }],
+      ['PATCH', `/api/admin/administradores/${idAdminB}/status`, { ativo: false }],
+      ['POST', `/api/admin/administradores/${idAdminB}/arquivar`],
+      ['POST', `/api/admin/administradores/${idAdminB}/desarquivar`],
+      ['DELETE', `/api/admin/administradores/${idAdminB}`]
+    ]) {
+      const resposta = await chamar(caminho, { metodo, token: tokenAdmin, dados });
+      assert.equal(resposta.status, 404, `${metodo} ${caminho}`);
+    }
+    const cruzada = await chamar(`/api/admin/administradores/${idAdminB}/permissoes`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { permissoes: [] },
+      baseUrl: urlBaseTenantB
+    });
+    assert.equal(cruzada.status, 403);
+
+    const [[contaB]] = await banco.execute(
+      'SELECT ativo, arquivado_em FROM administradores WHERE id = ? AND id_estabelecimento = ?',
+      [idAdminB, idTenantB]
+    );
+    assert.equal(Number(contaB.ativo), 1);
+    assert.equal(contaB.arquivado_em, null);
+    assert.deepEqual(await permissoesNoBanco(idAdminB), todasAsPermissoes);
+    const painelA = await chamar('/api/admin/dados', { token: tokenAdmin });
+    assert.equal(painelA.corpo.administradores.some((item) => item.id === idAdminB), false);
+  });
+
+  test('administrador não eleva as próprias permissões nem concede o que não possui, mesmo chamando a API direto', async () => {
+    const senha = 'senha-do-limitado-segura';
+    const limitado = await criarAdministradorPeloPainel('limitado', senha);
+    const alvo = await criarAdministradorPeloPainel('alvo', 'senha-do-alvo-segura');
+    const definir = (id, permissoes) => chamar(`/api/admin/administradores/${id}/permissoes`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { permissoes }
+    });
+    assert.equal((await definir(limitado.id, ['funcionarios.gerenciar', 'pedidos.visualizar'])).status, 200);
+    assert.equal((await definir(alvo.id, ['pedidos.visualizar'])).status, 200);
+
+    const login = await entrarComo(limitado.usuario, senha);
+    assert.equal(login.status, 200);
+    const tokenLimitado = login.corpo.token;
+
+    const propria = await chamar(`/api/admin/administradores/${limitado.id}/permissoes`, {
+      metodo: 'PUT',
+      token: tokenLimitado,
+      dados: { permissoes: [...CHAVES_PERMISSOES] }
+    });
+    assert.equal(propria.status, 403);
+    const concessao = await chamar(`/api/admin/administradores/${alvo.id}/permissoes`, {
+      metodo: 'PUT',
+      token: tokenLimitado,
+      dados: { permissoes: ['pedidos.visualizar', 'relatorios.visualizar'] }
+    });
+    assert.equal(concessao.status, 403);
+    assert.deepEqual(await permissoesNoBanco(limitado.id), ['funcionarios.gerenciar', 'pedidos.visualizar']);
+    assert.deepEqual(await permissoesNoBanco(alvo.id), ['pedidos.visualizar']);
+
+    // Rotas sem a permissão, chamadas direto: recusadas e nada muda no banco.
+    const idTenantA = await idDaLoja('estabelecimento-padrao');
+    const lerProduto = async () => (await banco.execute(
+      'SELECT id, ativo FROM produtos WHERE id_estabelecimento = ? ORDER BY id LIMIT 1',
+      [idTenantA]
+    ))[0][0];
+    const produtoAntes = await lerProduto();
+    const produto = await chamar(`/api/admin/produtos/${produtoAntes.id}/status`, {
+      metodo: 'PATCH',
+      token: tokenLimitado,
+      dados: { ativo: !produtoAntes.ativo }
+    });
+    assert.equal(produto.status, 403);
+    assert.equal(Number((await lerProduto()).ativo), Number(produtoAntes.ativo));
+    assert.equal((await chamar('/api/admin/dashboard/indicadores?periodo=30dias', { token: tokenLimitado })).status, 403);
+    assert.equal((await chamar('/api/admin/configuracao', {
+      metodo: 'PUT',
+      token: tokenLimitado,
+      dados: { nomeLoja: 'Invadida' }
+    })).status, 403);
+
+    // /dados só traz o que a conta pode usar.
+    const painel = await chamar('/api/admin/dados', { token: tokenLimitado });
+    assert.equal(painel.status, 200);
+    assert.deepEqual(painel.corpo.mesas, []);
+    assert.deepEqual(painel.corpo.promocoes, []);
+
+    // Quem possui concede, e a permissão vale sem novo login.
+    assert.equal((await definir(limitado.id, ['funcionarios.gerenciar', 'pedidos.visualizar', 'relatorios.visualizar'])).status, 200);
+    assert.equal((await chamar('/api/admin/dashboard/indicadores?periodo=30dias', { token: tokenLimitado })).status, 200);
+  });
+
+  test('arquivar tira o acesso, desarquivar devolve a conta desativada e sem permissões, e apagar remove a conta', async () => {
+    const senha = 'senha-arquivavel-segura';
+    const conta = await criarAdministradorPeloPainel('arquivavel', senha);
+    const primeiroLogin = await entrarComo(conta.usuario, senha);
+    assert.equal(primeiroLogin.status, 200);
+
+    const idAdmin = (await chamar('/api/admin/sessao', { token: tokenAdmin })).corpo.admin.id;
+    assert.equal((await chamar(`/api/admin/administradores/${idAdmin}/arquivar`, { metodo: 'POST', token: tokenAdmin })).status, 403);
+    assert.equal((await chamar(`/api/admin/administradores/${idAdmin}`, { metodo: 'DELETE', token: tokenAdmin })).status, 403);
+
+    const lerConta = async () => (await banco.execute(
+      'SELECT usuario, ativo, arquivado_em FROM administradores WHERE id = ?',
+      [conta.id]
+    ))[0][0];
+
+    // Arquivar.
+    assert.equal((await chamar(`/api/admin/administradores/${conta.id}/arquivar`, { metodo: 'POST', token: tokenAdmin })).status, 200);
+    assert.equal((await chamar('/api/admin/sessao', { token: primeiroLogin.corpo.token })).status, 401);
+    assert.equal((await entrarComo(conta.usuario, senha)).status, 401);
+    const arquivada = await lerConta();
+    assert.equal(arquivada.usuario, conta.usuario);
+    assert.equal(Number(arquivada.ativo), 0);
+    assert.ok(arquivada.arquivado_em);
+    assert.deepEqual(await permissoesNoBanco(conta.id), []);
+    const painelComArquivada = await chamar('/api/admin/dados', { token: tokenAdmin });
+    assert.equal(painelComArquivada.corpo.administradores.find((item) => item.id === conta.id)?.arquivado, true);
+    const duplicada = await chamar('/api/admin/administradores', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { nome: 'Outra conta', usuario: conta.usuario, email: `outra-${conta.usuario}@teste.local`, senha, confirmacaoSenha: senha }
+    });
+    assert.equal(duplicada.status, 409);
+    assert.equal((await chamar(`/api/admin/administradores/${conta.id}/permissoes`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { permissoes: ['pedidos.visualizar'] }
+    })).status, 404);
+    assert.equal((await chamar(`/api/admin/administradores/${conta.id}/status`, {
+      metodo: 'PATCH',
+      token: tokenAdmin,
+      dados: { ativo: true }
+    })).status, 404);
+
+    // Desarquivar: volta desativada e sem permissões.
+    assert.equal((await chamar(`/api/admin/administradores/${conta.id}/desarquivar`, { metodo: 'POST', token: tokenAdmin })).status, 200);
+    const desarquivada = await lerConta();
+    assert.equal(desarquivada.arquivado_em, null);
+    assert.equal(Number(desarquivada.ativo), 0);
+    assert.deepEqual(await permissoesNoBanco(conta.id), []);
+    assert.equal((await entrarComo(conta.usuario, senha)).status, 401);
+
+    // Reativada, entra, mas sem permissões não abre nada protegido.
+    assert.equal((await chamar(`/api/admin/administradores/${conta.id}/status`, {
+      metodo: 'PATCH',
+      token: tokenAdmin,
+      dados: { ativo: true }
+    })).status, 200);
+    const reativada = await entrarComo(conta.usuario, senha);
+    assert.equal(reativada.status, 200);
+    assert.equal((await chamar('/api/admin/dashboard/indicadores?periodo=30dias', { token: reativada.corpo.token })).status, 403);
+
+    // Apagar.
+    assert.equal((await chamar(`/api/admin/administradores/${conta.id}`, { metodo: 'DELETE', token: tokenAdmin })).status, 200);
+    const [restantes] = await banco.execute('SELECT id FROM administradores WHERE id = ?', [conta.id]);
+    assert.equal(restantes.length, 0);
+    assert.deepEqual(await permissoesNoBanco(conta.id), []);
+    assert.equal((await entrarComo(conta.usuario, senha)).status, 401);
+    const historico = await chamar('/api/admin/dados', { token: tokenAdmin });
+    const loginDaContaApagada = historico.corpo.auditoria.find((item) => item.usuario === conta.usuario);
+    assert.equal(loginDaContaApagada?.administrador, 'Conta apagada');
   });
 }

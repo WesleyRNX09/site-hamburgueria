@@ -145,10 +145,29 @@ CREATE TABLE IF NOT EXISTS administradores (
   nome VARCHAR(160) NOT NULL,
   senha_hash VARCHAR(255) NOT NULL,
   ativo TINYINT(1) NOT NULL DEFAULT 1,
+  -- Preenchida quando a conta é arquivada; NULL significa conta em uso.
+  arquivado_em DATETIME NULL,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_administradores_estabelecimento_usuario (id_estabelecimento, usuario),
   UNIQUE KEY uk_administradores_estabelecimento_email (id_estabelecimento, email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Permissões de cada administrador no painel do estabelecimento. A lista de
+-- valores acompanha src/utils/permissoes.js.
+CREATE TABLE IF NOT EXISTS administrador_permissoes (
+  id_estabelecimento BIGINT UNSIGNED NOT NULL,
+  administrador_id BIGINT UNSIGNED NOT NULL,
+  permissao VARCHAR(40) NOT NULL,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (administrador_id, permissao),
+  CONSTRAINT chk_administrador_permissoes_permissao
+    CHECK (permissao IN (
+      'dashboard.visualizar', 'pedidos.visualizar', 'pedidos.alterar_status',
+      'pedidos.gerenciar_pagamento', 'mesas.operar', 'mesas.fechar', 'mesas.cadastrar',
+      'produtos.editar', 'relatorios.visualizar', 'funcionarios.gerenciar',
+      'personalizacao.editar', 'delivery.editar', 'configuracoes.editar'
+    ))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS sessoes_admin (
@@ -455,6 +474,7 @@ CREATE INDEX idx_auditoria_superadmin_usuario ON auditoria_superadmin (superadmi
 CREATE INDEX idx_auditoria_superadmin_estabelecimento ON auditoria_superadmin (id_estabelecimento);
 CREATE INDEX idx_auditoria_superadmin_criado_em ON auditoria_superadmin (criado_em);
 CREATE INDEX idx_administradores_estabelecimento ON administradores (id_estabelecimento);
+CREATE INDEX idx_administrador_permissoes_estabelecimento ON administrador_permissoes (id_estabelecimento);
 CREATE INDEX idx_sessoes_admin_estabelecimento ON sessoes_admin (id_estabelecimento);
 CREATE INDEX idx_auditoria_admin_estabelecimento ON auditoria_admin (id_estabelecimento);
 CREATE INDEX idx_categorias_estabelecimento ON categorias (id_estabelecimento);
@@ -483,6 +503,7 @@ CREATE INDEX idx_promocoes_ativo ON promocoes (ativo);
 CREATE INDEX idx_funcionarios_ativo ON funcionarios (ativo);
 CREATE INDEX idx_sessoes_garcom_expiracao ON sessoes_garcom (expira_em);
 CREATE INDEX idx_pedidos_criado_em ON pedidos (criado_em);
+CREATE INDEX idx_pedidos_estabelecimento_criado_em ON pedidos (id_estabelecimento, criado_em);
 CREATE INDEX idx_pedidos_status ON pedidos (status);
 CREATE INDEX idx_pedidos_token_acompanhamento ON pedidos (token_acompanhamento_hash);
 CREATE INDEX idx_pagamentos_status ON pagamentos (status);
@@ -511,6 +532,13 @@ ALTER TABLE administradores
   ADD CONSTRAINT fk_administradores_estabelecimento
   FOREIGN KEY (id_estabelecimento)
   REFERENCES estabelecimentos(id_estabelecimento) ON DELETE RESTRICT;
+
+ALTER TABLE administrador_permissoes
+  ADD CONSTRAINT fk_administrador_permissoes_estabelecimento
+    FOREIGN KEY (id_estabelecimento)
+    REFERENCES estabelecimentos(id_estabelecimento) ON DELETE RESTRICT,
+  ADD CONSTRAINT fk_administrador_permissoes_administrador
+  FOREIGN KEY (administrador_id) REFERENCES administradores(id) ON DELETE CASCADE;
 
 ALTER TABLE sessoes_admin
   ADD CONSTRAINT fk_sessoes_admin_estabelecimento
@@ -679,7 +707,10 @@ INSERT INTO schema_migrations (versao, checksum) VALUES
   ('012_adicionar_login_do_garcom.sql', '371e3d178993ed316dd67a4a321e38ee2c47dac46bce4436ead2c41764fc7fd6'),
   ('013_acesso_unico_do_garcom.sql', 'e3ef5ae2adcd59a4f74cce3efa27bfb4aa211298b82149fffbe3c9b02436ee7a'),
   ('014_separar_cardapio_do_salao.sql', 'a3f19528864c09205aacc7d4833fceca41234f75e76d740daf0acfbc6d0342be'),
-  ('015_horario_automatico_da_loja.sql', '4ec43857d55a1e0ecdbb547855406e0cab47ac47383e6e2a7892778b7ad4897e')
+  ('015_horario_automatico_da_loja.sql', '4ec43857d55a1e0ecdbb547855406e0cab47ac47383e6e2a7892778b7ad4897e'),
+  ('016_indice_pedidos_por_periodo.sql', '6d2b3da9d4f619e59ab9682ebd8ddd38ed4ce036e3632de0fbb01e3a78edaf39'),
+  ('017_permissoes_administradores.sql', '1630b466b47154b28b0d5c2d7d0714c3e0874fd9dbfd534aeaa8ec9cae1b809f'),
+  ('018_arquivar_administradores.sql', '7bdc15d4289120e9766ba52f1cdebacd10127bcc92748adeaeda58750a84dd33')
 ON DUPLICATE KEY UPDATE versao = VALUES(versao);
 
 INSERT INTO estabelecimentos

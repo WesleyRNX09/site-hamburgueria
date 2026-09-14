@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 
 import { configuracaoInicial } from '../data/initialData';
 import { estaAbertoNoHorario } from '../utils/horarios';
+import { possuiPermissao } from '../utils/permissoes';
 import { aplicarTema, ehAreaPublica, normalizarConfiguracaoPublica, usaTemaClaro } from '../utils/theme';
 import {
   acompanharPedidoApi,
@@ -58,7 +59,11 @@ import {
   validarSessaoAdmin,
   validarCarrinhoApi,
   validarSessaoGarcom,
-  alterarSenhaAdministradorApi
+  alterarSenhaAdministradorApi,
+  atualizarPermissoesAdministradorApi,
+  arquivarAdministradorApi,
+  desarquivarAdministradorApi,
+  excluirAdministradorApi
 } from '../services/api';
 import { AppContext } from './appContext';
 
@@ -381,15 +386,28 @@ export function AppProvider({ children }) {
     return () => { ativo = false; };
   }, [garcomSessao?.token, aplicarDados]);
 
+  /* Permissões alteradas por outro administrador passam a valer no painel sem
+    novo login: a sessão é revalidada junto com a atualização periódica. */
+  const atualizarSessaoAdmin = useCallback(async () => {
+    const { admin } = await validarSessaoAdmin();
+    const token = lerSessaoComToken(CHAVES.admin)?.token;
+    if (!token) return;
+    const sessao = { ...admin, token };
+    sessionStorage.setItem(CHAVES.admin, JSON.stringify(sessao));
+    setAdminSessao(sessao);
+  }, []);
+
   useEffect(() => {
     if (!adminSessao?.token && !garcomSessao?.token) return undefined;
     const atualizar = () => {
-      const operacao = adminSessao?.token ? recarregarAdmin() : recarregarGarcom();
+      const operacao = adminSessao?.token
+        ? Promise.all([recarregarAdmin(), atualizarSessaoAdmin()])
+        : recarregarGarcom();
       operacao.catch(() => {});
     };
     const intervalo = setInterval(atualizar, 15000);
     return () => clearInterval(intervalo);
-  }, [adminSessao?.token, garcomSessao?.token, recarregarAdmin, recarregarGarcom]);
+  }, [adminSessao?.token, garcomSessao?.token, recarregarAdmin, recarregarGarcom, atualizarSessaoAdmin]);
 
   const pedidoAtualId = pedidoAtual?.id;
   const pedidoAtualToken = pedidoAtual?.tokenAcompanhamento;
@@ -440,7 +458,11 @@ export function AppProvider({ children }) {
     try {
       const { admin, token } = await loginAdmin(usuario, senha);
       setSessaoExpirada('');
-      const sessao = { ...admin, token };
+      sessionStorage.setItem(CHAVES.admin, JSON.stringify({ ...admin, token }));
+      // O login não traz as permissões: a sessão validada devolve a lista atual
+      // antes de o painel montar menu e rotas.
+      const { admin: validado } = await validarSessaoAdmin();
+      const sessao = { ...validado, token };
       sessionStorage.setItem(CHAVES.admin, JSON.stringify(sessao));
       setAdminSessao(sessao);
       await recarregarAdmin();
@@ -543,6 +565,27 @@ export function AppProvider({ children }) {
     const { administrador } = await alterarStatusAdministradorApi(id, !atual.ativo);
     setAdministradores((atuais) => atuais.map((item) => item.id === id ? administrador : item));
     await recarregarAdmin();
+  }
+
+  async function arquivarAdministrador(id) {
+    await arquivarAdministradorApi(id);
+    await recarregarAdmin();
+  }
+
+  async function desarquivarAdministrador(id) {
+    await desarquivarAdministradorApi(id);
+    await recarregarAdmin();
+  }
+
+  async function excluirAdministrador(id) {
+    await excluirAdministradorApi(id);
+    await recarregarAdmin();
+  }
+
+  async function atualizarPermissoesAdministrador(id, permissoes) {
+    const { administrador } = await atualizarPermissoesAdministradorApi(id, permissoes);
+    await recarregarAdmin();
+    return administrador;
   }
 
   async function alterarSenhaAdministrador(dados) {
@@ -854,6 +897,13 @@ export function AppProvider({ children }) {
     criarAdministrador,
     alternarAdministrador,
     alterarSenhaAdministrador,
+    atualizarPermissoesAdministrador,
+    arquivarAdministrador,
+    desarquivarAdministrador,
+    excluirAdministrador,
+    permissoesAdmin: adminSessao?.permissoes ?? [],
+    // Basta uma das permissões informadas. Só decide o que o painel mostra.
+    temPermissao: (...chaves) => chaves.some((chave) => possuiPermissao(adminSessao?.permissoes, chave)),
     dispensarAlertaNovoPedido: () => setAlertaNovoPedido(null),
     criarMesaAdmin,
     abrirComanda,

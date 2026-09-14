@@ -70,7 +70,13 @@ function UploadIdentidade({ campo, titulo, descricao, valor, proporcao, onSelect
 }
 
 function ConfiguracoesAdmin() {
-  const { configuracao, setConfiguracao } = useApp();
+  const { configuracao, setConfiguracao, temPermissao } = useApp();
+  // O servidor mantém como estão os grupos que a conta não pode alterar.
+  const gruposBloqueados = [
+    { permissao: 'personalizacao.editar', nome: 'logo, banner e textos da loja' },
+    { permissao: 'delivery.editar', nome: 'entrega, retirada, taxas e bairros' },
+    { permissao: 'configuracoes.editar', nome: 'contato, horários, pagamentos e textos legais' }
+  ].filter((grupo) => !temPermissao(grupo.permissao));
   const [dados, setDados] = useState(() => dadosEditaveis(configuracao));
   const [alterado, setAlterado] = useState(false);
   const [salvo, setSalvo] = useState(false);
@@ -180,6 +186,11 @@ function ConfiguracoesAdmin() {
 
   return (
     <AdminLayout titulo="Configurações" subtitulo="Identidade, operação e regras públicas do seu estabelecimento.">
+      {gruposBloqueados.length > 0 && (
+        <div className={`${styles.aviso} ${styles.secaoComMargemInferior}`} role="status">
+          Sua conta não pode alterar: {gruposBloqueados.map((grupo) => grupo.nome).join('; ')}. Mudanças nessas seções não serão gravadas.
+        </div>
+      )}
       <form className={configStyles.layoutConfiguracoes} onSubmit={enviar}>
         <div className={configStyles.colunaFormulario}>
           <section className={styles.card}>

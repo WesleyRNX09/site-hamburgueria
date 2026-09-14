@@ -13,6 +13,8 @@ import {
   normalizarHorarios,
   resumoHorarios
 } from '../src/utils/horarios.js';
+import { normalizarPermissoes } from '../src/utils/permissoes.js';
+import { concederPermissoesPadrao } from './permissoes.js';
 import {
   criarHashSenha,
   criarHashToken,
@@ -1892,6 +1894,36 @@ export async function listarAdministradores(banco, idEstabelecimento) {
   return linhas.map(mapearAdministrador);
 }
 
+/* Lista do painel do estabelecimento, com as permissões e a marca de arquivada
+   de cada conta. O superadministrador continua usando listarAdministradores. */
+export async function listarAdministradoresComPermissoes(banco, idEstabelecimento) {
+  const [[linhas], [linhasPermissoes]] = await Promise.all([
+    banco.execute(`
+      SELECT id, usuario, email, nome, ativo, criado_em, arquivado_em
+      FROM administradores
+      WHERE id_estabelecimento = ?
+      ORDER BY nome
+    `, [idEstabelecimento]),
+    banco.execute(`
+      SELECT administrador_id, permissao
+      FROM administrador_permissoes
+      WHERE id_estabelecimento = ?
+    `, [idEstabelecimento])
+  ]);
+  const permissoesPorAdministrador = new Map();
+  for (const linha of linhasPermissoes) {
+    const id = Number(linha.administrador_id);
+    if (!permissoesPorAdministrador.has(id)) permissoesPorAdministrador.set(id, []);
+    permissoesPorAdministrador.get(id).push(linha.permissao);
+  }
+  return linhas.map((linha) => ({
+    ...mapearAdministrador(linha),
+    arquivado: Boolean(linha.arquivado_em),
+    arquivadoEm: dataIso(linha.arquivado_em),
+    permissoes: normalizarPermissoes(permissoesPorAdministrador.get(Number(linha.id)) ?? [])
+  }));
+}
+
 export async function criarAdministrador(banco, idEstabelecimento, dados, administradorId) {
   const usuario = texto(dados.usuario, 80);
   const email = texto(dados.email, 160).toLowerCase();
@@ -1907,6 +1939,7 @@ export async function criarAdministrador(banco, idEstabelecimento, dados, admini
         (id_estabelecimento, usuario, email, nome, senha_hash, ativo)
       VALUES (?, ?, ?, ?, ?, 1)
     `, [idEstabelecimento, usuario, email, nome, criarHashSenha(senha)]);
+    await concederPermissoesPadrao(conexao, idEstabelecimento, resultado.insertId);
     await registrarAuditoria(conexao, idEstabelecimento, administradorId, 'administrador.criado', 'administrador', resultado.insertId, { usuario, email });
     return Number(resultado.insertId);
   });
@@ -1931,7 +1964,7 @@ export async function alternarStatusAdministrador(
   return executarTransacao(banco, async (conexao) => {
     const [alvos] = await conexao.execute(`
       SELECT id FROM administradores
-      WHERE id = ? AND id_estabelecimento = ? FOR UPDATE
+      WHERE id = ? AND id_estabelecimento = ? AND arquivado_em IS NULL FOR UPDATE
     `, [alvoId, idEstabelecimento]);
     if (!alvos[0]) return null;
     if (!ativo) {
@@ -1957,6 +1990,182 @@ export async function alternarStatusAdministrador(
       WHERE id = ? AND id_estabelecimento = ?
     `, [alvoId, idEstabelecimento]);
     return mapearAdministrador(linhas[0]);
+  });
+}
+
+/*
+  Permissões de outro administrador do mesmo estabelecimento.
+
+  - Ninguém altera as próprias permissões.
+  - Só entram chaves do catálogo; qualquer outra coisa é ignorada.
+  - Quem edita não concede o que não possui. As permissões que ele não possui
+    ficam como estão no alvo: não dá para concedê-las nem retirá-las.
+
+  Quem edita precisa de `funcionarios.gerenciar` e não edita a si mesmo, então
+  a loja nunca fica sem ao menos um administrador capaz de gerenciar acessos.
+*/
+export async function salvarPermissoesAdministrador(banco, idEstabelecimento, id, dados, autor) {
+  const alvoId = Number(id);
+  if (!Number.isInteger(alvoId) || alvoId <= 0) return null;
+  if (alvoId === Number(autor?.id)) {
+    throw erroDominio('Você não pode alterar as próprias permissões.', 403);
+  }
+  if (!Array.isArray(dados?.permissoes)) throw erroDominio('Informe a lista de permissões.');
+  const solicitadas = normalizarPermissoes(dados.permissoes);
+  const doAutor = new Set(normalizarPermissoes(autor?.permissoes));
+
+  return executarTransacao(banco, async (conexao) => {
+    const [alvos] = await conexao.execute(`
+      SELECT id FROM administradores
+      WHERE id = ? AND id_estabelecimento = ? AND arquivado_em IS NULL FOR UPDATE
+    `, [alvoId, idEstabelecimento]);
+    if (!alvos[0]) return null;
+    const [linhasAtuais] = await conexao.execute(`
+      SELECT permissao FROM administrador_permissoes
+      WHERE id_estabelecimento = ? AND administrador_id = ?
+    `, [idEstabelecimento, alvoId]);
+    const atuais = normalizarPermissoes(linhasAtuais.map((linha) => linha.permissao));
+    if (solicitadas.some((permissao) => !doAutor.has(permissao) && !atuais.includes(permissao))) {
+      throw erroDominio('Você não pode conceder permissões que não possui.', 403);
+    }
+    const finais = normalizarPermissoes([
+      ...solicitadas.filter((permissao) => doAutor.has(permissao)),
+      ...atuais.filter((permissao) => !doAutor.has(permissao))
+    ]);
+    const removidas = atuais.filter((permissao) => !finais.includes(permissao));
+    const adicionadas = finais.filter((permissao) => !atuais.includes(permissao));
+    if (removidas.length) {
+      await conexao.execute(`
+        DELETE FROM administrador_permissoes
+        WHERE id_estabelecimento = ? AND administrador_id = ?
+          AND permissao IN (${removidas.map(() => '?').join(', ')})
+      `, [idEstabelecimento, alvoId, ...removidas]);
+    }
+    if (adicionadas.length) {
+      await conexao.execute(`
+        INSERT INTO administrador_permissoes (id_estabelecimento, administrador_id, permissao)
+        VALUES ${adicionadas.map(() => '(?, ?, ?)').join(', ')}
+      `, adicionadas.flatMap((permissao) => [idEstabelecimento, alvoId, permissao]));
+    }
+    if (removidas.length || adicionadas.length) {
+      await registrarAuditoria(
+        conexao,
+        idEstabelecimento,
+        autor.id,
+        'administrador.permissoes_alteradas',
+        'administrador',
+        alvoId,
+        { adicionadas, removidas }
+      );
+    }
+    return { id: alvoId, permissoes: finais };
+  });
+}
+
+/*
+  Arquivar: a conta vai para "Arquivados" e perde acesso, sessões e
+  permissões, mas a linha continua no banco para o histórico seguir mostrando
+  quem fez cada ação. Usuário e e-mail continuam reservados para ela, então
+  desarquivar sempre devolve a mesma conta.
+*/
+export async function arquivarAdministrador(banco, idEstabelecimento, id, autorId) {
+  const alvoId = Number(id);
+  if (!Number.isInteger(alvoId) || alvoId <= 0) return null;
+  if (alvoId === Number(autorId)) throw erroDominio('Você não pode arquivar a própria conta.', 403);
+  return executarTransacao(banco, async (conexao) => {
+    const [alvos] = await conexao.execute(`
+      SELECT id, usuario, email, nome
+      FROM administradores
+      WHERE id = ? AND id_estabelecimento = ? AND arquivado_em IS NULL
+      FOR UPDATE
+    `, [alvoId, idEstabelecimento]);
+    const alvo = alvos[0];
+    if (!alvo) return null;
+    await conexao.execute(`
+      UPDATE administradores
+      SET ativo = 0, arquivado_em = CURRENT_TIMESTAMP
+      WHERE id = ? AND id_estabelecimento = ?
+    `, [alvoId, idEstabelecimento]);
+    await conexao.execute(`
+      DELETE FROM sessoes_admin
+      WHERE administrador_id = ? AND id_estabelecimento = ?
+    `, [alvoId, idEstabelecimento]);
+    await conexao.execute(`
+      DELETE FROM administrador_permissoes
+      WHERE administrador_id = ? AND id_estabelecimento = ?
+    `, [alvoId, idEstabelecimento]);
+    await registrarAuditoria(conexao, idEstabelecimento, autorId, 'administrador.arquivado', 'administrador', alvoId, {
+      usuario: alvo.usuario,
+      email: alvo.email,
+      nome: alvo.nome
+    });
+    return { id: alvoId, arquivado: true };
+  });
+}
+
+/*
+  Desarquivar: a conta volta para a lista desativada e sem nenhuma permissão.
+  Quem gerencia acessos marca depois só as permissões que também possui e
+  ativa a conta, então desarquivar nunca devolve acesso por conta própria.
+*/
+export async function desarquivarAdministrador(banco, idEstabelecimento, id, autorId) {
+  const alvoId = Number(id);
+  if (!Number.isInteger(alvoId) || alvoId <= 0) return null;
+  return executarTransacao(banco, async (conexao) => {
+    const [alvos] = await conexao.execute(`
+      SELECT id, usuario, nome
+      FROM administradores
+      WHERE id = ? AND id_estabelecimento = ? AND arquivado_em IS NOT NULL
+      FOR UPDATE
+    `, [alvoId, idEstabelecimento]);
+    const alvo = alvos[0];
+    if (!alvo) return null;
+    await conexao.execute(`
+      UPDATE administradores
+      SET arquivado_em = NULL, ativo = 0
+      WHERE id = ? AND id_estabelecimento = ?
+    `, [alvoId, idEstabelecimento]);
+    await conexao.execute(`
+      DELETE FROM administrador_permissoes
+      WHERE administrador_id = ? AND id_estabelecimento = ?
+    `, [alvoId, idEstabelecimento]);
+    await registrarAuditoria(conexao, idEstabelecimento, autorId, 'administrador.desarquivado', 'administrador', alvoId, {
+      usuario: alvo.usuario,
+      nome: alvo.nome
+    });
+    return { id: alvoId, arquivado: false };
+  });
+}
+
+/*
+  Exclusão definitiva. As chaves estrangeiras apagam sessões e permissões e
+  deixam vazio o autor nos registros antigos (auditoria, pagamentos, comandas).
+  Não dá para desfazer; a auditoria guarda quem foi apagado e por quem.
+*/
+export async function excluirAdministrador(banco, idEstabelecimento, id, autorId) {
+  const alvoId = Number(id);
+  if (!Number.isInteger(alvoId) || alvoId <= 0) return null;
+  if (alvoId === Number(autorId)) throw erroDominio('Você não pode apagar a própria conta.', 403);
+  return executarTransacao(banco, async (conexao) => {
+    const [alvos] = await conexao.execute(`
+      SELECT id, usuario, email, nome, arquivado_em
+      FROM administradores
+      WHERE id = ? AND id_estabelecimento = ?
+      FOR UPDATE
+    `, [alvoId, idEstabelecimento]);
+    const alvo = alvos[0];
+    if (!alvo) return null;
+    await conexao.execute(`
+      DELETE FROM administradores
+      WHERE id = ? AND id_estabelecimento = ?
+    `, [alvoId, idEstabelecimento]);
+    await registrarAuditoria(conexao, idEstabelecimento, autorId, 'administrador.excluido', 'administrador', alvoId, {
+      usuario: alvo.usuario,
+      email: alvo.email,
+      nome: alvo.nome,
+      estavaArquivado: Boolean(alvo.arquivado_em)
+    });
+    return { id: alvoId, excluido: true };
   });
 }
 
@@ -2026,8 +2235,12 @@ export async function listarAuditoriaAdmin(banco, idEstabelecimento, { acao = nu
       : (linha.detalhes_json ?? null);
     return {
       id: Number(linha.id),
-      administrador: linha.administrador_nome ?? 'Sistema',
-      usuario: linha.administrador_usuario ?? detalhes?.usuario ?? '',
+      // Conta apagada deixa o autor vazio: o usuário gravado no registro
+      // separa esse caso de uma ação do próprio sistema.
+      administrador: linha.administrador_nome ?? (detalhes?.usuario ? 'Conta apagada' : 'Sistema'),
+      // O usuário gravado no momento da ação vale mais que o atual, que muda
+      // quando a conta é arquivada.
+      usuario: detalhes?.usuario ?? linha.administrador_usuario ?? '',
       acao: linha.acao,
       entidade: linha.entidade,
       entidadeId: linha.entidade_id ?? '',
@@ -2950,7 +3163,12 @@ export async function listarDadosPublicos(banco, idEstabelecimento) {
   return { ...catalogo, promocoes, configuracao };
 }
 
-export async function listarDadosAdmin(banco, idEstabelecimento) {
+export async function listarDadosAdmin(banco, idEstabelecimento, permissoes = null) {
+  /* Cada parte do painel só é consultada e devolvida para quem pode usá-la.
+    Sem lista de permissões (uso interno), devolve o painel completo. */
+  const pode = (...chaves) => permissoes === null || chaves.some((chave) => permissoes.includes(chave));
+  const podeGerenciarEquipe = pode('funcionarios.gerenciar');
+  const podeVerSalao = pode('mesas.operar', 'mesas.fechar', 'mesas.cadastrar');
   const [
     catalogo,
     promocoes,
@@ -2963,16 +3181,24 @@ export async function listarDadosAdmin(banco, idEstabelecimento) {
     auditoria,
     acessoGarcom
   ] = await Promise.all([
-    listarCatalogo(banco, idEstabelecimento, { administrativo: true }),
-    listarPromocoes(banco, idEstabelecimento),
-    listarFuncionarios(banco, idEstabelecimento),
-    listarMesas(banco, idEstabelecimento),
-    listarComandas(banco, idEstabelecimento),
-    listarPedidos(banco, idEstabelecimento),
-    buscarConfiguracao(banco, idEstabelecimento),
-    listarAdministradores(banco, idEstabelecimento),
-    listarAuditoriaAdmin(banco, idEstabelecimento, { acao: ACAO_LOGIN_ADMIN }),
-    obterTokenAcessoGarcom(banco, idEstabelecimento)
+    pode('produtos.editar', 'mesas.operar')
+      ? listarCatalogo(banco, idEstabelecimento, { administrativo: true })
+      : { categorias: [], adicionais: [], produtos: [] },
+    pode('produtos.editar') ? listarPromocoes(banco, idEstabelecimento) : [],
+    pode('funcionarios.gerenciar', 'relatorios.visualizar', 'mesas.operar')
+      ? listarFuncionarios(banco, idEstabelecimento)
+      : [],
+    podeVerSalao ? listarMesas(banco, idEstabelecimento) : [],
+    podeVerSalao ? listarComandas(banco, idEstabelecimento) : [],
+    pode('pedidos.visualizar', 'relatorios.visualizar') ? listarPedidos(banco, idEstabelecimento) : [],
+    pode('personalizacao.editar', 'delivery.editar', 'configuracoes.editar')
+      ? buscarConfiguracao(banco, idEstabelecimento)
+      : buscarConfiguracaoPublica(banco, idEstabelecimento),
+    podeGerenciarEquipe ? listarAdministradoresComPermissoes(banco, idEstabelecimento) : [],
+    podeGerenciarEquipe
+      ? listarAuditoriaAdmin(banco, idEstabelecimento, { acao: ACAO_LOGIN_ADMIN })
+      : [],
+    podeGerenciarEquipe ? obterTokenAcessoGarcom(banco, idEstabelecimento) : ''
   ]);
   return {
     ...catalogo,

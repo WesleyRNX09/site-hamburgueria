@@ -29,6 +29,7 @@ import {
   alternarStatusFuncionario,
   alternarStatusAdministrador,
   alterarSenhaAdministrador,
+  arquivarAdministrador,
   atualizarQuantidadeItemComandaAdmin,
   cancelarComandaAdmin,
   atualizarStatusPedido,
@@ -41,9 +42,11 @@ import {
   criarAdministrador,
   criarMesa,
   criarPedidoDelivery,
+  desarquivarAdministrador,
   enviarComanda,
   enviarComandaAdmin,
   estornarPagamento,
+  excluirAdministrador,
   excluirFuncionario,
   excluirPromocao,
   finalizarComandaAdmin,
@@ -60,9 +63,18 @@ import {
   rotacionarTokenAcessoGarcom,
   salvarConfiguracao,
   salvarFuncionario,
+  salvarPermissoesAdministrador,
   salvarPromocao,
   tokenAcessoGarcomValido
 } from './operations.js';
+import {
+  exigirAlgumaPermissao,
+  exigirPermissao,
+  limitarConfiguracaoPorPermissao,
+  listarPermissoesAdministrador,
+  permissaoDaRotaAdmin,
+  PERMISSOES_CONFIGURACAO
+} from './permissoes.js';
 import {
   criarHashToken,
   criarJwt,
@@ -274,6 +286,9 @@ async function obterAdministrador(banco, requisicao, jwtSecret) {
   `, [criarHashToken(token), idEstabelecimento, identidade.idUsuario]);
   const sessao = linhas[0];
   if (!sessao) throw new ErroHttp(401, 'Sua sessão expirou. Entre novamente.');
+  // Autorização: as permissões são lidas a cada requisição, depois da sessão
+  // validada, então uma alteração vale na hora.
+  const permissoes = await listarPermissoesAdministrador(banco, idEstabelecimento, Number(sessao.id));
   return {
     id: Number(sessao.id),
     nome: sessao.nome,
@@ -281,7 +296,8 @@ async function obterAdministrador(banco, requisicao, jwtSecret) {
     email: sessao.email,
     idEstabelecimento: Number(sessao.id_estabelecimento),
     perfil: 'Administrador',
-    superadministrador: false
+    superadministrador: false,
+    permissoes
   };
 }
 
@@ -790,9 +806,18 @@ async function rotaAdmin({
 
   if (!caminho.startsWith('/api/admin/')) return false;
   const administradorAutenticado = await obterAdministrador(banco, requisicao, jwtSecret);
+  // Portão único de autorização: cada rota declara sua permissão em
+  // server/permissoes.js, e rota não declarada não é atendida.
+  const permissaoExigida = permissaoDaRotaAdmin(requisicao.method, caminho);
+  if (permissaoExigida === undefined) return false;
+  exigirPermissao(administradorAutenticado, permissaoExigida);
 
   if (requisicao.method === 'GET' && caminho === '/api/admin/dados') {
-    responderJson(resposta, 200, await listarDadosAdmin(banco, idEstabelecimento));
+    responderJson(resposta, 200, await listarDadosAdmin(
+      banco,
+      idEstabelecimento,
+      administradorAutenticado.permissoes
+    ));
     return true;
   }
 
@@ -875,6 +900,57 @@ async function rotaAdmin({
     );
     if (!administrador) throw new ErroHttp(404, 'Administrador não encontrado.');
     responderJson(resposta, 200, { administrador });
+    return true;
+  }
+  const permissoesAdministrador = caminho.match(/^\/api\/admin\/administradores\/(\d+)\/permissoes$/);
+  if (requisicao.method === 'PUT' && permissoesAdministrador) {
+    // Do corpo só a lista `permissoes` é lida; qualquer outro campo é ignorado.
+    const dados = await lerJson(requisicao);
+    const administrador = await salvarPermissoesAdministrador(
+      banco,
+      idEstabelecimento,
+      permissoesAdministrador[1],
+      { permissoes: dados?.permissoes },
+      administradorAutenticado
+    );
+    if (!administrador) throw new ErroHttp(404, 'Administrador não encontrado.');
+    responderJson(resposta, 200, { administrador });
+    return true;
+  }
+  const arquivamentoAdministrador = caminho.match(/^\/api\/admin\/administradores\/(\d+)\/arquivar$/);
+  if (requisicao.method === 'POST' && arquivamentoAdministrador) {
+    const administrador = await arquivarAdministrador(
+      banco,
+      idEstabelecimento,
+      arquivamentoAdministrador[1],
+      administradorAutenticado.id
+    );
+    if (!administrador) throw new ErroHttp(404, 'Administrador não encontrado.');
+    responderJson(resposta, 200, { administrador });
+    return true;
+  }
+  const desarquivamentoAdministrador = caminho.match(/^\/api\/admin\/administradores\/(\d+)\/desarquivar$/);
+  if (requisicao.method === 'POST' && desarquivamentoAdministrador) {
+    const administrador = await desarquivarAdministrador(
+      banco,
+      idEstabelecimento,
+      desarquivamentoAdministrador[1],
+      administradorAutenticado.id
+    );
+    if (!administrador) throw new ErroHttp(404, 'Administrador arquivado não encontrado.');
+    responderJson(resposta, 200, { administrador });
+    return true;
+  }
+  const exclusaoAdministrador = caminho.match(/^\/api\/admin\/administradores\/(\d+)$/);
+  if (requisicao.method === 'DELETE' && exclusaoAdministrador) {
+    const administrador = await excluirAdministrador(
+      banco,
+      idEstabelecimento,
+      exclusaoAdministrador[1],
+      administradorAutenticado.id
+    );
+    if (!administrador) throw new ErroHttp(404, 'Administrador não encontrado.');
+    responderJson(resposta, 200, { sucesso: true });
     return true;
   }
   if (requisicao.method === 'PUT' && caminho === '/api/admin/senha') {
@@ -1261,8 +1337,13 @@ async function rotaAdmin({
   }
 
   if (requisicao.method === 'PUT' && caminho === '/api/admin/configuracao') {
+    exigirAlgumaPermissao(administradorAutenticado, PERMISSOES_CONFIGURACAO);
     const anterior = await buscarConfiguracao(banco, idEstabelecimento);
-    const dados = await lerJson(requisicao);
+    const dados = limitarConfiguracaoPorPermissao(
+      anterior,
+      await lerJson(requisicao),
+      administradorAutenticado.permissoes
+    );
     let logo;
     let banner;
     let novaLogo = null;

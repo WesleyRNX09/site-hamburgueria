@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 
-import { RequireAdmin, RequireGarcom, RequireSuperadmin } from './components/RouteGuards';
+import { PERMISSOES_TELAS_ADMIN } from './components/AdminLayout/menu';
+import { RequireAdmin, RequireGarcom, RequirePermissao, RequireSuperadmin } from './components/RouteGuards';
 import { SuperadminProvider } from './context/SuperadminProvider';
 import Home from './pages/home';
 import FinalizarPedidos from './pages/telas/finalizarPedido';
@@ -61,19 +62,34 @@ function App() {
 
       <Route path="/admin/login" element={<LoginAdmin />} />
       <Route element={<RequireAdmin />}>
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
-        <Route path="/admin/pedidos" element={<AdminPedidos />} />
-        <Route path="/admin/pedidos/:id" element={<DetalhesPedido />} />
-        <Route path="/admin/cardapio" element={<CardapioAdmin />} />
-        <Route path="/admin/categorias" element={<CategoriasAdmin />} />
-        <Route path="/admin/cardapio/novo" element={<FormularioProduto />} />
-        <Route path="/admin/cardapio/:id/editar" element={<FormularioProduto />} />
-        <Route path="/admin/adicionais" element={<AdicionaisAdmin />} />
-        <Route path="/admin/promocoes" element={<PromocoesAdmin />} />
-        <Route path="/admin/funcionarios" element={<FuncionariosAdmin />} />
-        <Route path="/admin/mesas" element={<MesasAdmin />} />
-        <Route path="/admin/relatorios" element={<RelatoriosAdmin />} />
-        <Route path="/admin/configuracoes" element={<ConfiguracoesAdmin />} />
+        <Route element={<RequirePermissao algumaDe={PERMISSOES_TELAS_ADMIN.dashboard} />}>
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        </Route>
+        <Route element={<RequirePermissao algumaDe={PERMISSOES_TELAS_ADMIN.pedidos} />}>
+          <Route path="/admin/pedidos" element={<AdminPedidos />} />
+          <Route path="/admin/pedidos/:id" element={<DetalhesPedido />} />
+        </Route>
+        <Route element={<RequirePermissao algumaDe={PERMISSOES_TELAS_ADMIN.cardapio} />}>
+          <Route path="/admin/cardapio" element={<CardapioAdmin />} />
+          <Route path="/admin/categorias" element={<CategoriasAdmin />} />
+          <Route path="/admin/cardapio/novo" element={<FormularioProduto />} />
+          <Route path="/admin/cardapio/:id/editar" element={<FormularioProduto />} />
+          <Route path="/admin/adicionais" element={<AdicionaisAdmin />} />
+          <Route path="/admin/promocoes" element={<PromocoesAdmin />} />
+        </Route>
+        <Route element={<RequirePermissao algumaDe={PERMISSOES_TELAS_ADMIN.funcionarios} />}>
+          <Route path="/admin/funcionarios" element={<FuncionariosAdmin />} />
+        </Route>
+        <Route element={<RequirePermissao algumaDe={PERMISSOES_TELAS_ADMIN.mesas} />}>
+          <Route path="/admin/mesas" element={<MesasAdmin />} />
+        </Route>
+        <Route element={<RequirePermissao algumaDe={PERMISSOES_TELAS_ADMIN.relatorios} />}>
+          <Route path="/admin/relatorios" element={<RelatoriosAdmin />} />
+        </Route>
+        <Route element={<RequirePermissao algumaDe={PERMISSOES_TELAS_ADMIN.configuracoes} />}>
+          <Route path="/admin/configuracoes" element={<ConfiguracoesAdmin />} />
+        </Route>
+        {/* Aberta a todo administrador: a troca da própria senha mora aqui. */}
         <Route path="/admin/acessos" element={<AcessosAdmin />} />
       </Route>
 

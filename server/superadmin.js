@@ -1,4 +1,5 @@
 import { executarTransacao } from './database.js';
+import { concederPermissoesPadrao } from './permissoes.js';
 import { criarHashSenha, verificarSenha } from './security.js';
 
 const PLANOS = new Set(['basico', 'profissional', 'premium']);
@@ -288,11 +289,13 @@ export async function criarEstabelecimentoGerencial(banco, dados, superadministr
     ]);
     const id = Number(resultado.insertId);
     await salvarConfiguracaoVisual(conexao, id, estabelecimento);
-    await conexao.execute(`
+    const [administradorCriado] = await conexao.execute(`
       INSERT INTO administradores
         (id_estabelecimento, usuario, email, nome, senha_hash, ativo)
       VALUES (?, ?, ?, ?, ?, 1)
     `, [id, administrador.usuario, administrador.email, administrador.nome, administrador.senhaHash]);
+    // O primeiro administrador nasce com o conjunto completo do painel.
+    await concederPermissoesPadrao(conexao, id, administradorCriado.insertId);
     await registrarAuditoria(conexao, superadministradorId, id, 'estabelecimento.criado', {
       slug: estabelecimento.slug,
       plano: estabelecimento.plano,

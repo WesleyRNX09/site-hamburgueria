@@ -64,6 +64,10 @@ CREATE TABLE IF NOT EXISTS configuracoes_estabelecimento (
   email VARCHAR(160),
   endereco VARCHAR(255),
   horario_funcionamento TEXT,
+  -- Grade semanal: [{ "dia": 0-6, "aberto": bool, "abre": "HH:MM", "fecha": "HH:MM" }].
+  horarios_json TEXT NULL,
+  -- 1 = o servidor decide aberta/fechada pelo relógio; 0 = vale loja_aberta.
+  funcionamento_automatico TINYINT(1) NOT NULL DEFAULT 0,
   instagram_url VARCHAR(500),
   facebook_url VARCHAR(500),
   loja_aberta TINYINT(1) NOT NULL DEFAULT 0,
@@ -136,10 +140,29 @@ CREATE TABLE IF NOT EXISTS administradores (
   nome VARCHAR(160) NOT NULL,
   senha_hash VARCHAR(255) NOT NULL,
   ativo TINYINT(1) NOT NULL DEFAULT 1,
+  -- Preenchida quando a conta é arquivada; NULL significa conta em uso.
+  arquivado_em DATETIME NULL,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_administradores_estabelecimento_usuario (id_estabelecimento, usuario),
   UNIQUE KEY uk_administradores_estabelecimento_email (id_estabelecimento, email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Permissões de cada administrador no painel do estabelecimento. A lista de
+-- valores acompanha src/utils/permissoes.js.
+CREATE TABLE IF NOT EXISTS administrador_permissoes (
+  id_estabelecimento BIGINT UNSIGNED NOT NULL,
+  administrador_id BIGINT UNSIGNED NOT NULL,
+  permissao VARCHAR(40) NOT NULL,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (administrador_id, permissao),
+  CONSTRAINT chk_administrador_permissoes_permissao
+    CHECK (permissao IN (
+      'dashboard.visualizar', 'pedidos.visualizar', 'pedidos.alterar_status',
+      'pedidos.gerenciar_pagamento', 'mesas.operar', 'mesas.fechar', 'mesas.cadastrar',
+      'produtos.editar', 'relatorios.visualizar', 'funcionarios.gerenciar',
+      'personalizacao.editar', 'delivery.editar', 'configuracoes.editar'
+    ))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS sessoes_admin (

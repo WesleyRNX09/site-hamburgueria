@@ -236,6 +236,26 @@ export function alterarStatusAdministradorApi(id, ativo) {
   return requisicao(`/api/admin/administradores/${id}/status`, { metodo: 'PATCH', dados: { ativo }, autenticacao: 'admin' });
 }
 
+export function atualizarPermissoesAdministradorApi(id, permissoes) {
+  return requisicao(`/api/admin/administradores/${id}/permissoes`, {
+    metodo: 'PUT',
+    dados: { permissoes },
+    autenticacao: 'admin'
+  });
+}
+
+export function arquivarAdministradorApi(id) {
+  return requisicao(`/api/admin/administradores/${id}/arquivar`, { metodo: 'POST', autenticacao: 'admin' });
+}
+
+export function desarquivarAdministradorApi(id) {
+  return requisicao(`/api/admin/administradores/${id}/desarquivar`, { metodo: 'POST', autenticacao: 'admin' });
+}
+
+export function excluirAdministradorApi(id) {
+  return requisicao(`/api/admin/administradores/${id}`, { metodo: 'DELETE', autenticacao: 'admin' });
+}
+
 export function alterarSenhaAdministradorApi(dados) {
   return requisicao('/api/admin/senha', { metodo: 'PUT', dados, autenticacao: 'admin' });
 }

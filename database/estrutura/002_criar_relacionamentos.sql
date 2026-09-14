@@ -23,6 +23,13 @@ ALTER TABLE administradores
   FOREIGN KEY (id_estabelecimento)
   REFERENCES estabelecimentos(id_estabelecimento) ON DELETE RESTRICT;
 
+ALTER TABLE administrador_permissoes
+  ADD CONSTRAINT fk_administrador_permissoes_estabelecimento
+    FOREIGN KEY (id_estabelecimento)
+    REFERENCES estabelecimentos(id_estabelecimento) ON DELETE RESTRICT,
+  ADD CONSTRAINT fk_administrador_permissoes_administrador
+  FOREIGN KEY (administrador_id) REFERENCES administradores(id) ON DELETE CASCADE;
+
 ALTER TABLE sessoes_admin
   ADD CONSTRAINT fk_sessoes_admin_estabelecimento
     FOREIGN KEY (id_estabelecimento)

@@ -1,15 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  BarChart3,
   BellRing,
-  ClipboardList,
-  LayoutDashboard,
   LogOut,
   Menu,
-  Package,
-  Settings,
-  ShieldCheck,
-  Users,
   UtensilsCrossed,
   X
 } from 'lucide-react';
@@ -18,26 +11,16 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/appContext';
 import LogoEstabelecimento from '../LogoEstabelecimento';
 import styles from './index.module.css';
-
-const itensMenu = [
-  { nome: 'Dashboard', rota: '/admin/dashboard', icone: LayoutDashboard },
-  { nome: 'Pedidos', rota: '/admin/pedidos', icone: ClipboardList },
-  // Categorias, adicionais e promoções moram dentro da tela de cardápio,
-  // para encurtar o menu.
-  { nome: 'Cardápio', rota: '/admin/cardapio', icone: Package },
-  { nome: 'Mesas / Comandas', rota: '/admin/mesas', icone: UtensilsCrossed },
-  { nome: 'Funcionários', rota: '/admin/funcionarios', icone: Users },
-  { nome: 'Acessos', rota: '/admin/acessos', icone: ShieldCheck },
-  { nome: 'Relatórios', rota: '/admin/relatorios', icone: BarChart3 },
-  { nome: 'Configurações', rota: '/admin/configuracoes', icone: Settings }
-];
+import { itensMenuAdmin } from './menu';
 
 function AdminLayout({ titulo, subtitulo, acao, children }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [layoutCompacto, setLayoutCompacto] = useState(() => window.matchMedia('(max-width: 900px)').matches);
   const botaoMenuRef = useRef(null);
   const fecharMenuRef = useRef(null);
-  const { adminSessao, sairAdmin, configuracao, alertaNovoPedido, dispensarAlertaNovoPedido } = useApp();
+  const { adminSessao, sairAdmin, configuracao, alertaNovoPedido, dispensarAlertaNovoPedido, temPermissao } = useApp();
+  // O menu mostra só as telas que as permissões recebidas do servidor abrem.
+  const itensMenu = itensMenuAdmin.filter((item) => !item.permissoes || temPermissao(...item.permissoes));
   const navigate = useNavigate();
 
   async function sair() {

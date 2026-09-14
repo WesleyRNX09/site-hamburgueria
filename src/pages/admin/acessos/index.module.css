@@ -1,0 +1,84 @@
+/* Editor de permissões de um administrador, agrupado por área. */
+.atalhosPermissoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.atalhosPermissoes > span {
+  color: var(--cor-texto-fraco);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.gradeAreas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.areaPermissoes {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  margin: 0;
+  border: 1px solid var(--cor-borda);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.areaPermissoes legend {
+  padding: 0 6px;
+  color: var(--cor-texto);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.opcaoPermissao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--cor-borda-forte);
+  border-radius: 10px;
+  background: var(--cor-campo);
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.opcaoPermissao input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: var(--cor-principal);
+  cursor: inherit;
+}
+
+.opcaoPermissao > span {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.opcaoPermissao strong { color: var(--cor-texto-suave); font-size: 12px; }
+.opcaoPermissao small { overflow-wrap: anywhere; color: var(--cor-texto-fraco); font-size: 11px; }
+
+.opcaoPermissao:has(input:checked) {
+  border-color: var(--cor-principal);
+  background: rgb(from var(--cor-principal) r g b / 0.07);
+}
+
+/* Permissão que a própria conta não possui: não pode ser concedida nem retirada. */
+.opcaoBloqueada { cursor: not-allowed; opacity: 0.6; }
+.opcaoBloqueada svg { flex: 0 0 auto; color: var(--cor-texto-fraco); }
+
+@media (max-width: 760px) {
+  .gradeAreas { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .atalhosPermissoes > button { width: 100%; }
+}

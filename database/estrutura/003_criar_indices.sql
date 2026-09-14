@@ -9,6 +9,7 @@ CREATE INDEX idx_auditoria_superadmin_usuario ON auditoria_superadmin (superadmi
 CREATE INDEX idx_auditoria_superadmin_estabelecimento ON auditoria_superadmin (id_estabelecimento);
 CREATE INDEX idx_auditoria_superadmin_criado_em ON auditoria_superadmin (criado_em);
 CREATE INDEX idx_administradores_estabelecimento ON administradores (id_estabelecimento);
+CREATE INDEX idx_administrador_permissoes_estabelecimento ON administrador_permissoes (id_estabelecimento);
 CREATE INDEX idx_sessoes_admin_estabelecimento ON sessoes_admin (id_estabelecimento);
 CREATE INDEX idx_auditoria_admin_estabelecimento ON auditoria_admin (id_estabelecimento);
 CREATE INDEX idx_categorias_estabelecimento ON categorias (id_estabelecimento);
@@ -37,6 +38,7 @@ CREATE INDEX idx_promocoes_ativo ON promocoes (ativo);
 CREATE INDEX idx_funcionarios_ativo ON funcionarios (ativo);
 CREATE INDEX idx_sessoes_garcom_expiracao ON sessoes_garcom (expira_em);
 CREATE INDEX idx_pedidos_criado_em ON pedidos (criado_em);
+CREATE INDEX idx_pedidos_estabelecimento_criado_em ON pedidos (id_estabelecimento, criado_em);
 CREATE INDEX idx_pedidos_status ON pedidos (status);
 CREATE INDEX idx_pedidos_token_acompanhamento ON pedidos (token_acompanhamento_hash);
 CREATE INDEX idx_pagamentos_status ON pagamentos (status);

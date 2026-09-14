@@ -72,4 +72,16 @@ A pasta `legado/` preserva o histórico anterior e não é executada pelo runner
   o sistema abrir e fechar a loja pelo relógio em vez de depender do botão
   manual. Colunas novas com DEFAULT: enquanto o administrador não ligar o modo
   automático, `loja_aberta` continua mandando.
+- `016_indice_pedidos_por_periodo.sql`: cria o índice composto
+  `idx_pedidos_estabelecimento_criado_em (id_estabelecimento, criado_em)` para
+  os indicadores do dashboard por período. Só adiciona índice: nenhuma linha é
+  alterada e os índices anteriores continuam existindo.
+- `017_permissoes_administradores.sql`: cria `administrador_permissoes`
+  (permissões do painel por administrador, dentro do estabelecimento, com a
+  lista fixa em CHECK) e concede as 13 permissões a todo administrador já
+  cadastrado, preservando exatamente o acesso atual. Não altera nem remove
+  linhas existentes.
+- `018_arquivar_administradores.sql`: acrescenta `arquivado_em` a
+  `administradores`, para arquivar uma conta sem apagar a linha e sem perder o
+  autor no histórico. Coluna opcional: nenhuma conta existente é arquivada.
 - `legado/20260824_operacao_comercial.sql`: histórico anterior, fora do runner.

@@ -14,9 +14,16 @@ import {
   listarDadosAdmin,
   listarDadosGarcom
 } from './operations.js';
+import {
+  CAMPOS_CONFIGURACAO_POR_PERMISSAO,
+  exigirPermissao,
+  permissaoDaRotaAdmin,
+  PERMISSOES_CONFIGURACAO
+} from './permissoes.js';
 import { aguardarServidor, fecharServidor } from './runtime.js';
 import { criarJwt } from './security.js';
 import { resolverEstabelecimento } from './tenant.js';
+import { CHAVES_PERMISSOES, PERMISSOES_PADRAO_ADMINISTRADOR } from '../src/utils/permissoes.js';
 
 const pastaProjeto = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const segredoJwt = 'segredo-exclusivo-da-etapa-11-com-mais-de-32-bytes';
@@ -126,6 +133,7 @@ test('impede sessões de administrador e garçom de atravessarem o host do tenan
       if (sql.includes('DELETE FROM sessoes_admin') || sql.includes('DELETE FROM sessoes_garcom')) {
         return [{ affectedRows: 0 }];
       }
+      if (sql.includes('FROM administrador_permissoes ap')) return [[{ permissao: 'pedidos.visualizar' }]];
       if (sql.includes('FROM sessoes_admin s')) {
         consultasDeSessao += 1;
         const idEstabelecimento = Number(parametros[1]);
@@ -362,6 +370,9 @@ test('ticket médio e mais vendidos ficam presos ao tenant da sessão, mesmo com
         return [[tenants.get(parametros[0])].filter(Boolean)];
       }
       if (sql.includes('DELETE FROM sessoes_admin')) return [{ affectedRows: 0 }];
+      if (sql.includes('FROM administrador_permissoes ap')) {
+        return [[{ permissao: 'relatorios.visualizar' }]];
+      }
       if (sql.includes('FROM sessoes_admin s')) {
         const idEstabelecimento = Number(parametros[1]);
         const idUsuario = Number(parametros[2]);
@@ -438,6 +449,305 @@ test('ticket médio e mais vendidos ficam presos ao tenant da sessão, mesmo com
   } finally {
     await Promise.all([fecharServidor(servidorA), fecharServidor(servidorB)]);
   }
+});
+
+/*
+  Rotas do painel lidas do próprio app.js, a partir do portão de autenticação:
+  uma rota nova que esqueça de declarar permissão aparece aqui.
+*/
+async function rotasAdministrativasDoApp() {
+  const codigo = await readFile(resolve(pastaProjeto, 'server/app.js'), 'utf8');
+  const inicio = codigo.indexOf("if (!caminho.startsWith('/api/admin/')) return false;");
+  const fim = codigo.indexOf('async function rotaGarcom(');
+  assert.ok(inicio > 0 && fim > inicio, 'Trecho das rotas administrativas não encontrado em app.js.');
+  const trecho = codigo.slice(inicio, fim);
+  const padroes = new Map(
+    [...trecho.matchAll(/const (\w+) = caminho\.match\(\/\^(.+?)\$\/\);/g)]
+      .map(([, nome, fonte]) => [nome, fonte])
+  );
+  const exemplo = (fonte) => fonte
+    .replaceAll('\\/', '/')
+    .replaceAll('(\\d+)', '7')
+    .replaceAll('([^/]+)', 'PED0007');
+  return [
+    ...[...trecho.matchAll(/requisicao\.method === '(\w+)' && caminho === '([^']+)'/g)]
+      .map(([, metodo, caminho]) => ({ metodo, caminho })),
+    ...[...trecho.matchAll(/requisicao\.method === '(\w+)' && (\w+)\)/g)]
+      .filter(([, , nome]) => padroes.has(nome))
+      .map(([, metodo, nome]) => ({ metodo, caminho: exemplo(padroes.get(nome)) }))
+  ];
+}
+
+/* Banco simulado do painel: contas por id, com loja, e permissões por conta. */
+function bancoPainelComPermissoes({ contas, permissoes }) {
+  const tenants = new Map([
+    ['loja-a', linhaTenant(11, 'loja-a')],
+    ['loja-b', linhaTenant(22, 'loja-b')]
+  ]);
+  const consultas = [];
+  function responder(sql, parametros = []) {
+    consultas.push({ sql, parametros });
+    if (sql.includes('FROM estabelecimentos AS e')) return [[tenants.get(parametros[0])].filter(Boolean)];
+    if (sql.includes('DELETE FROM sessoes_admin') && sql.includes('expira_em')) return [{ affectedRows: 0 }];
+    if (sql.includes('FROM sessoes_admin s')) {
+      const tenant = Number(parametros[1]);
+      const id = Number(parametros[2]);
+      const conta = contas.get(id);
+      return [[conta && conta.tenant === tenant && !conta.arquivado ? {
+        id,
+        nome: conta.nome,
+        usuario: conta.usuario,
+        email: `${conta.usuario}@teste.local`,
+        id_estabelecimento: tenant
+      } : null].filter(Boolean)];
+    }
+    if (sql.includes('FROM administrador_permissoes')) {
+      const tenant = Number(parametros[0]);
+      const id = Number(parametros[1]);
+      return [contas.get(id)?.tenant === tenant
+        ? (permissoes.get(id) ?? []).map((permissao) => ({ permissao }))
+        : []];
+    }
+    if (sql.includes('FROM administradores') && sql.includes('FOR UPDATE')) {
+      const id = Number(parametros[0]);
+      const tenant = Number(parametros[1]);
+      const conta = contas.get(id);
+      const encontrada = conta && conta.tenant === tenant
+        && !(sql.includes('arquivado_em IS NOT NULL') && !conta.arquivado)
+        && !(sql.includes('arquivado_em IS NULL') && conta.arquivado);
+      return [[encontrada ? {
+        id,
+        usuario: conta.usuario,
+        email: `${conta.usuario}@teste.local`,
+        nome: conta.nome,
+        arquivado_em: conta.arquivado ? new Date() : null
+      } : null].filter(Boolean)];
+    }
+    if (/^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql)) return [{ affectedRows: 1 }];
+    throw new Error(`Consulta inesperada no teste: ${sql}`);
+  }
+  const conexao = {
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    release() {},
+    async execute(sql, parametros) { return responder(sql, parametros); }
+  };
+  return {
+    consultas,
+    banco: {
+      async execute(sql, parametros) { return responder(sql, parametros); },
+      async getConnection() { return conexao; }
+    }
+  };
+}
+
+async function comServidoresDoPainel(banco, executar) {
+  const criar = (slug) => criarServidor({
+    banco,
+    pastaUploads: resolve(pastaProjeto, 'server/uploads'),
+    tenantDesenvolvimento: slug,
+    jwtSecret: segredoJwt
+  });
+  const servidorA = criar('loja-a');
+  const servidorB = criar('loja-b');
+  try {
+    await Promise.all([aguardarServidor(servidorA, 0), aguardarServidor(servidorB, 0)]);
+    const urlDe = (servidor) => `http://127.0.0.1:${servidor.address().port}`;
+    await executar({ urlA: urlDe(servidorA), urlB: urlDe(servidorB) });
+  } finally {
+    await Promise.all([fecharServidor(servidorA), fecharServidor(servidorB)]);
+  }
+}
+
+function tokenAdministrador(idUsuario, idEstabelecimento) {
+  return criarJwt({ idUsuario, perfil: 'administrador', idEstabelecimento, duracaoMs: 60_000, segredo: segredoJwt });
+}
+
+async function chamarPainel(url, metodo, caminho, token, dados) {
+  const comCorpo = metodo !== 'GET';
+  const resposta = await fetch(`${url}${caminho}`, {
+    method: metodo,
+    headers: { Authorization: `Bearer ${token}`, ...(comCorpo ? { 'Content-Type': 'application/json' } : {}) },
+    body: comCorpo ? JSON.stringify(dados ?? {}) : undefined
+  });
+  return { status: resposta.status, corpo: await resposta.json() };
+}
+
+// Consultas que o portão faz antes de decidir: host, sessão e permissões.
+function consultasAlemDoPortao(consultas) {
+  return consultas.filter(({ sql }) => !(
+    sql.includes('FROM estabelecimentos AS e')
+    || (sql.includes('DELETE FROM sessoes_admin') && sql.includes('expira_em'))
+    || sql.includes('FROM sessoes_admin s')
+    || sql.includes('FROM administrador_permissoes ap')
+  ));
+}
+
+test('toda rota administrativa declara a permissão exigida e o conjunto completo abre todas', async () => {
+  const rotas = await rotasAdministrativasDoApp();
+  assert.ok(rotas.length >= 41, `Esperava ao menos 41 rotas administrativas, encontrei ${rotas.length}.`);
+  const administradorCompleto = { permissoes: [...PERMISSOES_PADRAO_ADMINISTRADOR] };
+  for (const { metodo, caminho } of rotas) {
+    const permissao = permissaoDaRotaAdmin(metodo, caminho);
+    assert.notEqual(permissao, undefined, `${metodo} ${caminho} não declara permissão em server/permissoes.js.`);
+    assert.ok(permissao === null || CHAVES_PERMISSOES.includes(permissao), `${metodo} ${caminho} exige permissão fora do catálogo.`);
+    // Quem existia antes da matriz recebeu o conjunto completo: continua passando em todas.
+    assert.doesNotThrow(() => exigirPermissao(administradorCompleto, permissao), `${metodo} ${caminho}`);
+  }
+  assert.equal(permissaoDaRotaAdmin('GET', '/api/admin/rota-inexistente'), undefined);
+});
+
+test('sem a permissão exigida, cada rota administrativa responde 403 antes de qualquer consulta de negócio', async () => {
+  const rotas = (await rotasAdministrativasDoApp())
+    .map((rota) => ({ ...rota, permissao: permissaoDaRotaAdmin(rota.metodo, rota.caminho) }))
+    .filter(({ permissao }) => permissao);
+  assert.ok(rotas.length >= 38, `Esperava ao menos 38 rotas com permissão, encontrei ${rotas.length}.`);
+  const contas = new Map([[101, { tenant: 11, nome: 'Admin A', usuario: 'admin-a' }]]);
+  const permissoes = new Map();
+  const { banco, consultas } = bancoPainelComPermissoes({ contas, permissoes });
+
+  await comServidoresDoPainel(banco, async ({ urlA }) => {
+    const token = tokenAdministrador(101, 11);
+    for (const { metodo, caminho, permissao } of rotas) {
+      // Todas as outras permissões, menos exatamente a exigida, e chamada direta à API.
+      permissoes.set(101, CHAVES_PERMISSOES.filter((chave) => chave !== permissao));
+      consultas.length = 0;
+      const resposta = await chamarPainel(urlA, metodo, caminho, token, {
+        permissoes: [...CHAVES_PERMISSOES],
+        ativo: true,
+        nome: 'Tentativa direta'
+      });
+      assert.equal(resposta.status, 403, `${metodo} ${caminho} sem ${permissao}`);
+      assert.deepEqual(consultasAlemDoPortao(consultas), [], `${metodo} ${caminho} consultou dados sem ${permissao}`);
+    }
+
+    // Configuração: sem nenhum dos três grupos, nada é lido nem gravado.
+    permissoes.set(101, CHAVES_PERMISSOES.filter((chave) => !PERMISSOES_CONFIGURACAO.includes(chave)));
+    consultas.length = 0;
+    const configuracao = await chamarPainel(urlA, 'PUT', '/api/admin/configuracao', token, { nomeLoja: 'Invadida' });
+    assert.equal(configuracao.status, 403);
+    assert.deepEqual(consultasAlemDoPortao(consultas), []);
+  });
+});
+
+test('administrador da loja A não altera, arquiva, desarquiva nem apaga administrador da loja B', async () => {
+  const contas = new Map([
+    [101, { tenant: 11, nome: 'Admin A', usuario: 'admin-a' }],
+    [201, { tenant: 22, nome: 'Admin B', usuario: 'admin-b' }],
+    [202, { tenant: 22, nome: 'Arquivada B', usuario: 'arquivada-b', arquivado: true }]
+  ]);
+  const permissoes = new Map([[101, [...CHAVES_PERMISSOES]], [201, [...CHAVES_PERMISSOES]]]);
+  const { banco, consultas } = bancoPainelComPermissoes({ contas, permissoes });
+  const escritas = () => consultas.filter(({ sql }) => (
+    /^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql)
+    && !(sql.includes('DELETE FROM sessoes_admin') && sql.includes('expira_em'))
+  ));
+
+  await comServidoresDoPainel(banco, async ({ urlA, urlB }) => {
+    const tokenA = tokenAdministrador(101, 11);
+    const tentativas = [
+      ['PUT', '/api/admin/administradores/201/permissoes', { permissoes: [] }],
+      ['PATCH', '/api/admin/administradores/201/status', { ativo: false }],
+      ['POST', '/api/admin/administradores/201/arquivar'],
+      ['POST', '/api/admin/administradores/202/desarquivar'],
+      ['DELETE', '/api/admin/administradores/201']
+    ];
+    for (const [metodo, caminho, dados] of tentativas) {
+      consultas.length = 0;
+      const resposta = await chamarPainel(urlA, metodo, caminho, tokenA, dados);
+      assert.equal(resposta.status, 404, `${metodo} ${caminho}`);
+      assert.deepEqual(escritas(), [], `${metodo} ${caminho} escreveu em conta de outro estabelecimento`);
+      const buscas = consultas.filter(({ sql }) => sql.includes('FROM administradores'));
+      assert.ok(buscas.length > 0 && buscas.every(({ parametros }) => parametros.includes(11)), `${metodo} ${caminho}`);
+    }
+
+    // A sessão da loja A no host da loja B é recusada antes de consultar sessão ou contas.
+    consultas.length = 0;
+    const cruzada = await chamarPainel(urlB, 'PUT', '/api/admin/administradores/201/permissoes', tokenA, { permissoes: [] });
+    assert.equal(cruzada.status, 403);
+    assert.equal(consultas.some(({ sql }) => sql.includes('FROM sessoes_admin s') || sql.includes('FROM administradores')), false);
+  });
+});
+
+test('administrador não eleva as próprias permissões, não concede o que não possui e não arquiva nem apaga a própria conta', async () => {
+  const contas = new Map([
+    [101, { tenant: 11, nome: 'Gerente', usuario: 'gerente' }],
+    [102, { tenant: 11, nome: 'Atendente', usuario: 'atendente' }]
+  ]);
+  const permissoes = new Map([
+    [101, ['funcionarios.gerenciar', 'pedidos.visualizar']],
+    [102, ['pedidos.visualizar']]
+  ]);
+  const { banco, consultas } = bancoPainelComPermissoes({ contas, permissoes });
+  const escreveuEmContas = () => consultas.some(({ sql }) => (
+    /INSERT INTO administrador_permissoes|DELETE FROM administrador_permissoes|UPDATE administradores|DELETE FROM administradores/.test(sql)
+  ));
+
+  await comServidoresDoPainel(banco, async ({ urlA }) => {
+    const token = tokenAdministrador(101, 11);
+    const casos = [
+      ['PUT', '/api/admin/administradores/101/permissoes', { permissoes: [...CHAVES_PERMISSOES] }, /próprias permissões/],
+      ['PUT', '/api/admin/administradores/102/permissoes', { permissoes: ['pedidos.visualizar', 'relatorios.visualizar'] }, /não possui/],
+      ['POST', '/api/admin/administradores/101/arquivar', undefined, /própria conta/],
+      ['DELETE', '/api/admin/administradores/101', undefined, /própria conta/],
+      ['GET', '/api/admin/dashboard/indicadores?periodo=30dias', undefined, /permissão/]
+    ];
+    for (const [metodo, caminho, dados, mensagem] of casos) {
+      consultas.length = 0;
+      const resposta = await chamarPainel(urlA, metodo, caminho, token, dados);
+      assert.equal(resposta.status, 403, `${metodo} ${caminho}`);
+      assert.match(resposta.corpo.erro, mensagem);
+      assert.equal(escreveuEmContas(), false, `${metodo} ${caminho} gravou algo`);
+    }
+
+    // Dentro do que possui, a edição de outra conta é aceita.
+    const permitida = await chamarPainel(urlA, 'PUT', '/api/admin/administradores/102/permissoes', token, { permissoes: [] });
+    assert.equal(permitida.status, 200);
+    assert.deepEqual(permitida.corpo.administrador, { id: 102, permissoes: [] });
+  });
+});
+
+test('a migration 017 dá a todo administrador existente o conjunto completo, igual ao catálogo', async () => {
+  const listaPermissoes = (texto) => [...texto.matchAll(/'([a-z]+\.[a-z_]+)'/g)].map(([, chave]) => chave);
+  const ordenar = (lista) => [...lista].sort();
+  const listaDoCheck = (sql, origem) => {
+    const bloco = sql.match(/CHECK \(permissao IN \(([\s\S]*?)\)\)/);
+    assert.ok(bloco, `CHECK de permissões não encontrado em ${origem}`);
+    return listaPermissoes(bloco[1]);
+  };
+
+  assert.deepEqual(ordenar(PERMISSOES_PADRAO_ADMINISTRADOR), ordenar(CHAVES_PERMISSOES));
+  for (const caminho of [
+    'database/migrations/017_permissoes_administradores.sql',
+    'database/CRIAR_db.sql',
+    'database/estrutura/001_criar_tabelas.sql'
+  ]) {
+    const sql = await readFile(resolve(pastaProjeto, caminho), 'utf8');
+    assert.deepEqual(ordenar(listaDoCheck(sql, caminho)), ordenar(CHAVES_PERMISSOES), caminho);
+  }
+
+  const migration = await readFile(resolve(pastaProjeto, 'database/migrations/017_permissoes_administradores.sql'), 'utf8');
+  const concessao = migration.match(/INSERT INTO administrador_permissoes[\s\S]*?;/);
+  assert.ok(concessao, 'A migration 017 precisa conceder permissões aos administradores existentes.');
+  assert.match(concessao[0], /SELECT a\.id_estabelecimento, a\.id, padrao\.permissao\s+FROM administradores a/);
+  assert.match(concessao[0], /WHERE a\.id_estabelecimento IS NOT NULL/);
+  const padrao = concessao[0].match(/CROSS JOIN \(([\s\S]*?)\) padrao/);
+  assert.deepEqual(ordenar(listaPermissoes(padrao[1])), ordenar(PERMISSOES_PADRAO_ADMINISTRADOR));
+  // Só acrescenta: não altera nem remove nada que já existia.
+  assert.equal(/^\s*(UPDATE|DELETE|DROP|TRUNCATE)\b/im.test(migration), false);
+});
+
+test('cada campo da configuração pertence a exatamente um grupo de permissão', async () => {
+  const codigo = await readFile(resolve(pastaProjeto, 'server/operations.js'), 'utf8');
+  const inicio = codigo.indexOf('export async function salvarConfiguracao(');
+  const fim = codigo.indexOf('function mapearPromocao(', inicio);
+  assert.ok(inicio > 0 && fim > inicio, 'salvarConfiguracao não encontrada em operations.js.');
+  const lidos = new Set([...codigo.slice(inicio, fim).matchAll(/dados\.(\w+)/g)].map(([, campo]) => campo));
+  const porGrupo = Object.values(CAMPOS_CONFIGURACAO_POR_PERMISSAO).flat();
+  assert.equal(new Set(porGrupo).size, porGrupo.length, 'Um campo aparece em mais de um grupo.');
+  assert.deepEqual([...lidos].sort(), [...porGrupo].sort());
+  assert.deepEqual([...PERMISSOES_CONFIGURACAO].sort(), ['configuracoes.editar', 'delivery.editar', 'personalizacao.editar']);
 });
 
 test('configuração de conexão muda somente por variáveis do ambiente', async () => {
