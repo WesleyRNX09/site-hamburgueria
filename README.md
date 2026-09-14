@@ -198,6 +198,7 @@ contatos, atendimento, pagamentos, entrega e textos legais — e não aceita um
 - `POST /api/admin/login`
 - `GET|DELETE /api/admin/sessao`
 - `GET /api/admin/dados`
+- `GET /api/admin/dashboard/indicadores?periodo=hoje|7dias|30dias|mes` (ticket médio e produtos mais vendidos do tenant da sessão)
 - CRUD de `/api/admin/produtos`, `/api/admin/adicionais`, `/api/admin/promocoes` e `/api/admin/funcionarios`
 - criação/edição/status de `/api/admin/categorias`
 - criação/status de `/api/admin/administradores` e `PUT /api/admin/senha`

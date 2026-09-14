@@ -35,6 +35,7 @@ import {
   buscarConfiguracao,
   buscarConfiguracaoPublica,
   buscarFuncionarioPorSenha,
+  buscarIndicadoresDashboard,
   buscarPromocao,
   confirmarPagamento,
   criarAdministrador,
@@ -717,6 +718,7 @@ async function rotaAdmin({
   requisicao,
   resposta,
   caminho,
+  url,
   limitadorAdmin,
   jwtSecret
 }) {
@@ -791,6 +793,17 @@ async function rotaAdmin({
 
   if (requisicao.method === 'GET' && caminho === '/api/admin/dados') {
     responderJson(resposta, 200, await listarDadosAdmin(banco, idEstabelecimento));
+    return true;
+  }
+
+  // O estabelecimento vem só da sessão validada acima; da query string sai
+  // apenas o período, validado contra a lista fixa.
+  if (requisicao.method === 'GET' && caminho === '/api/admin/dashboard/indicadores') {
+    responderJson(resposta, 200, await buscarIndicadoresDashboard(
+      banco,
+      idEstabelecimento,
+      url.searchParams.get('periodo')
+    ));
     return true;
   }
 

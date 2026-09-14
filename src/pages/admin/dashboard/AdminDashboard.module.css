@@ -1,0 +1,46 @@
+/* Seletor de período dos indicadores novos (ticket médio e mais vendidos). */
+.seletorPeriodo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  margin-bottom: 14px;
+}
+
+.seletorPeriodo > span {
+  color: var(--cor-texto-fraco);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Carregando, vazio e erro ocupam o lugar do valor sem parecer um R$ 0,00. */
+.estadoIndicador .valorPendente {
+  color: var(--cor-texto-fraco);
+  font-size: 18px;
+}
+
+.estadoIndicador small { overflow-wrap: anywhere; }
+
+.erroIndicadores {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.erroIndicadores > p { flex: 1 1 240px; margin: 0; }
+
+.valorProduto {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  .seletorPeriodo { align-items: stretch; flex-direction: column; }
+  .opcoesPeriodo { width: 100%; }
+  .opcoesPeriodo > button { flex: 1 1 0; padding: 0 8px; }
+  .erroIndicadores > button { width: 100%; }
+}

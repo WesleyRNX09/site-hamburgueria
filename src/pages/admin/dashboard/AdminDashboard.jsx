@@ -1,21 +1,38 @@
+import { useEffect, useState } from 'react';
 import {
   Bike,
   ClipboardList,
   DollarSign,
   Eye,
-  ShoppingBag
+  Receipt,
+  ShoppingBag,
+  Trophy
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
 import { useApp } from '../../../context/appContext';
+import { buscarIndicadoresDashboardApi } from '../../../services/api';
 import styles from '../shared.module.css';
+import estilos from './AdminDashboard.module.css';
 
 // Delivery encerrado não entra na contagem de pedidos em andamento.
 const STATUS_DELIVERY_ENCERRADO = ['Entregue', 'Cancelado'];
 
+// Período dos indicadores novos. Os cards que já existiam não usam o seletor.
+const PERIODOS = [
+  { valor: 'hoje', rotulo: 'Hoje', descricao: 'hoje' },
+  { valor: '7dias', rotulo: '7 dias', descricao: 'nos últimos 7 dias' },
+  { valor: '30dias', rotulo: '30 dias', descricao: 'nos últimos 30 dias' },
+  { valor: 'mes', rotulo: 'Este mês', descricao: 'neste mês' }
+];
+
 function moeda(valor) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
+}
+
+function quantidadePedidos(quantidade) {
+  return `${quantidade.toLocaleString('pt-BR')} ${quantidade === 1 ? 'pedido' : 'pedidos'}`;
 }
 
 function classeStatus(status) {
@@ -30,6 +47,35 @@ function classeStatus(status) {
 function AdminDashboard() {
   const { pedidos, comandas, pedidosNovos } = useApp();
   const navigate = useNavigate();
+  const [periodo, setPeriodo] = useState('30dias');
+  const [tentativa, setTentativa] = useState(0);
+  const [indicadores, setIndicadores] = useState(null);
+
+  /* Recarrega ao trocar o período, ao pedir nova tentativa e a cada
+    atualização da lista de pedidos do painel. Uma falha numa atualização
+    silenciosa mantém os números já exibidos. */
+  useEffect(() => {
+    let ativo = true;
+    buscarIndicadoresDashboardApi(periodo)
+      .then((dados) => {
+        if (ativo) setIndicadores({ periodo, tentativa, dados, erro: '' });
+      })
+      .catch((falha) => {
+        if (!ativo) return;
+        setIndicadores((atual) => (atual?.periodo === periodo && atual.tentativa === tentativa && atual.dados
+          ? atual
+          : { periodo, tentativa, dados: null, erro: falha.message }));
+      });
+    return () => { ativo = false; };
+  }, [periodo, tentativa, pedidos]);
+
+  const carregandoIndicadores = !indicadores
+    || indicadores.periodo !== periodo
+    || indicadores.tentativa !== tentativa;
+  const erroIndicadores = carregandoIndicadores ? '' : indicadores.erro;
+  const ticketMedio = carregandoIndicadores ? null : indicadores.dados?.ticketMedio;
+  const maisVendidos = carregandoIndicadores ? [] : (indicadores.dados?.produtosMaisVendidos ?? []);
+  const descricaoPeriodo = PERIODOS.find((item) => item.valor === periodo)?.descricao ?? '';
 
   const receitaConfirmada = pedidos
     .filter((pedido) => pedido.pagamentoStatus === 'Pago')
@@ -42,10 +88,68 @@ function AdminDashboard() {
 
   return (
     <AdminLayout titulo="Dashboard ADM" subtitulo="Visão operacional dos registros mais recentes carregados pelo sistema.">
-      <section className={`${styles.gradeMetricas} ${styles.gradeMetricasTres}`}>
+      <div className={estilos.seletorPeriodo}>
+        <span id="rotulo-periodo-indicadores">Período do ticket médio e dos mais vendidos</span>
+        <div className={`${styles.abas} ${estilos.opcoesPeriodo}`} role="group" aria-labelledby="rotulo-periodo-indicadores">
+          {PERIODOS.map((item) => (
+            <button
+              type="button"
+              key={item.valor}
+              aria-pressed={periodo === item.valor}
+              className={`${styles.aba} ${periodo === item.valor ? styles.abaAtiva : ''}`}
+              onClick={() => setPeriodo(item.valor)}
+            >
+              {item.rotulo}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <section className={styles.gradeMetricas}>
         <div className={styles.metrica}><div className={styles.metricaIcone}><DollarSign size={24} /></div><div><span>Receita confirmada</span><strong>{moeda(receitaConfirmada)}</strong><small>Somente pagamentos marcados como pagos</small></div></div>
         <div className={styles.metrica}><div className={styles.metricaIcone}><ClipboardList size={23} /></div><div><span>Comandas abertas</span><strong>{comandasAbertas}</strong><small>Mesas em atendimento no momento</small></div></div>
         <div className={styles.metrica}><div className={styles.metricaIcone}><Bike size={23} /></div><div><span>Pedidos do delivery</span><strong>{deliveryEmAndamento}</strong><small>Entregas em andamento</small></div></div>
+        <div className={styles.metrica} aria-live="polite" aria-busy={carregandoIndicadores}>
+          <div className={styles.metricaIcone}><Receipt size={23} /></div>
+          <div className={estilos.estadoIndicador}>
+            <span>Ticket médio</span>
+            {carregandoIndicadores ? (
+              <><strong className={estilos.valorPendente}>Calculando…</strong><small>Pedidos pagos {descricaoPeriodo}</small></>
+            ) : erroIndicadores ? (
+              <><strong className={estilos.valorPendente}>Indisponível</strong><small>Não foi possível calcular agora.</small></>
+            ) : !ticketMedio || ticketMedio.pedidos === 0 ? (
+              <><strong className={estilos.valorPendente}>Sem pedidos</strong><small>Nenhum pedido pago {descricaoPeriodo}</small></>
+            ) : (
+              <><strong>{moeda(ticketMedio.valor)}</strong><small>base: {quantidadePedidos(ticketMedio.pedidos)} {descricaoPeriodo}</small></>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className={styles.card} aria-busy={carregandoIndicadores}>
+        <div className={styles.topoCard}>
+          <div><h2>Produtos mais vendidos</h2><p>Os 5 com maior quantidade em pedidos pagos {descricaoPeriodo}</p></div>
+        </div>
+        {carregandoIndicadores ? (
+          <div className={styles.vazio} role="status"><p>Carregando os produtos mais vendidos…</p></div>
+        ) : erroIndicadores ? (
+          <div className={estilos.erroIndicadores} role="alert">
+            <p className={styles.erro}>{erroIndicadores}</p>
+            <button type="button" className={styles.botaoSecundario} onClick={() => setTentativa((atual) => atual + 1)}>Tentar novamente</button>
+          </div>
+        ) : maisVendidos.length === 0 ? (
+          <div className={styles.vazio}><Trophy size={32} /><h3>Nenhuma venda no período</h3><p>Os produtos de pedidos pagos aparecerão aqui.</p></div>
+        ) : (
+          <ol className={styles.ranking} aria-label="Produtos mais vendidos">
+            {maisVendidos.map((produto) => (
+              <li className={styles.rankingItem} key={`${produto.produtoId ?? 'sem-cadastro'}-${produto.nome}`}>
+                <span>{produto.posicao}</span>
+                <div><strong>{produto.nome}</strong><small>{produto.quantidade.toLocaleString('pt-BR')} {produto.quantidade === 1 ? 'unidade vendida' : 'unidades vendidas'}</small></div>
+                <div className={estilos.valorProduto}><b>{moeda(produto.receita)}</b><small>receita</small></div>
+              </li>
+            ))}
+          </ol>
+        )}
       </section>
 
       <section className={`${styles.card} ${styles.secaoSeparada}`}>

@@ -209,6 +209,13 @@ export function buscarDadosAdmin() {
   return requisicao('/api/admin/dados', { autenticacao: 'admin' });
 }
 
+export function buscarIndicadoresDashboardApi(periodo) {
+  return requisicao(
+    `/api/admin/dashboard/indicadores?periodo=${encodeURIComponent(periodo)}`,
+    { autenticacao: 'admin' }
+  );
+}
+
 export function criarCategoriaApi(dados) {
   return requisicao('/api/admin/categorias', { metodo: 'POST', dados, autenticacao: 'admin' });
 }

@@ -14,8 +14,10 @@ import { checksumMigration, checksumsCompativeisMigration } from './db/migration
 import { removerImagemLocal, salvarImagemDataUrl } from './imageStore.js';
 import {
   buscarConfiguracaoPublica,
+  buscarIndicadoresDashboard,
   buscarItensValidados,
   calcularTotaisPedido,
+  intervaloIndicadores,
   salvarConfiguracao
 } from './operations.js';
 import { aguardarServidor, fecharServidor } from './runtime.js';
@@ -920,6 +922,54 @@ test('API bloqueia JWT de perfil ou estabelecimento diferente antes de consultar
   } finally {
     await fecharServidor(servidor);
   }
+});
+
+test('recorta o período dos indicadores no fuso da loja e trata período sem vendas', async () => {
+  // 13/09/2026, 23h30 em São Paulo: no UTC já é dia 14.
+  const agora = new Date('2026-09-14T02:30:00.000Z');
+  const inicio = (periodo) => intervaloIndicadores(periodo, agora).inicio.toISOString();
+  assert.equal(inicio('hoje'), '2026-09-13T03:00:00.000Z');
+  assert.equal(inicio('7dias'), '2026-09-07T03:00:00.000Z');
+  assert.equal(inicio('30dias'), '2026-08-15T03:00:00.000Z');
+  assert.equal(inicio('mes'), '2026-09-01T03:00:00.000Z');
+  assert.equal(intervaloIndicadores('mes', agora).fim.toISOString(), '2026-09-14T03:00:00.000Z');
+  assert.throws(() => intervaloIndicadores('1ano', agora), (erro) => erro.status === 400);
+
+  const consultas = [];
+  const bancoSemVendas = {
+    async execute(sql, parametros) {
+      consultas.push({ sql, parametros });
+      return [sql.includes('FROM pedido_itens itp') ? [] : [{ pedidos: 0, receita_centavos: 0 }]];
+    }
+  };
+  const vazio = await buscarIndicadoresDashboard(bancoSemVendas, 7, undefined, agora);
+  assert.equal(vazio.periodo, '30dias');
+  assert.deepEqual(vazio.ticketMedio, { valor: null, receita: 0, pedidos: 0 });
+  assert.deepEqual(vazio.produtosMaisVendidos, []);
+  assert.equal(consultas.length, 2);
+  for (const { sql, parametros } of consultas) {
+    assert.deepEqual(parametros, [7, '2026-08-15 03:00:00', '2026-09-14 03:00:00']);
+    assert.match(sql, /p\.status <> 'Cancelado'/);
+    assert.match(sql, /pg\.status = 'Pago'/);
+    assert.equal(/SELECT\s+\*/i.test(sql), false);
+  }
+
+  const bancoComVendas = {
+    async execute(sql) {
+      return [sql.includes('FROM pedido_itens itp')
+        ? [
+          { produto_id: 3, nome_produto: 'X-Bacon', quantidade: 4, receita_centavos: 12000 },
+          { produto_id: null, nome_produto: 'Produto excluído do cardápio', quantidade: 4, receita_centavos: 8000 }
+        ]
+        : [{ pedidos: 3, receita_centavos: 10000 }]];
+    }
+  };
+  const comVendas = await buscarIndicadoresDashboard(bancoComVendas, 7, 'hoje', agora);
+  assert.deepEqual(comVendas.ticketMedio, { valor: 33.33, receita: 100, pedidos: 3 });
+  assert.deepEqual(comVendas.produtosMaisVendidos, [
+    { posicao: 1, produtoId: 3, nome: 'X-Bacon', quantidade: 4, receita: 120 },
+    { posicao: 2, produtoId: null, nome: 'Produto excluído do cardápio', quantidade: 4, receita: 80 }
+  ]);
 });
 
 function conexaoCatalogo({ promocao = null } = {}) {
@@ -2410,6 +2460,94 @@ if (!executarIntegracao) {
     assert.equal(canceladoPago.status, 200);
     assert.equal(canceladoPago.corpo.pedido.pagamentoStatus, 'Estornado');
     assert.equal(canceladoPago.corpo.pedido.pagamentoEstornadoPor, administrador.nome);
+  });
+
+  test('indicadores do dashboard batem com a receita confirmada e ignoram o tenant B', async (t) => {
+    const [[tenantA]] = await banco.execute(
+      "SELECT id_estabelecimento FROM estabelecimentos WHERE slug = 'estabelecimento-padrao'"
+    );
+    const [[tenantB]] = await banco.execute(
+      "SELECT id_estabelecimento FROM estabelecimentos WHERE slug = 'loja-b'"
+    );
+    const idTenantA = Number(tenantA.id_estabelecimento);
+    const idTenantB = Number(tenantB.id_estabelecimento);
+
+    // Venda grande e paga em B, que não pode contaminar os números de A.
+    const [[produtoB]] = await banco.execute(
+      'SELECT id, nome FROM produtos WHERE id_estabelecimento = ? LIMIT 1',
+      [idTenantB]
+    );
+    const [pedidoB] = await banco.execute(`
+      INSERT INTO pedidos
+        (id_estabelecimento, origem, cliente, telefone, status, pagamento, taxa_entrega_centavos, total_centavos)
+      VALUES (?, 'retirada', 'Cliente B', '11900000000', 'Retirado', 'Dinheiro', 0, 999900)
+    `, [idTenantB]);
+    await banco.execute(`
+      INSERT INTO pedido_itens
+        (id_estabelecimento, pedido_id, produto_id, nome_produto, preco_unitario_centavos, quantidade)
+      VALUES (?, ?, ?, ?, 2500, 400)
+    `, [idTenantB, pedidoB.insertId, produtoB.id, produtoB.nome]);
+    await banco.execute(`
+      INSERT INTO pagamentos
+        (id_estabelecimento, pedido_id, forma, status, valor_centavos, pago_em)
+      VALUES (?, ?, 'Dinheiro', 'Pago', 999900, CURRENT_TIMESTAMP)
+    `, [idTenantB, pedidoB.insertId]);
+
+    // Garante ao menos um pedido pago em A dentro do período.
+    const pedidoA = await chamar('/api/pedidos', {
+      metodo: 'POST',
+      dados: dadosPedido({ modalidade: 'retirada', pagamento: 'Cartão na retirada', rua: '', numero: '', bairro: '' })
+    });
+    assert.equal(pedidoA.status, 201);
+    const confirmado = await chamar(
+      `/api/admin/pedidos/${encodeURIComponent(pedidoA.corpo.pedido.id)}/pagamento/confirmar`,
+      { metodo: 'POST', token: tokenAdmin }
+    );
+    assert.equal(confirmado.status, 200);
+
+    const resposta = await chamar(
+      `/api/admin/dashboard/indicadores?periodo=30dias&id_estabelecimento=${idTenantB}`,
+      { token: tokenAdmin }
+    );
+    assert.equal(resposta.status, 200);
+    const { ticketMedio, produtosMaisVendidos, inicio, fim } = resposta.corpo;
+    assert.ok(ticketMedio.pedidos >= 1);
+    assert.equal(produtosMaisVendidos.some((produto) => produto.nome === produtoB.nome), false);
+    assert.ok(produtosMaisVendidos.length <= 5);
+
+    // Consulta independente: último pagamento de cada pedido por tabela derivada.
+    const dataSql = (iso) => iso.slice(0, 19).replace('T', ' ');
+    const [[independente]] = await banco.execute(`
+      SELECT COUNT(p.id) AS pedidos, COALESCE(SUM(p.total_centavos), 0) AS receita_centavos
+      FROM pedidos p
+      INNER JOIN (
+        SELECT pedido_id, MAX(id) AS ultimo_id
+        FROM pagamentos
+        WHERE id_estabelecimento = ?
+        GROUP BY pedido_id
+      ) ultimo ON ultimo.pedido_id = p.id
+      INNER JOIN pagamentos pg ON pg.id = ultimo.ultimo_id
+      WHERE p.id_estabelecimento = ?
+        AND p.status <> 'Cancelado'
+        AND pg.status = 'Pago'
+        AND p.criado_em >= ? AND p.criado_em < ?
+    `, [idTenantA, idTenantA, dataSql(inicio), dataSql(fim)]);
+    const pedidosIndependente = Number(independente.pedidos);
+    const receitaIndependente = Number(independente.receita_centavos);
+
+    // A mesma regra do card "Receita confirmada", aplicada aos pedidos do painel.
+    const dados = await chamar('/api/admin/dados', { token: tokenAdmin });
+    const pagosNoPeriodo = dados.corpo.pedidos.filter((pedido) => pedido.pagamentoStatus === 'Pago'
+      && pedido.criadoEm >= inicio && pedido.criadoEm < fim);
+    const receitaCard = Math.round(pagosNoPeriodo.reduce((soma, pedido) => soma + pedido.total, 0) * 100);
+
+    assert.equal(ticketMedio.pedidos, pedidosIndependente);
+    assert.equal(Math.round(ticketMedio.receita * 100), receitaIndependente);
+    assert.equal(ticketMedio.pedidos, pagosNoPeriodo.length);
+    assert.equal(Math.round(ticketMedio.receita * 100), receitaCard);
+    assert.equal(ticketMedio.valor, Math.round(receitaIndependente / pedidosIndependente) / 100);
+    t.diagnostic(`API: ticket médio ${ticketMedio.valor} (receita ${ticketMedio.receita} ÷ ${ticketMedio.pedidos} pedidos)`);
+    t.diagnostic(`Independente: ${receitaIndependente / 100} ÷ ${pedidosIndependente} = ${(receitaIndependente / pedidosIndependente / 100).toFixed(4)}`);
   });
 
   test('admin cria acessos adicionais e o histórico lista somente logins', async () => {

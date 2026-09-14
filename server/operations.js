@@ -9,6 +9,7 @@ import {
   algumDiaAberto,
   erroNosHorarios,
   estaAbertoNoHorario,
+  FUSO_HORARIO_LOJA,
   normalizarHorarios,
   resumoHorarios
 } from '../src/utils/horarios.js';
@@ -2829,6 +2830,115 @@ export async function finalizarComandaAdmin(
       trocoCentavos: pagamento.trocoCentavos
     };
   });
+}
+
+/*
+  Indicadores do dashboard (ticket médio e produtos mais vendidos).
+
+  Vale a mesma regra do card "Receita confirmada": conta o pedido cujo
+  pagamento mais recente está 'Pago'. `status <> 'Cancelado'` só deixa
+  explícito o que o cancelamento já garante ao cancelar ou estornar a cobrança.
+
+  O período é recortado no fuso da loja e comparado com `criado_em`, que o
+  sistema grava e lê como UTC (o pool usa timezone 'Z'). As datas seguem como
+  parâmetros no formato DATETIME, nunca concatenadas no SQL.
+*/
+const PERIODOS_INDICADORES = new Set(['hoje', '7dias', '30dias', 'mes']);
+const PERIODO_INDICADORES_PADRAO = '30dias';
+const DIAS_ANTERIORES_PERIODO = { hoje: 0, '7dias': 6, '30dias': 29 };
+const LIMITE_PRODUTOS_MAIS_VENDIDOS = 5;
+
+const PEDIDOS_CONFIRMADOS_NO_PERIODO = `
+  INNER JOIN pagamentos pg
+    ON pg.id = (
+      SELECT MAX(pg2.id) FROM pagamentos pg2
+      WHERE pg2.pedido_id = p.id AND pg2.id_estabelecimento = p.id_estabelecimento
+    )
+    AND pg.id_estabelecimento = p.id_estabelecimento
+  WHERE p.id_estabelecimento = ?
+    AND p.criado_em >= ?
+    AND p.criado_em < ?
+    AND p.status <> 'Cancelado'
+    AND pg.status = 'Pago'
+`;
+
+function dataUtcMySql(data) {
+  return data.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+export function intervaloIndicadores(periodo, agora = new Date(), fuso = FUSO_HORARIO_LOJA) {
+  if (!PERIODOS_INDICADORES.has(periodo)) throw erroDominio('Período inválido para os indicadores.');
+  const partes = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: fuso,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23'
+    })
+      .formatToParts(agora)
+      .filter((parte) => parte.type !== 'literal')
+      .map((parte) => [parte.type, Number(parte.value)])
+  );
+  // Diferença entre o relógio da loja e o UTC neste instante.
+  const deslocamentoMs = Date.UTC(
+    partes.year, partes.month - 1, partes.day, partes.hour, partes.minute, partes.second
+  ) - Math.floor(agora.getTime() / 1000) * 1000;
+  const meiaNoiteDaLoja = (dia) => new Date(Date.UTC(partes.year, partes.month - 1, dia) - deslocamentoMs);
+  return {
+    inicio: meiaNoiteDaLoja(periodo === 'mes' ? 1 : partes.day - DIAS_ANTERIORES_PERIODO[periodo]),
+    fim: meiaNoiteDaLoja(partes.day + 1)
+  };
+}
+
+export async function buscarIndicadoresDashboard(banco, idEstabelecimento, periodoInformado, agora = new Date()) {
+  const periodo = texto(periodoInformado, 10) || PERIODO_INDICADORES_PADRAO;
+  const { inicio, fim } = intervaloIndicadores(periodo, agora);
+  const parametros = [idEstabelecimento, dataUtcMySql(inicio), dataUtcMySql(fim)];
+  const [[linhasTicket], [linhasProdutos]] = await Promise.all([
+    banco.execute(`
+      SELECT COUNT(p.id) AS pedidos, COALESCE(SUM(p.total_centavos), 0) AS receita_centavos
+      FROM pedidos p
+      ${PEDIDOS_CONFIRMADOS_NO_PERIODO}
+    `, parametros),
+    // Agrupa pelo nome gravado no pedido: produto excluído (produto_id NULL)
+    // continua aparecendo, e uma promoção não se mistura ao produto base.
+    banco.execute(`
+      SELECT itp.produto_id, itp.nome_produto,
+        SUM(itp.quantidade) AS quantidade,
+        SUM(itp.preco_unitario_centavos * itp.quantidade) AS receita_centavos
+      FROM pedido_itens itp
+      INNER JOIN pedidos p
+        ON p.id = itp.pedido_id
+        AND p.id_estabelecimento = itp.id_estabelecimento
+      ${PEDIDOS_CONFIRMADOS_NO_PERIODO}
+      GROUP BY itp.produto_id, itp.nome_produto
+      ORDER BY quantidade DESC, receita_centavos DESC, itp.nome_produto ASC
+      LIMIT ${LIMITE_PRODUTOS_MAIS_VENDIDOS}
+    `, parametros)
+  ]);
+  const pedidos = Number(linhasTicket[0]?.pedidos ?? 0);
+  const receitaCentavos = Number(linhasTicket[0]?.receita_centavos ?? 0);
+  return {
+    periodo,
+    inicio: inicio.toISOString(),
+    fim: fim.toISOString(),
+    ticketMedio: {
+      valor: pedidos > 0 ? Math.round(receitaCentavos / pedidos) / 100 : null,
+      receita: receitaCentavos / 100,
+      pedidos
+    },
+    produtosMaisVendidos: linhasProdutos.map((linha, indice) => ({
+      posicao: indice + 1,
+      produtoId: linha.produto_id == null ? null : Number(linha.produto_id),
+      nome: linha.nome_produto,
+      quantidade: Number(linha.quantidade),
+      receita: Number(linha.receita_centavos) / 100
+    }))
+  };
 }
 
 export async function listarDadosPublicos(banco, idEstabelecimento) {

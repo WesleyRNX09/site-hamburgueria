@@ -339,6 +339,107 @@ test('painel, relatórios e dados do garçom consultam somente o tenant autentic
   assert.deepEqual(consultaComandasGarcom.parametros, [11]);
 });
 
+test('ticket médio e mais vendidos ficam presos ao tenant da sessão, mesmo com parâmetros adulterados', async () => {
+  const tenants = new Map([
+    ['loja-a', linhaTenant(11, 'loja-a')],
+    ['loja-b', linhaTenant(22, 'loja-b')]
+  ]);
+  const administradorDoTenant = new Map([[11, 101], [22, 202]]);
+  const vendas = new Map([
+    [11, {
+      ticket: { pedidos: 2, receita_centavos: 5000 },
+      produtos: [{ produto_id: 1, nome_produto: 'X-Salada da Loja A', quantidade: 3, receita_centavos: 4200 }]
+    }],
+    [22, {
+      ticket: { pedidos: 4, receita_centavos: 99900 },
+      produtos: [{ produto_id: 9, nome_produto: 'Segredo da Loja B', quantidade: 40, receita_centavos: 99000 }]
+    }]
+  ]);
+  const consultasIndicadores = [];
+  const banco = {
+    async execute(sql, parametros = []) {
+      if (sql.includes('FROM estabelecimentos AS e')) {
+        return [[tenants.get(parametros[0])].filter(Boolean)];
+      }
+      if (sql.includes('DELETE FROM sessoes_admin')) return [{ affectedRows: 0 }];
+      if (sql.includes('FROM sessoes_admin s')) {
+        const idEstabelecimento = Number(parametros[1]);
+        const idUsuario = Number(parametros[2]);
+        return [[administradorDoTenant.get(idEstabelecimento) === idUsuario ? {
+          id: idUsuario,
+          nome: `Admin ${idEstabelecimento}`,
+          usuario: `admin-${idEstabelecimento}`,
+          email: `admin-${idEstabelecimento}@teste.local`,
+          id_estabelecimento: idEstabelecimento
+        } : null].filter(Boolean)];
+      }
+      if (sql.includes("pg.status = 'Pago'")) {
+        consultasIndicadores.push({ sql, parametros });
+        assert.equal(/SELECT\s+\*/i.test(sql), false);
+        const tenant = vendas.get(Number(parametros[0]));
+        return [sql.includes('FROM pedido_itens itp') ? tenant.produtos : [tenant.ticket]];
+      }
+      throw new Error(`Consulta inesperada no teste: ${sql}`);
+    }
+  };
+  const criarServidorTenant = (slug) => criarServidor({
+    banco,
+    pastaUploads: resolve(pastaProjeto, 'server/uploads'),
+    tenantDesenvolvimento: slug,
+    jwtSecret: segredoJwt
+  });
+  const servidorA = criarServidorTenant('loja-a');
+  const servidorB = criarServidorTenant('loja-b');
+  const token = (idUsuario, idEstabelecimento) => criarJwt({
+    idUsuario,
+    perfil: 'administrador',
+    idEstabelecimento,
+    duracaoMs: 60_000,
+    segredo: segredoJwt
+  });
+
+  try {
+    await Promise.all([aguardarServidor(servidorA, 0), aguardarServidor(servidorB, 0)]);
+    const urlA = `http://127.0.0.1:${servidorA.address().port}`;
+    const urlB = `http://127.0.0.1:${servidorB.address().port}`;
+    const chamar = async (url, consulta, tokenSessao) => {
+      const resposta = await fetch(`${url}/api/admin/dashboard/indicadores${consulta}`, {
+        headers: tokenSessao ? { Authorization: `Bearer ${tokenSessao}` } : {}
+      });
+      return { status: resposta.status, corpo: await resposta.json() };
+    };
+
+    // A tenta apontar para B pela query string: o servidor ignora e responde A.
+    const adulterada = await chamar(
+      urlA,
+      '?periodo=30dias&id_estabelecimento=22&idEstabelecimento=22&estabelecimento=22&tenant=loja-b',
+      token(101, 11)
+    );
+    assert.equal(adulterada.status, 200);
+    assert.deepEqual(adulterada.corpo.ticketMedio, { valor: 25, receita: 50, pedidos: 2 });
+    assert.deepEqual(adulterada.corpo.produtosMaisVendidos.map((produto) => produto.nome), ['X-Salada da Loja A']);
+    assert.equal(JSON.stringify(adulterada.corpo).includes('Segredo da Loja B'), false);
+    assert.equal(consultasIndicadores.length, 2);
+    assert.ok(consultasIndicadores.every(({ parametros }) => parametros[0] === 11));
+
+    // Sessão de A no host de B, sessão de B no host de A, usuário de B
+    // alegando ser de A, sem sessão e período fora da lista: nenhum consulta.
+    assert.equal((await chamar(urlB, '?periodo=30dias', token(101, 11))).status, 403);
+    assert.equal((await chamar(urlA, '?periodo=30dias', token(202, 22))).status, 403);
+    assert.equal((await chamar(urlA, '?periodo=30dias', token(202, 11))).status, 401);
+    assert.equal((await chamar(urlA, '?periodo=30dias')).status, 401);
+    assert.equal((await chamar(urlA, '?periodo=365dias', token(101, 11))).status, 400);
+    assert.equal(consultasIndicadores.length, 2);
+
+    const lojaB = await chamar(urlB, '?periodo=hoje', token(202, 22));
+    assert.equal(lojaB.status, 200);
+    assert.equal(lojaB.corpo.produtosMaisVendidos[0].nome, 'Segredo da Loja B');
+    assert.ok(consultasIndicadores.slice(2).every(({ parametros }) => parametros[0] === 22));
+  } finally {
+    await Promise.all([fecharServidor(servidorA), fecharServidor(servidorB)]);
+  }
+});
+
 test('configuração de conexão muda somente por variáveis do ambiente', async () => {
   const valores = {
     NODE_ENV: 'production',
