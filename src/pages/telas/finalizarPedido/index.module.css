@@ -410,7 +410,7 @@
 .campo input,
 .campo select {
   width: 100%;
-  height: 4rem;
+  height: 4.4rem;
 
   padding: 0 1.2rem;
 
@@ -1272,3 +1272,202 @@
 }
 
 .mensagemAviso strong { color: var(--cor-principal-texto); }
+
+/* =========================
+   ERROS POR CAMPO E DADOS LEMBRADOS
+========================= */
+
+.campo input[aria-invalid='true'],
+.campo select[aria-invalid='true'] {
+  border-color: var(--cor-erro);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cor-erro) 12%, transparent);
+}
+
+.erroCampo {
+  margin: 0;
+
+  color: var(--cor-erro-texto);
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.lembrarDados {
+  margin-top: 1.4rem;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 1.2rem;
+}
+
+.opcaoLembrar {
+  min-height: 4.4rem;
+
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+
+  color: var(--cor-texto);
+  font-size: 1.3rem;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.opcaoLembrar input {
+  width: 2.2rem;
+  height: 2.2rem;
+  margin: 0;
+  flex: 0 0 auto;
+
+  accent-color: var(--cor-principal);
+}
+
+.limparDados {
+  min-height: 4.4rem;
+  padding: 0 0.4rem;
+
+  color: var(--cor-principal-texto);
+  font-family: inherit;
+  font-size: 1.3rem;
+  font-weight: 700;
+  text-decoration: underline;
+
+  background: transparent;
+  border: 0;
+
+  cursor: pointer;
+}
+
+.lembrarDados small {
+  flex-basis: 100%;
+
+  color: var(--cor-texto-fraco);
+  font-size: 1.15rem;
+}
+
+.avisoDados {
+  flex-basis: 100%;
+
+  color: var(--cor-ok-texto);
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+/* Botão de recolher itens e barra fixa só existem no celular. */
+.alternarItens,
+.barraFinalizar {
+  display: none;
+}
+
+@media (max-width: 750px) {
+  .conteudoPagina {
+    padding-bottom: calc(10rem + env(safe-area-inset-bottom));
+  }
+
+  .botaoVoltar {
+    height: 4.4rem;
+  }
+
+  .alternarItens {
+    width: 100%;
+    margin-bottom: 0.4rem;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    color: var(--cor-principal-texto);
+    font-family: inherit;
+    font-weight: 700;
+
+    background: transparent;
+    border: 1px solid rgb(from var(--cor-principal-texto) r g b / 0.4);
+    border-radius: 0.8rem;
+
+    cursor: pointer;
+  }
+
+  .listaResumo:not(.listaResumoAberta) {
+    display: none;
+  }
+
+  .quantidadeResumo {
+    width: 13.2rem;
+    height: 4.4rem;
+    grid-template-columns: 4.4rem 1fr 4.4rem;
+  }
+
+  .pagina .quantidadeResumo button {
+    min-height: 4.4rem;
+  }
+
+  .pagina .removerItem {
+    width: 4.4rem;
+    height: 4.4rem;
+    min-width: 4.4rem;
+    min-height: 4.4rem;
+  }
+
+  .resumoPedido > .botaoFinalizar {
+    display: none;
+  }
+
+  .barraFinalizar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1100;
+
+    padding: 1rem 1.2rem calc(1rem + env(safe-area-inset-bottom));
+
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+
+    background: var(--cor-card);
+    border-top: 1px solid color-mix(in srgb, var(--cor-texto) 10%, transparent);
+    box-shadow: 0 -8px 24px var(--sombra-cartao);
+  }
+
+  .barraFinalizar > div {
+    flex: 0 0 auto;
+    display: grid;
+  }
+
+  .barraFinalizar span {
+    color: var(--cor-texto-medio);
+    font-size: 1.2rem;
+    font-weight: 600;
+  }
+
+  .barraFinalizar strong {
+    color: var(--cor-texto);
+    font-size: 1.9rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .barraFinalizar button {
+    flex: 1;
+    min-height: 4.8rem;
+
+    color: var(--cor-sobre-principal);
+    font-family: inherit;
+    font-size: 1.5rem;
+    font-weight: 800;
+
+    background-color: var(--cor-principal);
+    border: 0;
+    border-radius: 0.9rem;
+
+    cursor: pointer;
+  }
+
+  .barraFinalizar button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}

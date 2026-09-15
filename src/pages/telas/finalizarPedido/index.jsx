@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import LogoEstabelecimento from '../../../components/LogoEstabelecimento';
 
 import { useApp } from '../../../context/appContext';
+import { apagarDadosCliente, lerDadosCliente, salvarDadosCliente } from '../../../utils/dadosCliente';
 import { usarPlaceholderProduto } from '../../../utils/productImage';
 import styles from './index.module.css';
 
@@ -19,6 +20,27 @@ function formatarTempoArea(area) {
     : `${area.tempoEstimadoMin}–${area.tempoEstimadoMax} min`;
 }
 
+const CAMPOS_CLIENTE = ['nome', 'telefone', 'rua', 'numero', 'bairro', 'complemento', 'referencia'];
+
+function camposCliente(dados) {
+  return Object.fromEntries(CAMPOS_CLIENTE.map((campo) => [campo, dados?.[campo] ?? '']));
+}
+
+// Na ordem da tela: o foco vai para o primeiro campo com erro.
+const CAMPOS_VALIDADOS = [
+  ['nome', 'nomeCliente'],
+  ['telefone', 'telefoneCliente'],
+  ['rua', 'ruaCliente'],
+  ['numero', 'numeroCliente'],
+  ['bairro', 'bairroCliente']
+];
+
+const TELEFONE_INCOMPLETO = 'Telefone incompleto: informe DDD e número.';
+
+function telefoneValido(valor) {
+  return /^\d{10,11}$/.test(valor.replace(/\D/g, ''));
+}
+
 function FinalizarPedidos() {
   const navigate = useNavigate();
 
@@ -29,21 +51,19 @@ function FinalizarPedidos() {
   const [trocoPara, setTrocoPara] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [pixCopiado, setPixCopiado] = useState(false);
-  const [areaEntregaId, setAreaEntregaId] = useState('');
+  // Dados guardados neste aparelho num pedido anterior, se houver.
+  const [dadosLembrados] = useState(lerDadosCliente);
+  const [areaEntregaId, setAreaEntregaId] = useState(() => dadosLembrados?.areaEntregaId ?? '');
+  const [lembrarDados, setLembrarDados] = useState(true);
+  const [temDadosSalvos, setTemDadosSalvos] = useState(() => Boolean(dadosLembrados));
+  const [avisoDados, setAvisoDados] = useState('');
+  const [errosCampos, setErrosCampos] = useState({});
+  const [itensVisiveis, setItensVisiveis] = useState(false);
   const erroRef = useRef(null);
   const validacaoInicialRef = useRef(false);
   const chaveTentativa = useRef(null);
   if (chaveTentativa.current == null) chaveTentativa.current = criarChavePedido();
-  const [dadosCliente, setDadosCliente] = useState({
-    nome: '',
-    telefone: '',
-    email: '',
-    rua: '',
-    numero: '',
-    bairro: '',
-    complemento: '',
-    referencia: ''
-  });
+  const [dadosCliente, setDadosCliente] = useState(() => camposCliente(dadosLembrados));
   const [erro, setErro] = useState('');
   const {
     carrinho: itens,
@@ -110,8 +130,10 @@ function FinalizarPedidos() {
     taxa única. O valor exibido é só prévia: quem calcula é o servidor. */
   const areasEntrega = configuracao.areasEntrega ?? [];
   const entregaPorArea = configuracao.entregaPorArea === true;
+  // Com uma única área ativa, ela já vem escolhida.
+  const areaEscolhidaId = areaEntregaId || (areasEntrega.length === 1 ? String(areasEntrega[0].id) : '');
   const areaSelecionada = entregaPorArea
-    ? areasEntrega.find((area) => String(area.id) === areaEntregaId)
+    ? areasEntrega.find((area) => String(area.id) === areaEscolhidaId)
     : undefined;
   const semAreaDisponivel = !retirada && entregaPorArea && areasEntrega.length === 0;
   const taxaDefinida = retirada || !entregaPorArea || Boolean(areaSelecionada);
@@ -137,15 +159,58 @@ function FinalizarPedidos() {
   const pagamentoSelecionado = formasDisponiveis.includes(formaPagamento)
     ? formaPagamento
     : (formasDisponiveis[0] ?? '');
+  const bloqueado = enviando || itens.length === 0 || !lojaDisponivel || formasDisponiveis.length === 0;
+  const quantidadeItens = itens.reduce((soma, item) => soma + item.quantidade, 0);
 
   function alterarCampo(campo, valor) {
     setDadosCliente((atuais) => ({ ...atuais, [campo]: valor }));
+    setErrosCampos((atuais) => (atuais[campo] ? { ...atuais, [campo]: '' } : atuais));
   }
 
   function selecionarArea(id) {
     setAreaEntregaId(id);
     const area = areasEntrega.find((item) => String(item.id) === id);
     alterarCampo('bairro', area ? area.nome : '');
+  }
+
+  function validarTelefoneAoSair() {
+    if (dadosCliente.telefone.trim() && !telefoneValido(dadosCliente.telefone)) {
+      setErrosCampos((atuais) => ({ ...atuais, telefone: TELEFONE_INCOMPLETO }));
+    }
+  }
+
+  function errosDoFormulario() {
+    const erros = {};
+    if (!dadosCliente.nome.trim()) erros.nome = 'Informe seu nome.';
+    if (!dadosCliente.telefone.trim()) erros.telefone = 'Informe seu telefone com DDD.';
+    else if (!telefoneValido(dadosCliente.telefone)) erros.telefone = TELEFONE_INCOMPLETO;
+    if (!retirada) {
+      if (!dadosCliente.rua.trim()) erros.rua = 'Informe a rua.';
+      if (!dadosCliente.numero.trim()) erros.numero = 'Informe o número.';
+      if (entregaPorArea ? !areaSelecionada : !dadosCliente.bairro.trim()) {
+        erros.bairro = entregaPorArea ? 'Selecione a área de entrega.' : 'Informe o bairro.';
+      }
+    }
+    return erros;
+  }
+
+  // Liga o campo à mensagem de erro dele para leitores de tela.
+  function propsErro(campo, descricaoExtra = null) {
+    const descricao = [descricaoExtra, errosCampos[campo] ? `erro-${campo}` : null].filter(Boolean).join(' ');
+    return {
+      'aria-invalid': errosCampos[campo] ? true : undefined,
+      'aria-describedby': descricao || undefined
+    };
+  }
+
+  function limparDadosSalvos() {
+    apagarDadosCliente();
+    setDadosCliente(camposCliente(null));
+    setAreaEntregaId('');
+    setErrosCampos({});
+    setTemDadosSalvos(false);
+    setLembrarDados(false);
+    setAvisoDados('Dados apagados deste aparelho.');
   }
 
   function formatarTelefone(valor) {
@@ -169,13 +234,6 @@ function FinalizarPedidos() {
   async function finalizarPedido(evento) {
     evento?.preventDefault();
     if (enviando) return;
-    const obrigatorios = [
-      dadosCliente.nome,
-      dadosCliente.telefone,
-      dadosCliente.email,
-      ...(!retirada ? [dadosCliente.rua, dadosCliente.numero, dadosCliente.bairro] : [])
-    ];
-
     if (itens.length === 0) {
       setErro('Seu carrinho está vazio. Volte ao cardápio para adicionar produtos.');
       return;
@@ -190,18 +248,14 @@ function FinalizarPedidos() {
       return;
     }
 
-    if (!retirada && entregaPorArea && !areaSelecionada) {
-      setErro('Selecione a área de entrega.');
-      return;
-    }
-
-    if (obrigatorios.some((campo) => !campo.trim())) {
-      setErro(retirada ? 'Preencha os dados essenciais do cliente.' : 'Preencha os dados do cliente e o endereço de entrega.');
-      return;
-    }
-
-    if (!/^\d{10,11}$/.test(dadosCliente.telefone.replace(/\D/g, ''))) {
-      setErro('Informe um telefone válido com DDD.');
+    const erros = errosDoFormulario();
+    setErrosCampos(erros);
+    const primeiroInvalido = CAMPOS_VALIDADOS.find(([campo]) => erros[campo]);
+    if (primeiroInvalido) {
+      setErro('');
+      const campo = document.getElementById(primeiroInvalido[1]);
+      campo?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      campo?.focus({ preventScroll: true });
       return;
     }
 
@@ -239,6 +293,24 @@ function FinalizarPedidos() {
             : { trocoPara: Number(trocoPara) }
           : {})
       });
+      // Só contato e endereço; pagamento e troco nunca ficam no aparelho.
+      if (lembrarDados) {
+        salvarDadosCliente({
+          ...(lerDadosCliente() ?? {}),
+          nome: dadosCliente.nome.trim(),
+          telefone: dadosCliente.telefone,
+          ...(retirada ? {} : {
+            rua: dadosCliente.rua.trim(),
+            numero: dadosCliente.numero.trim(),
+            bairro: areaSelecionada ? areaSelecionada.nome : dadosCliente.bairro.trim(),
+            complemento: dadosCliente.complemento.trim(),
+            referencia: dadosCliente.referencia.trim(),
+            areaEntregaId: areaSelecionada ? String(areaSelecionada.id) : ''
+          })
+        });
+      } else {
+        apagarDadosCliente();
+      }
       navigate('/pedido-finalizado');
     } catch (falha) {
       setErro(falha.message);
@@ -420,10 +492,13 @@ function FinalizarPedidos() {
                     type="text"
                     required
                     autoComplete="name"
+                    enterKeyHint="next"
                     placeholder="Digite seu nome"
                     value={dadosCliente.nome}
                     onChange={(event) => alterarCampo('nome', event.target.value)}
+                    {...propsErro('nome')}
                   />
+                  {errosCampos.nome && <p id="erro-nome" className={styles.erroCampo}>{errosCampos.nome}</p>}
                 </div>
 
                 <div className={styles.campo}>
@@ -434,27 +509,36 @@ function FinalizarPedidos() {
                     type="tel"
                     required
                     autoComplete="tel"
+                    enterKeyHint={retirada ? 'done' : 'next'}
                     placeholder="(11) 99999-9999"
                     inputMode="tel"
                     maxLength={15}
                     value={dadosCliente.telefone}
                     onChange={(event) => alterarCampo('telefone', formatarTelefone(event.target.value))}
+                    onBlur={validarTelefoneAoSair}
+                    {...propsErro('telefone')}
                   />
+                  {errosCampos.telefone && <p id="erro-telefone" className={styles.erroCampo}>{errosCampos.telefone}</p>}
                 </div>
 
-                <div className={`${styles.campo} ${styles.campoCompleto}`}>
-                  <label htmlFor="emailCliente">E-mail</label>
+              </div>
+
+              <div className={styles.lembrarDados}>
+                <label className={styles.opcaoLembrar}>
                   <input
-                    id="emailCliente"
-                    type="email"
-                    required
-                    autoComplete="email"
-                    placeholder="seuemail@exemplo.com"
-                    value={dadosCliente.email}
-                    onChange={(event) => alterarCampo('email', event.target.value)}
+                    type="checkbox"
+                    checked={lembrarDados}
+                    onChange={(event) => setLembrarDados(event.target.checked)}
                   />
-                </div>
-
+                  <span>Lembrar meus dados neste aparelho</span>
+                </label>
+                {temDadosSalvos && (
+                  <button type="button" className={styles.limparDados} onClick={limparDadosSalvos}>
+                    Limpar dados salvos
+                  </button>
+                )}
+                <small>Guardamos só nome, telefone e endereço neste navegador. Pagamento nunca é salvo.</small>
+                {avisoDados && <span className={styles.avisoDados} role="status">{avisoDados}</span>}
               </div>
 
             </section>
@@ -501,10 +585,13 @@ function FinalizarPedidos() {
                     type="text"
                     required
                     autoComplete="address-line1"
+                    enterKeyHint="next"
                     placeholder="Digite o nome da rua"
                     value={dadosCliente.rua}
                     onChange={(event) => alterarCampo('rua', event.target.value)}
+                    {...propsErro('rua')}
                   />
+                  {errosCampos.rua && <p id="erro-rua" className={styles.erroCampo}>{errosCampos.rua}</p>}
                 </div>
 
                 <div className={styles.campo}>
@@ -515,10 +602,13 @@ function FinalizarPedidos() {
                     type="text"
                     required
                     autoComplete="address-line2"
+                    enterKeyHint="next"
                     placeholder="123"
                     value={dadosCliente.numero}
                     onChange={(event) => alterarCampo('numero', event.target.value)}
+                    {...propsErro('numero')}
                   />
+                  {errosCampos.numero && <p id="erro-numero" className={styles.erroCampo}>{errosCampos.numero}</p>}
                 </div>
 
 
@@ -531,7 +621,7 @@ function FinalizarPedidos() {
                         id="bairroCliente"
                         required
                         disabled={areasEntrega.length === 0}
-                        aria-describedby={areaSelecionada ? 'infoAreaEntrega' : undefined}
+                        {...propsErro('bairro', areaSelecionada ? 'infoAreaEntrega' : null)}
                         value={areaSelecionada ? String(areaSelecionada.id) : ''}
                         onChange={(event) => selecionarArea(event.target.value)}
                       >
@@ -551,11 +641,14 @@ function FinalizarPedidos() {
                       type="text"
                       required
                       autoComplete="address-level3"
+                      enterKeyHint="next"
                       placeholder="Digite seu bairro"
                       value={dadosCliente.bairro}
                       onChange={(event) => alterarCampo('bairro', event.target.value)}
+                      {...propsErro('bairro')}
                     />
                   )}
+                  {errosCampos.bairro && <p id="erro-bairro" className={styles.erroCampo}>{errosCampos.bairro}</p>}
                 </div>
 
 
@@ -569,6 +662,7 @@ function FinalizarPedidos() {
                     id="complementoCliente"
                     type="text"
                     autoComplete="address-line3"
+                    enterKeyHint="next"
                     placeholder="Apto, bloco, casa..."
                     value={dadosCliente.complemento}
                     onChange={(event) => alterarCampo('complemento', event.target.value)}
@@ -587,6 +681,7 @@ function FinalizarPedidos() {
                   <input
                     id="referenciaCliente"
                     type="text"
+                    enterKeyHint="done"
                     placeholder="Ex: próximo ao mercado, padaria..."
                     value={dadosCliente.referencia}
                     onChange={(event) => alterarCampo('referencia', event.target.value)}
@@ -742,7 +837,7 @@ function FinalizarPedidos() {
                   <strong>Você precisa de troco?</strong>
                   <label><input type="radio" name="troco" checked={trocoOpcao === 'sem'} onChange={() => setTrocoOpcao('sem')} /> Não preciso de troco</label>
                   <label><input type="radio" name="troco" checked={trocoOpcao === 'valor'} onChange={() => setTrocoOpcao('valor')} /> Troco para</label>
-                  {trocoOpcao === 'valor' && <input required type="number" min={total} step="0.01" value={trocoPara} onChange={(event) => setTrocoPara(event.target.value)} placeholder={`Mínimo R$ ${total.toFixed(2).replace('.', ',')}`} />}
+                  {trocoOpcao === 'valor' && <input required type="number" inputMode="decimal" min={total} step="0.01" value={trocoPara} onChange={(event) => setTrocoPara(event.target.value)} placeholder={`Mínimo R$ ${total.toFixed(2).replace('.', ',')}`} />}
                 </div>
               )}
 
@@ -779,10 +874,25 @@ function FinalizarPedidos() {
               <h2>Seu pedido</h2>
             </div>
 
+            {/* Celular: a lista começa recolhida para o total e o envio ficarem perto. */}
+            {itens.length > 0 && (
+              <button
+                type="button"
+                className={styles.alternarItens}
+                aria-expanded={itensVisiveis}
+                aria-controls="itens-resumo"
+                onClick={() => setItensVisiveis((visiveis) => !visiveis)}
+              >
+                {itensVisiveis ? 'Ocultar itens' : `Ver itens (${quantidadeItens})`}
+              </button>
+            )}
 
             {/* ITENS */}
 
-            <div className={styles.listaResumo}>
+            <div
+              id="itens-resumo"
+              className={`${styles.listaResumo} ${itensVisiveis || itens.length === 0 ? styles.listaResumoAberta : ''}`}
+            >
 
               {itens.length === 0 && (
                 <div className={styles.resumoVazio}>
@@ -955,10 +1065,21 @@ function FinalizarPedidos() {
             <button
               type="submit"
               className={styles.botaoFinalizar}
-              disabled={enviando || itens.length === 0 || !lojaDisponivel || formasDisponiveis.length === 0}
+              disabled={bloqueado}
             >
               {enviando ? 'Enviando pedido…' : 'Finalizar pedido'}
             </button>
+
+            {/* Celular: total e envio sempre à vista no rodapé da tela. */}
+            <div className={styles.barraFinalizar}>
+              <div>
+                <span>Total</span>
+                <strong>R$ {total.toFixed(2).replace('.', ',')}</strong>
+              </div>
+              <button type="submit" disabled={bloqueado}>
+                {enviando ? 'Enviando…' : 'Finalizar pedido'}
+              </button>
+            </div>
 
             {avisosCarrinho.length > 0 && <div className={styles.mensagemAviso} role="status"><strong>Seu carrinho foi atualizado:</strong>{avisosCarrinho.map((aviso, indice) => <span key={`${aviso.carrinhoId ?? 'aviso'}-${indice}`}>{aviso.mensagem}</span>)}</div>}
             {erro && <div ref={erroRef} tabIndex={-1} role="alert" className={styles.mensagemErro}>{erro}</div>}

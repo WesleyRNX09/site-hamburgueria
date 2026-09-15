@@ -65,6 +65,9 @@ function Home() {
 
   const [observacao, setObservacao] = useState('');
   const [quantidadeModal, setQuantidadeModal] = useState(1);
+  /* Aviso curto de item adicionado: não abre o carrinho nem bloqueia a tela. */
+  const [confirmacao, setConfirmacao] = useState(null);
+  const temporizadorConfirmacao = useRef(null);
 
   const navigate = useNavigate();
   const {
@@ -167,6 +170,55 @@ function Home() {
     setObservacao('');
     setQuantidadeModal(1);
     setAdicionaisSelecionados([]);
+  }
+
+  useEffect(() => () => window.clearTimeout(temporizadorConfirmacao.current), []);
+
+  function mostrarConfirmacao(texto) {
+    window.clearTimeout(temporizadorConfirmacao.current);
+    setConfirmacao({ id: Date.now(), texto });
+    temporizadorConfirmacao.current = window.setTimeout(() => setConfirmacao(null), 2500);
+  }
+
+  /* Só produto sem nenhum adicional ativo vinculado pode ir direto para o
+     carrinho: com opções, o modal continua sendo o caminho. */
+  function produtoSemAdicionais(produto) {
+    return Array.isArray(produto.adicionaisIds) && !adicionais.some((adicional) => (
+      adicional.ativo !== false
+      && produto.adicionaisIds.some((id) => String(id) === String(adicional.id))
+    ));
+  }
+
+  /* Adição rápida: 1 unidade, sem observação. Soma na linha que já existe do
+     mesmo produto nas mesmas condições. O preço exibido é só prévia; o
+     servidor recalcula tudo ao validar o carrinho e ao fechar o pedido. */
+  function adicionarRapido(produto) {
+    const produtoId = produto.produtoId ?? produto.id;
+    setCarrinho((carrinhoAtual) => {
+      const existente = carrinhoAtual.find((item) => (
+        (item.produtoId ?? item.id) === produtoId
+        && !item.promocaoId
+        && !item.observacao
+        && !(item.adicionais?.length)
+      ));
+      if (existente) {
+        return carrinhoAtual.map((item) => (
+          item === existente ? { ...item, quantidade: Math.min(50, item.quantidade + 1) } : item
+        ));
+      }
+      return [...carrinhoAtual, {
+        ...produto,
+        id: produtoId,
+        produtoId,
+        promocaoId: null,
+        carrinhoId: `${produto.id}-${Date.now()}`,
+        quantidade: 1,
+        observacao: '',
+        adicionais: [],
+        precoFinal: Number(produto.preco.replace(',', '.'))
+      }];
+    });
+    mostrarConfirmacao(`${produto.nome} adicionado ao carrinho`);
   }
 
   function selecionarAdicional(adicional) {
@@ -434,13 +486,15 @@ function Home() {
       novoItem
     ]);
 
+    const nomeAdicionado = produtoSelecionado.nome;
+
     fecharModalProduto();
 
-    setCarrinhoAberto(true);
+    mostrarConfirmacao(`${nomeAdicionado} adicionado ao carrinho`);
   }
 
   return (
-    <div className={styles.pagina}>
+    <div className={`${styles.pagina} ${quantidadeCarrinho > 0 ? styles.paginaComBarra : ''}`}>
       <header
         className={`${styles.barraPrincipal} ${
           rolouPagina ? styles.barraRolada : ''
@@ -739,7 +793,7 @@ function Home() {
                   />
                 </div>
               ) : (
-                <span className={styles.indicadorAdicionar} aria-hidden="true">+</span>
+                !produtoSemAdicionais(produto) && <span className={styles.indicadorAdicionar} aria-hidden="true">+</span>
               )}
 
               <div className={styles.informacoesProduto}>
@@ -779,6 +833,17 @@ function Home() {
                 onClick={() => abrirModalProduto(produto)}
                 aria-label={`Ver detalhes de ${produto.nome}`}
               />
+
+              {produtoSemAdicionais(produto) && (
+                <button
+                  type="button"
+                  className={styles.botaoAdicaoRapida}
+                  onClick={() => adicionarRapido(produto)}
+                  aria-label={`Adicionar ${produto.nome} ao carrinho`}
+                >
+                  +
+                </button>
+              )}
             </article>
               ))}
             </div>
@@ -995,8 +1060,9 @@ function Home() {
             </div>
 
 
-            {/* ADICIONAIS */}
+            {/* ADICIONAIS: a seção só aparece quando o produto tem opções. */}
 
+            {adicionaisProduto.length > 0 && (
             <div className={styles.secaoModal}>
 
               <div className={styles.tituloSecaoModal}>
@@ -1057,13 +1123,10 @@ function Home() {
                   );
                 })}
 
-                {adicionaisProduto.length === 0 && (
-                  <p className={styles.semAdicionais}>Este produto não possui adicionais disponíveis.</p>
-                )}
-
               </div>
 
             </div>
+            )}
 
 
             {/* OBSERVAÇÃO */}
@@ -1416,6 +1479,27 @@ function Home() {
           </div>
         )}
       </aside>
+
+      {/* Celular: atalho fixo para o carrinho enquanto se navega pelo cardápio. */}
+      {quantidadeCarrinho > 0 && !carrinhoAberto && !modalProdutoAberto && !painelMenu && (
+        <button
+          type="button"
+          className={styles.barraCarrinho}
+          onClick={abrirCarrinho}
+          aria-haspopup="dialog"
+          aria-controls="carrinho-lateral"
+        >
+          <span className={styles.quantidadeBarraCarrinho}>
+            {quantidadeCarrinho} {quantidadeCarrinho === 1 ? 'item' : 'itens'}
+          </span>
+          <strong>Ver carrinho</strong>
+          <span>R$ {totalCarrinho.toFixed(2).replace('.', ',')}</span>
+        </button>
+      )}
+
+      <div className={styles.confirmacaoCarrinho} role="status" aria-live="polite">
+        {confirmacao && <span key={confirmacao.id}>{confirmacao.texto}</span>}
+      </div>
 
       
     </div>

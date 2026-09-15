@@ -1451,10 +1451,13 @@
 
 .secaoObservacao textarea {
   width: 100%;
-  min-height: 125px;
+  /* Começa com duas linhas e cresce conforme o texto. */
+  min-height: 6.8rem;
+  max-height: 16rem;
 
   padding: 1.2rem;
 
+  field-sizing: content;
   resize: vertical;
 
   color: var(--cor-texto);
@@ -2857,16 +2860,6 @@ button.cartaoPainel:hover {
   }
 }
 
-.semAdicionais {
-  grid-column: 1 / -1;
-  margin: 0;
-  border: 1px dashed color-mix(in srgb, var(--cor-texto) 15%, var(--cor-fundo));
-  border-radius: 10px;
-  padding: 18px;
-  color: var(--cor-texto-fraco);
-  font-size: 12px;
-  text-align: center;
-}
 
 @media (max-width: 700px) {
   .numeroCarrinho {
@@ -3155,6 +3148,201 @@ button.cartaoPainel:hover {
   }
 }
 
+
+/* =========================
+   ADIÇÃO RÁPIDA, CONFIRMAÇÃO E BARRA DO CARRINHO
+========================= */
+
+/* Produto sem adicionais: o "+" coloca direto no carrinho. Fica acima do
+   alvo que abre o modal (z-index 3), que continua valendo no resto do card. */
+.botaoAdicaoRapida {
+  position: absolute;
+  right: 0.8rem;
+  bottom: 0.8rem;
+  z-index: 4;
+
+  width: 4.4rem;
+  height: 4.4rem;
+  padding: 0;
+
+  display: grid;
+  place-items: center;
+
+  color: var(--cor-sobre-principal);
+  font-family: inherit;
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1;
+
+  background-color: var(--cor-principal);
+  border: 2px solid var(--cor-card);
+  border-radius: 50%;
+  box-shadow: 0 4px 12px var(--sombra-cartao);
+
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.botaoAdicaoRapida:active {
+  transform: scale(0.94);
+}
+
+.botaoAdicaoRapida:focus-visible {
+  outline: 3px solid var(--cor-texto);
+  outline-offset: 2px;
+}
+
+/* Sem foto, o "+" ocupa a coluna da direita, como o indicador fazia. */
+.cardProdutoSemFoto > .botaoAdicaoRapida {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.confirmacaoCarrinho {
+  position: fixed;
+  left: 50%;
+  bottom: calc(2rem + env(safe-area-inset-bottom));
+  z-index: 1200;
+
+  width: max-content;
+  max-width: calc(100% - 3.2rem);
+
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.confirmacaoCarrinho > span {
+  display: block;
+  padding: 1.1rem 1.6rem;
+
+  color: var(--cor-card);
+  font-size: 1.4rem;
+  font-weight: 700;
+  text-align: center;
+
+  background-color: var(--cor-texto);
+  border-radius: 1rem;
+  box-shadow: 0 10px 30px var(--sombra-flutuante);
+
+  animation: confirmacaoEntrada 0.2s ease-out;
+}
+
+@keyframes confirmacaoEntrada {
+  from { opacity: 0; transform: translateY(0.8rem); }
+  to { opacity: 1; transform: none; }
+}
+
+.barraCarrinho {
+  display: none;
+}
+
+@keyframes painelSobe {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+
+@media (max-width: 650px) {
+  .paginaComBarra {
+    padding-bottom: calc(8.4rem + env(safe-area-inset-bottom));
+  }
+
+  .barraCarrinho {
+    position: fixed;
+    left: 1.2rem;
+    right: 1.2rem;
+    bottom: calc(1.2rem + env(safe-area-inset-bottom));
+    z-index: 1100;
+
+    min-height: 5.6rem;
+    padding: 0 1.6rem;
+
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 1rem;
+
+    color: var(--cor-sobre-principal);
+    font-family: inherit;
+    font-size: 1.4rem;
+    font-weight: 700;
+    text-align: left;
+
+    background-color: var(--cor-principal);
+    border: 0;
+    border-radius: 1.4rem;
+    box-shadow: 0 10px 28px var(--sombra-flutuante);
+
+    cursor: pointer;
+  }
+
+  .barraCarrinho strong {
+    font-size: 1.6rem;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .barraCarrinho:focus-visible {
+    outline: 3px solid var(--cor-texto);
+    outline-offset: 3px;
+  }
+
+  .paginaComBarra .confirmacaoCarrinho {
+    bottom: calc(8.2rem + env(safe-area-inset-bottom));
+  }
+
+  /* O modal vira um painel que sobe do rodapé, com quantidade, total e
+     "Adicionar" sempre à vista. */
+  .overlayModalProduto {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modalProduto {
+    max-height: 92svh;
+    padding-bottom: 0;
+
+    border-radius: 1.8rem 1.8rem 0 0;
+
+    animation: painelSobe 0.22s ease-out;
+  }
+
+  .rodapeModalProduto {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+
+    margin: 0 -1.3rem;
+    padding: 1.2rem 1.3rem calc(1.2rem + env(safe-area-inset-bottom));
+
+    background: var(--cor-card-elevado);
+    box-shadow: 0 -8px 20px var(--sombra-cartao);
+  }
+
+  /* A borda de 2px fica por dentro: 4.8rem de caixa deixam 4.4rem de toque. */
+  .quantidadeModal {
+    width: 13.6rem;
+    height: 4.8rem;
+    grid-template-columns: 4.4rem 1fr 4.4rem;
+  }
+
+  .quantidadeModal button {
+    width: 4.4rem;
+  }
+
+  .confirmarProduto {
+    height: 4.8rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modalProduto,
+  .confirmacaoCarrinho > span {
+    animation: none;
+  }
+}
 
 /* Celular estreito: o menu empilha icone e texto para caber ao lado da
    logo, e o carrinho fica so com o icone e o contador. */

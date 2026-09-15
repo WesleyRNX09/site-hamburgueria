@@ -13,7 +13,7 @@ function PoliticaPrivacidade() {
         <Link className={styles.voltar} to="/">← Voltar ao cardápio</Link>
         <p className={styles.rotulo}>DOCUMENTO INFORMATIVO</p>
         <h1>Política de Privacidade</h1>
-        <p className={styles.atualizacao}>Última atualização: 22 de agosto de 2026.</p>
+        <p className={styles.atualizacao}>Última atualização: 15 de setembro de 2026.</p>
 
         <section>
           <h2>1. Quem trata os dados</h2>
@@ -26,8 +26,9 @@ function PoliticaPrivacidade() {
 
         <section>
           <h2>2. Dados coletados e finalidade</h2>
-          <p>Para processar a entrega, coletamos nome, telefone, e-mail, endereço, itens, observações do produto, forma de pagamento e informações de troco. Esses dados são usados para validar, preparar, entregar, acompanhar e prestar suporte ao pedido.</p>
+          <p>Para processar a entrega, coletamos nome, telefone, endereço, itens, observações do produto, forma de pagamento e informações de troco. O e-mail do cliente não é solicitado. Esses dados são usados para validar, preparar, entregar, acompanhar e prestar suporte ao pedido.</p>
           <p>O site também mantém o carrinho no navegador e uma referência temporária ao pedido atual para permitir continuidade e acompanhamento. As sessões de administrador e atendente ficam restritas às respectivas áreas autenticadas.</p>
+          <p>Com a opção “Lembrar meus dados neste aparelho” marcada no checkout, nome, telefone e endereço de entrega ficam guardados no próprio navegador para preencher o próximo pedido. Forma de pagamento, troco e qualquer outro dado sensível nunca são guardados. Esses dados podem ser apagados a qualquer momento pelo botão “Limpar dados salvos” no checkout ou limpando os dados do site no navegador.</p>
         </section>
 
         <section>

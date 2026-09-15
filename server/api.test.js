@@ -1150,9 +1150,9 @@ function bancoPedidoComAreas({ areas = [], taxaUnicaCentavos = 700 } = {}) {
       if (sql.includes('FROM pedidos p') && estado.pedido) {
         const p = estado.pedido;
         return [[{
-          id: 900, origem: p[3], cliente: p[4], telefone: p[5], email: p[6], status: 'Recebido',
-          pagamento: p[7], rua: p[8], numero: p[9], bairro: p[10], area_entrega_id: p[11],
-          complemento: p[12], referencia: p[13], taxa_entrega_centavos: p[14], total_centavos: p[15],
+          id: 900, origem: p[3], cliente: p[4], telefone: p[5], email: null, status: 'Recebido',
+          pagamento: p[6], rua: p[7], numero: p[8], bairro: p[9], area_entrega_id: p[10],
+          complemento: p[11], referencia: p[12], taxa_entrega_centavos: p[13], total_centavos: p[14],
           comanda_id: null, mesa_id: null, funcionario_id: null, criado_em: new Date(),
           pagamento_status: 'Pagamento na entrega', sem_troco: null, troco_para_centavos: null
         }]];
@@ -1168,7 +1168,6 @@ function pedidoDeliveryTeste(sobrescritas = {}) {
   return {
     nome: 'Cliente',
     telefone: '(11) 90000-0000',
-    email: 'cliente@teste.local',
     rua: 'Rua A',
     numero: '10',
     bairro: 'Centro',
@@ -1192,16 +1191,20 @@ test('fecha o pedido com a taxa da área escolhida e ignora taxa e total enviado
     bairro: 'Centro',
     taxaEntrega: 0,
     taxaEntregaCentavos: 0,
-    total: 0.01
+    total: 0.01,
+    email: 'nao-deve-ser-gravado@teste.local'
   }));
   assert.equal(pedido.taxaEntrega, 8.5);
   assert.equal(pedido.total, 58.4);
   assert.equal(pedido.areaEntregaId, 2);
   // Grava o id da área, o nome dela como bairro e a taxa do momento.
-  assert.equal(estado.pedido[10], 'Bairro Sul');
-  assert.equal(estado.pedido[11], 2);
-  assert.equal(estado.pedido[14], 850);
-  assert.equal(estado.pedido[15], 5840);
+  assert.equal(estado.pedido[9], 'Bairro Sul');
+  assert.equal(estado.pedido[10], 2);
+  assert.equal(estado.pedido[13], 850);
+  assert.equal(estado.pedido[14], 5840);
+  // O e-mail saiu do checkout: nem a coluna nem o valor enviado entram no INSERT.
+  assert.equal(estado.pedido.length, 15);
+  assert.equal(estado.pedido.includes('nao-deve-ser-gravado@teste.local'), false);
 
   const peloNome = bancoPedidoComAreas({ areas });
   assert.equal((await criarPedidoDelivery(peloNome.banco, 11, pedidoDeliveryTeste({ bairro: 'bairro sul' }))).taxaEntrega, 8.5);
@@ -1226,7 +1229,7 @@ test('sem áreas cadastradas o pedido usa a taxa única; com todas desativadas o
   assert.equal(pedido.taxaEntrega, 7);
   assert.equal(pedido.total, 56.9);
   assert.equal(pedido.areaEntregaId, null);
-  assert.equal(semAreas.estado.pedido[10], 'Qualquer Bairro');
+  assert.equal(semAreas.estado.pedido[9], 'Qualquer Bairro');
 
   const desativadas = bancoPedidoComAreas({ areas: [{ id: 1, tenant: 11, nome: 'Centro', taxaCentavos: 500, ativo: false }] });
   await assert.rejects(
@@ -1242,7 +1245,7 @@ test('sem áreas cadastradas o pedido usa a taxa única; com todas desativadas o
     areaEntregaId: 'abc'
   }));
   assert.equal(retirada.taxaEntrega, 0);
-  assert.equal(desativadas.estado.pedido[11], null);
+  assert.equal(desativadas.estado.pedido[10], null);
 });
 
 test('limita tentativas repetidas de autenticação', () => {
@@ -2199,7 +2202,6 @@ if (!executarIntegracao) {
     return {
       nome: 'Cliente Teste',
       telefone: '(11) 90000-0000',
-      email: `cliente-${randomUUID()}@teste.local`,
       rua: 'Rua do Teste',
       numero: '10',
       bairro: 'Centro',
@@ -2366,7 +2368,8 @@ if (!executarIntegracao) {
       dados: {
         nome: 'Cliente Teste',
         telefone: '(11) 90000-0000',
-        email: 'cliente@teste.local',
+        // Enviado por um cliente antigo: o servidor ignora.
+        email: 'ignorado@teste.local',
         rua: 'Rua do Teste',
         numero: '10',
         bairro: 'Centro',
@@ -2377,6 +2380,11 @@ if (!executarIntegracao) {
       }
     });
     assert.equal(criado.status, 201);
+    const [[gravado]] = await banco.execute(
+      'SELECT email FROM pedidos WHERE id = ?',
+      [Number(criado.corpo.pedido.id.replace('#PED', ''))]
+    );
+    assert.equal(gravado.email, null);
     assert.equal(criado.corpo.pedido.taxaEntrega, 5);
     assert.equal(criado.corpo.pedido.total, 44.9);
     assert.equal(criado.corpo.pedido.pagamentoStatus, 'Pagamento na entrega');
@@ -2387,7 +2395,6 @@ if (!executarIntegracao) {
       dados: {
         nome: 'Cliente Pix',
         telefone: '(11) 91111-1111',
-        email: 'cliente-pix@teste.local',
         rua: 'Rua do Teste',
         numero: '20',
         bairro: 'Centro',
@@ -2743,8 +2750,8 @@ if (!executarIntegracao) {
 
   test('reenvio idempotente retorna o mesmo pedido sem duplicar registro', async () => {
     const chaveIdempotencia = randomUUID();
-    const email = `duplicado-${randomUUID()}@teste.local`;
-    const dados = dadosPedido({ chaveIdempotencia, email });
+    const nome = `Cliente duplicado ${randomUUID().slice(0, 8)}`;
+    const dados = dadosPedido({ chaveIdempotencia, nome });
     const [primeiro, segundo] = await Promise.all([
       chamar('/api/pedidos', { metodo: 'POST', dados }),
       chamar('/api/pedidos', { metodo: 'POST', dados })
@@ -2754,7 +2761,7 @@ if (!executarIntegracao) {
     assert.equal(segundo.corpo.pedido.id, primeiro.corpo.pedido.id);
     assert.equal(segundo.corpo.pedido.tokenAcompanhamento, chaveIdempotencia);
 
-    const [[contagem]] = await banco.execute('SELECT COUNT(*) AS total FROM pedidos WHERE email = ?', [email]);
+    const [[contagem]] = await banco.execute('SELECT COUNT(*) AS total FROM pedidos WHERE cliente = ?', [nome]);
     assert.equal(Number(contagem.total), 1);
   });
 

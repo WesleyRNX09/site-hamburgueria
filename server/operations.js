@@ -1738,7 +1738,7 @@ export function calcularTotaisPedido(itens, taxaEntregaCentavos) {
 export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
   const nome = texto(dados.nome, 160);
   const telefone = texto(dados.telefone, 40);
-  const email = texto(dados.email, 160);
+  // O e-mail do cliente não é mais pedido: mesmo enviado, é ignorado.
   const rua = texto(dados.rua, 180);
   const numero = texto(dados.numero, 30);
   const bairro = texto(dados.bairro, 120);
@@ -1756,12 +1756,11 @@ export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
   if (areaEntregaInformada && !(Number.isSafeInteger(areaEntregaId) && areaEntregaId > 0)) {
     throw erroDominio('Selecione uma área de entrega válida.');
   }
-  if (!nome || !telefone || !email || (!retirada && (!rua || !numero || (!bairro && !areaEntregaInformada)))) {
+  if (!nome || !telefone || (!retirada && (!rua || !numero || (!bairro && !areaEntregaInformada)))) {
     throw erroDominio(retirada
       ? 'Preencha os dados essenciais do cliente.'
       : 'Preencha os dados do cliente e o endereço de entrega.');
   }
-  if (!/^\S+@\S+\.\S+$/.test(email)) throw erroDominio('Informe um e-mail válido.');
   if (!/^\d{10,11}$/.test(telefone.replace(/\D/g, ''))) throw erroDominio('Informe um telefone válido com DDD.');
   if (!['delivery', 'retirada'].includes(modalidade)) throw erroDominio('A modalidade de atendimento informada não está disponível.');
   if (!/^[a-zA-Z0-9_-]{16,100}$/.test(chaveIdempotencia)) {
@@ -1885,13 +1884,13 @@ export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
       const [resultado] = await conexao.execute(`
         INSERT INTO pedidos
           (id_estabelecimento, token_acompanhamento_hash, chave_idempotencia_hash,
-           origem, cliente, telefone, email, status, pagamento,
+           origem, cliente, telefone, status, pagamento,
            rua, numero, bairro, area_entrega_id, complemento, referencia,
            taxa_entrega_centavos, total_centavos)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'Recebido', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, 'Recebido', ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         idEstabelecimento,
-        hashIdempotencia, hashIdempotencia, modalidade, nome, telefone, email, pagamento,
+        hashIdempotencia, hashIdempotencia, modalidade, nome, telefone, pagamento,
         retirada ? null : rua, retirada ? null : numero, retirada ? null : (areaEntrega?.nome ?? bairro),
         areaEntrega ? Number(areaEntrega.id) : null,
         retirada ? null : (texto(dados.complemento, 160) || null),
