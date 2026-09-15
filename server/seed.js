@@ -250,6 +250,5 @@ export const configuracaoSeed = {
   endereco: '',
   taxaEntregaCentavos: 790,
   tempoEntrega: '35–45 min',
-  pedidoMinimoCentavos: 2000,
   lojaAberta: true
 };

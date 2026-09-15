@@ -23,7 +23,7 @@ Workbench.
   estabelecimentos, controlar planos/assinaturas e criar o primeiro
   administrador de cada tenant.
 
-O carrinho permanece no navegador somente até o cliente finalizar a compra. Ao abrir o carrinho e antes do checkout, a API remove itens indisponíveis e atualiza preço, promoção e adicionais. Na criação do pedido, o servidor recalcula tudo novamente, inclusive taxa por bairro e pedido mínimo, e grava pedido, itens e pagamento na mesma transação. Cada tentativa leva uma chave idempotente para que reenvios não criem pedidos duplicados.
+O carrinho permanece no navegador somente até o cliente finalizar a compra. Ao abrir o carrinho e antes do checkout, a API remove itens indisponíveis e atualiza preço, promoção e adicionais. Na criação do pedido, o servidor recalcula tudo novamente, inclusive a taxa pela área de entrega escolhida (ou a taxa única, quando a loja não cadastrou áreas), e grava pedido, itens e pagamento na mesma transação. Cada tentativa leva uma chave idempotente para que reenvios não criem pedidos duplicados.
 
 O backend identifica o estabelecimento pelo domínio, subdomínio ou slug local e
 aplica `id_estabelecimento` em todas as operações de negócio. JWTs assinados

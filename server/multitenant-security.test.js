@@ -479,7 +479,7 @@ async function rotasAdministrativasDoApp() {
 }
 
 /* Banco simulado do painel: contas por id, com loja, e permissões por conta. */
-function bancoPainelComPermissoes({ contas, permissoes }) {
+function bancoPainelComPermissoes({ contas, permissoes, areas = [] }) {
   const tenants = new Map([
     ['loja-a', linhaTenant(11, 'loja-a')],
     ['loja-b', linhaTenant(22, 'loja-b')]
@@ -523,7 +523,23 @@ function bancoPainelComPermissoes({ contas, permissoes }) {
         arquivado_em: conta.arquivado ? new Date() : null
       } : null].filter(Boolean)];
     }
-    if (/^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql)) return [{ affectedRows: 1 }];
+    if (sql.includes('FROM areas_entrega')) {
+      const tenant = Number(parametros[0]);
+      const daLoja = areas.filter((area) => area.tenant === tenant);
+      if (sql.includes('COUNT(id)')) return [[{ total: daLoja.length }]];
+      const id = parametros.length > 1 ? Number(parametros[1]) : null;
+      return [daLoja.filter((area) => id === null || area.id === id).map((area) => ({
+        id: area.id,
+        nome: area.nome,
+        taxa_entrega_centavos: 500,
+        tempo_estimado_min: 30,
+        tempo_estimado_max: 45,
+        ativo: 1,
+        criado_em: new Date(),
+        atualizado_em: new Date()
+      }))];
+    }
+    if (/^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql)) return [{ affectedRows: 1, insertId: 999 }];
     throw new Error(`Consulta inesperada no teste: ${sql}`);
   }
   const conexao = {
@@ -736,6 +752,93 @@ test('a migration 017 dá a todo administrador existente o conjunto completo, ig
   assert.deepEqual(ordenar(listaPermissoes(padrao[1])), ordenar(PERMISSOES_PADRAO_ADMINISTRADOR));
   // Só acrescenta: não altera nem remove nada que já existia.
   assert.equal(/^\s*(UPDATE|DELETE|DROP|TRUNCATE)\b/im.test(migration), false);
+});
+
+test('loja A não lista, edita, ativa, desativa nem exclui áreas de entrega da loja B', async () => {
+  const contas = new Map([[101, { tenant: 11, nome: 'Admin A', usuario: 'admin-a' }]]);
+  const permissoes = new Map([[101, [...CHAVES_PERMISSOES]]]);
+  const areas = [
+    { id: 1, tenant: 11, nome: 'Centro' },
+    { id: 2, tenant: 22, nome: 'Bairro da loja B' }
+  ];
+  const { banco, consultas } = bancoPainelComPermissoes({ contas, permissoes, areas });
+  const escritas = () => consultas.filter(({ sql }) => (
+    /^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql)
+    && !(sql.includes('DELETE FROM sessoes_admin') && sql.includes('expira_em'))
+  ));
+
+  await comServidoresDoPainel(banco, async ({ urlA, urlB }) => {
+    const token = tokenAdministrador(101, 11);
+    const lista = await chamarPainel(urlA, 'GET', '/api/admin/areas-entrega?id_estabelecimento=22', token);
+    assert.equal(lista.status, 200);
+    assert.deepEqual(lista.corpo.areasEntrega.map((area) => area.id), [1]);
+
+    for (const [metodo, caminho, dados] of [
+      ['PUT', '/api/admin/areas-entrega/2', { nome: 'Tomada', taxaEntrega: 0, tempoEstimadoMin: 10, tempoEstimadoMax: 20 }],
+      ['PATCH', '/api/admin/areas-entrega/2/status', { ativo: false }],
+      ['DELETE', '/api/admin/areas-entrega/2']
+    ]) {
+      consultas.length = 0;
+      const resposta = await chamarPainel(urlA, metodo, caminho, token, dados);
+      assert.equal(resposta.status, 404, `${metodo} ${caminho}`);
+      assert.deepEqual(escritas(), [], `${metodo} ${caminho} escreveu em área de outro estabelecimento`);
+      const buscas = consultas.filter(({ sql }) => sql.includes('FROM areas_entrega'));
+      assert.ok(buscas.length > 0 && buscas.every(({ parametros }) => Number(parametros[0]) === 11), `${metodo} ${caminho}`);
+    }
+
+    // Campos fora do mapeamento, como id_estabelecimento, são ignorados.
+    consultas.length = 0;
+    const criada = await chamarPainel(urlA, 'POST', '/api/admin/areas-entrega', token, {
+      nome: '  Vila Nova ', taxaEntrega: '5,50', tempoEstimadoMin: 20, tempoEstimadoMax: 30,
+      id_estabelecimento: 22, idEstabelecimento: 22, id: 2
+    });
+    assert.equal(criada.status, 201);
+    const insercao = consultas.find(({ sql }) => sql.includes('INSERT INTO areas_entrega'));
+    assert.deepEqual(insercao.parametros, [11, 'Vila Nova', 550, 20, 30, 1]);
+
+    // Payload inválido é recusado antes de gravar.
+    for (const invalida of [
+      {},
+      { nome: ['Centro'], taxaEntrega: 1, tempoEstimadoMin: 10, tempoEstimadoMax: 20 },
+      { nome: 'Área', taxaEntrega: true, tempoEstimadoMin: 10, tempoEstimadoMax: 20 },
+      { nome: 'Área', taxaEntrega: 1, tempoEstimadoMin: 0, tempoEstimadoMax: 20 },
+      { nome: 'Área', taxaEntrega: 1, tempoEstimadoMin: 10, tempoEstimadoMax: 601 },
+      { nome: 'Área', taxaEntrega: 1, tempoEstimadoMin: 20, tempoEstimadoMax: 10 }
+    ]) {
+      consultas.length = 0;
+      assert.equal((await chamarPainel(urlA, 'POST', '/api/admin/areas-entrega', token, invalida)).status, 400);
+      assert.deepEqual(escritas(), []);
+    }
+
+    // Sessão da loja A no host da loja B: recusada antes de tocar nas áreas.
+    consultas.length = 0;
+    const cruzada = await chamarPainel(urlB, 'DELETE', '/api/admin/areas-entrega/2', token);
+    assert.equal(cruzada.status, 403);
+    assert.equal(consultas.some(({ sql }) => sql.includes('FROM areas_entrega')), false);
+
+    // Público: cada host vê só as próprias áreas, sem aceitar tenant da URL.
+    const publicoB = await fetch(`${urlB}/api/publico/areas-entrega?id_estabelecimento=11`);
+    assert.equal(publicoB.status, 200);
+    assert.deepEqual((await publicoB.json()).areasEntrega.map((area) => area.id), [2]);
+  });
+});
+
+test('pedido guarda a área com chave estrangeira presa ao estabelecimento e a migration 019 não apaga nada', async () => {
+  const chaveComposta = /FOREIGN KEY \(id_estabelecimento, area_entrega_id\)\s+REFERENCES areas_entrega\(id_estabelecimento, id\) ON DELETE RESTRICT/;
+  for (const caminho of [
+    'database/migrations/019_areas_entrega.sql',
+    'database/CRIAR_db.sql',
+    'database/estrutura/002_criar_relacionamentos.sql'
+  ]) {
+    assert.match(await readFile(resolve(pastaProjeto, caminho), 'utf8'), chaveComposta, caminho);
+  }
+  for (const caminho of ['database/migrations/019_areas_entrega.sql', 'database/CRIAR_db.sql', 'database/estrutura/001_criar_tabelas.sql']) {
+    const sql = await readFile(resolve(pastaProjeto, caminho), 'utf8');
+    assert.match(sql, /UNIQUE KEY uk_areas_entrega_estabelecimento_nome \(id_estabelecimento, nome\)/, caminho);
+    assert.match(sql, /CHECK \(tempo_estimado_min > 0 AND tempo_estimado_max >= tempo_estimado_min\)/, caminho);
+  }
+  const migration = await readFile(resolve(pastaProjeto, 'database/migrations/019_areas_entrega.sql'), 'utf8');
+  assert.equal(/^\s*(UPDATE|DELETE|DROP|TRUNCATE)\b|DROP COLUMN/im.test(migration), false);
 });
 
 test('cada campo da configuração pertence a exatamente um grupo de permissão', async () => {

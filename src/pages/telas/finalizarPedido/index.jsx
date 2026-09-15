@@ -13,6 +13,12 @@ function criarChavePedido() {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+function formatarTempoArea(area) {
+  return area.tempoEstimadoMin === area.tempoEstimadoMax
+    ? `${area.tempoEstimadoMin} min`
+    : `${area.tempoEstimadoMin}–${area.tempoEstimadoMax} min`;
+}
+
 function FinalizarPedidos() {
   const navigate = useNavigate();
 
@@ -23,6 +29,7 @@ function FinalizarPedidos() {
   const [trocoPara, setTrocoPara] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [pixCopiado, setPixCopiado] = useState(false);
+  const [areaEntregaId, setAreaEntregaId] = useState('');
   const erroRef = useRef(null);
   const validacaoInicialRef = useRef(false);
   const chaveTentativa = useRef(null);
@@ -98,17 +105,29 @@ function FinalizarPedidos() {
 
   const retirada = modalidade === 'retirada' || (!configuracao.entregaAtiva && configuracao.retiradaAtiva);
   const modalidadeEfetiva = retirada ? 'retirada' : 'delivery';
+  /* Loja que cadastrou áreas só entrega nas ativas, e a taxa vem da área
+    escolhida. Sem áreas cadastradas, o checkout segue com bairro digitado e
+    taxa única. O valor exibido é só prévia: quem calcula é o servidor. */
   const areasEntrega = configuracao.areasEntrega ?? [];
-  const areaSelecionada = areasEntrega.find((area) => area.bairro === dadosCliente.bairro);
-  const taxaDefinida = retirada || areasEntrega.length === 0 || Boolean(areaSelecionada);
-  const taxaEntrega = retirada ? 0 : areasEntrega.length > 0
+  const entregaPorArea = configuracao.entregaPorArea === true;
+  const areaSelecionada = entregaPorArea
+    ? areasEntrega.find((area) => String(area.id) === areaEntregaId)
+    : undefined;
+  const semAreaDisponivel = !retirada && entregaPorArea && areasEntrega.length === 0;
+  const taxaDefinida = retirada || !entregaPorArea || Boolean(areaSelecionada);
+  const taxaEntrega = retirada ? 0 : entregaPorArea
     ? Number(areaSelecionada?.taxa ?? 0)
     : Number(configuracao.taxaEntrega);
+  const tempoEstimado = !retirada && areaSelecionada
+    ? formatarTempoArea(areaSelecionada)
+    : configuracao.tempoEntrega;
 
   const total = subtotal + taxaEntrega;
-  const pedidoMinimo = Number(configuracao.pedidoMinimo);
-  const minimoAtingido = retirada || subtotal >= pedidoMinimo;
-  const lojaDisponivel = Boolean(configuracao.lojaAberta && (retirada ? configuracao.retiradaAtiva : configuracao.entregaAtiva));
+  const lojaDisponivel = Boolean(
+    configuracao.lojaAberta
+    && (retirada ? configuracao.retiradaAtiva : configuracao.entregaAtiva)
+    && !semAreaDisponivel
+  );
   const pixDisponivel = Boolean(configuracao.pixChave && configuracao.pixBeneficiario && configuracao.pixCidade);
   const formasDisponiveis = [
     pixDisponivel ? 'pix' : null,
@@ -121,6 +140,12 @@ function FinalizarPedidos() {
 
   function alterarCampo(campo, valor) {
     setDadosCliente((atuais) => ({ ...atuais, [campo]: valor }));
+  }
+
+  function selecionarArea(id) {
+    setAreaEntregaId(id);
+    const area = areasEntrega.find((item) => String(item.id) === id);
+    alterarCampo('bairro', area ? area.nome : '');
   }
 
   function formatarTelefone(valor) {
@@ -158,13 +183,15 @@ function FinalizarPedidos() {
 
     if (!lojaDisponivel) {
       setErro(configuracao.lojaAberta
-        ? retirada ? 'A retirada no balcão está indisponível no momento.' : 'A entrega está indisponível no momento.'
+        ? semAreaDisponivel
+          ? 'Nenhuma área de entrega disponível.'
+          : retirada ? 'A retirada no balcão está indisponível no momento.' : 'A entrega está indisponível no momento.'
         : 'A loja está fechada no momento.');
       return;
     }
 
-    if (!minimoAtingido) {
-      setErro(`Faltam R$ ${(pedidoMinimo - subtotal).toFixed(2).replace('.', ',')} para atingir o pedido mínimo.`);
+    if (!retirada && entregaPorArea && !areaSelecionada) {
+      setErro('Selecione a área de entrega.');
       return;
     }
 
@@ -199,6 +226,10 @@ function FinalizarPedidos() {
     try {
       await criarPedidoDelivery({
         ...dadosCliente,
+        // Só o id da área vai para o servidor; a taxa é recalculada lá.
+        ...(!retirada && areaSelecionada
+          ? { bairro: areaSelecionada.nome, areaEntregaId: areaSelecionada.id }
+          : {}),
         modalidade: modalidadeEfetiva,
         chaveIdempotencia: chaveTentativa.current,
         pagamento: nomesPagamento[pagamentoSelecionado],
@@ -324,8 +355,12 @@ function FinalizarPedidos() {
 
         {!lojaDisponivel && (
           <div className={styles.avisoOperacao} role="status">
-            <strong>{configuracao.lojaAberta ? (retirada ? 'Retirada indisponível' : 'Entrega indisponível') : 'Loja fechada'}</strong>
-            <span>Você pode revisar o cardápio, mas não é possível concluir um pedido agora.</span>
+            <strong>{configuracao.lojaAberta ? (semAreaDisponivel ? 'Nenhuma área de entrega disponível' : retirada ? 'Retirada indisponível' : 'Entrega indisponível') : 'Loja fechada'}</strong>
+            <span>
+              {configuracao.lojaAberta && semAreaDisponivel && configuracao.retiradaAtiva
+                ? 'No momento não estamos entregando. Você ainda pode escolher a retirada no balcão.'
+                : 'Você pode revisar o cardápio, mas não é possível concluir um pedido agora.'}
+            </span>
           </div>
         )}
 
@@ -488,13 +523,28 @@ function FinalizarPedidos() {
 
 
                 <div className={styles.campo}>
-                  <label htmlFor="bairroCliente">Bairro</label>
+                  <label htmlFor="bairroCliente">{entregaPorArea ? 'Área de entrega' : 'Bairro'}</label>
 
-                  {areasEntrega.length > 0 ? (
-                    <select id="bairroCliente" required autoComplete="address-level3" value={dadosCliente.bairro} onChange={(event) => alterarCampo('bairro', event.target.value)}>
-                      <option value="">Selecione o bairro</option>
-                      {areasEntrega.map((area) => <option value={area.bairro} key={area.bairro}>{area.bairro} — R$ {Number(area.taxa).toFixed(2).replace('.', ',')}</option>)}
-                    </select>
+                  {entregaPorArea ? (
+                    <>
+                      <select
+                        id="bairroCliente"
+                        required
+                        disabled={areasEntrega.length === 0}
+                        aria-describedby={areaSelecionada ? 'infoAreaEntrega' : undefined}
+                        value={areaSelecionada ? String(areaSelecionada.id) : ''}
+                        onChange={(event) => selecionarArea(event.target.value)}
+                      >
+                        <option value="">{areasEntrega.length === 0 ? 'Nenhuma área disponível' : 'Selecione seu bairro ou região'}</option>
+                        {areasEntrega.map((area) => <option value={String(area.id)} key={area.id}>{area.nome} — R$ {Number(area.taxa).toFixed(2).replace('.', ',')}</option>)}
+                      </select>
+                      {areaSelecionada && (
+                        <p id="infoAreaEntrega" className={styles.infoAreaEntrega} aria-live="polite">
+                          <span>Taxa de entrega <strong>R$ {Number(areaSelecionada.taxa).toFixed(2).replace('.', ',')}</strong></span>
+                          <span>Tempo estimado <strong>{formatarTempoArea(areaSelecionada)}</strong></span>
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <input
                       id="bairroCliente"
@@ -856,14 +906,7 @@ function FinalizarPedidos() {
                 <strong>
                   {taxaDefinida
                     ? `R$ ${taxaEntrega.toFixed(2).replace('.', ',')}`
-                    : 'Selecione o bairro'}
-                </strong>
-              </div>
-
-              <div>
-                <span>{retirada ? 'Retirada' : 'Pedido mínimo'}</span>
-                <strong className={minimoAtingido ? styles.valorValido : styles.valorPendente}>
-                  {retirada ? 'Sem taxa de entrega' : minimoAtingido ? 'Atingido' : `Faltam R$ ${(pedidoMinimo - subtotal).toFixed(2).replace('.', ',')}`}
+                    : 'Selecione a área'}
                 </strong>
               </div>
 
@@ -895,7 +938,7 @@ function FinalizarPedidos() {
                 <span>{retirada ? 'Retirada estimada' : 'Entrega estimada'}</span>
 
                 <strong>
-                  {configuracao.tempoEntrega}
+                  {tempoEstimado}
                 </strong>
               </div>
 
@@ -912,7 +955,7 @@ function FinalizarPedidos() {
             <button
               type="submit"
               className={styles.botaoFinalizar}
-              disabled={enviando || itens.length === 0 || !lojaDisponivel || !minimoAtingido || formasDisponiveis.length === 0}
+              disabled={enviando || itens.length === 0 || !lojaDisponivel || formasDisponiveis.length === 0}
             >
               {enviando ? 'Enviando pedido…' : 'Finalizar pedido'}
             </button>

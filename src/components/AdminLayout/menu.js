@@ -20,7 +20,9 @@ export const PERMISSOES_TELAS_ADMIN = Object.freeze({
   mesas: ['mesas.operar', 'mesas.fechar', 'mesas.cadastrar'],
   funcionarios: ['funcionarios.gerenciar'],
   relatorios: ['relatorios.visualizar'],
-  configuracoes: ['personalizacao.editar', 'delivery.editar', 'configuracoes.editar']
+  configuracoes: ['personalizacao.editar', 'delivery.editar', 'configuracoes.editar'],
+  // Aberta a partir da tela de Configurações, sem item próprio no menu.
+  areasEntrega: ['delivery.editar']
 });
 
 export const itensMenuAdmin = [

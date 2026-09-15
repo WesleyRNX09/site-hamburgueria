@@ -2276,19 +2276,6 @@
   transform: none;
 }
 
-.progressoMinimo {
-  display: grid;
-  gap: 0.6rem;
-  margin-bottom: 1.2rem;
-  color: var(--cor-erro-texto);
-  font-size: 1.05rem;
-}
-
-.progressoMinimo > div:first-child { display: flex; justify-content: space-between; gap: 1rem; }
-.barraMinimo { height: 0.55rem; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--cor-texto) 14%, var(--cor-fundo)); }
-.barraMinimo span { display: block; height: 100%; border-radius: inherit; background: var(--cor-erro); transition: width 0.2s ease; }
-.minimoAtingido { color: var(--cor-ok-texto); }
-.minimoAtingido .barraMinimo span { background: var(--cor-ok); }
 .bloqueioCarrinho { margin: 0 0 1rem; color: var(--cor-erro-texto); font-size: 1.05rem; text-align: center; }
 
 .continuarComprando {

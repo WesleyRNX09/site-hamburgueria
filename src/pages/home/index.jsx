@@ -230,8 +230,6 @@ function Home() {
     (total, item) => total + item.quantidade,
     0
   );
-  const pedidoMinimo = Number(configuracao.pedidoMinimo);
-  const minimoAtingido = totalCarrinho >= pedidoMinimo;
   const pedidosOnlineDisponiveis = Boolean(
     configuracao.lojaAberta && (configuracao.entregaAtiva || configuracao.retiradaAtiva)
   );
@@ -241,7 +239,7 @@ function Home() {
       ? 'Só consulta'
       : 'Fechado';
   const gradeDeHorarios = algumDiaAberto(configuracao.horarios);
-  const podeFinalizar = pedidosOnlineDisponiveis && minimoAtingido;
+  const podeFinalizar = pedidosOnlineDisponiveis;
   const nomeExibicao = configuracao.nomeLoja || 'Cardápio online';
   const tituloCardapio = configuracao.tituloCardapio?.trim() || 'Nosso cardápio';
   const textoApresentacao = configuracao.textoApresentacao?.trim() || 'Escolha o seu hambúrguer favorito.';
@@ -1397,12 +1395,6 @@ function Home() {
               </strong>
             </div>
 
-            <div className={`${styles.progressoMinimo} ${minimoAtingido ? styles.minimoAtingido : ''}`}>
-              <div><span>Pedido mínimo</span><strong>R$ {pedidoMinimo.toFixed(2).replace('.', ',')}</strong></div>
-              <div className={styles.barraMinimo}><span style={{ width: `${pedidoMinimo > 0 ? Math.min(100, (totalCarrinho / pedidoMinimo) * 100) : 100}%` }} /></div>
-              <small>{minimoAtingido ? 'Pedido mínimo atingido.' : `Faltam R$ ${(pedidoMinimo - totalCarrinho).toFixed(2).replace('.', ',')}.`}</small>
-            </div>
-
             {!pedidosOnlineDisponiveis && <p className={styles.bloqueioCarrinho}>{configuracao.lojaAberta ? 'Delivery e retirada estão indisponíveis.' : 'A loja está fechada no momento.'}</p>}
 
             <button
@@ -1411,7 +1403,7 @@ function Home() {
               onClick={() => navigate('/finalizar-pedido')}
               disabled={!podeFinalizar}
             >
-              {podeFinalizar ? 'Finalizar Pedido' : !pedidosOnlineDisponiveis ? 'Pedidos indisponíveis' : 'Complete o pedido mínimo'}
+              {podeFinalizar ? 'Finalizar Pedido' : 'Pedidos indisponíveis'}
             </button>
 
             <button

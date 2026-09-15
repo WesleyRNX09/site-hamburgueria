@@ -3,13 +3,14 @@ import {
   Clock,
   Database,
   ImageUp,
-  Plus,
+  MapPin,
   Save,
   Store,
   Trash2,
   Type
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
 import { useApp } from '../../../context/appContext';
@@ -28,7 +29,6 @@ import configStyles from './index.module.css';
 function dadosEditaveis(configuracao) {
   return {
     ...configuracao,
-    areasEntrega: Array.isArray(configuracao.areasEntrega) ? configuracao.areasEntrega : [],
     horarios: normalizarHorarios(configuracao.horarios)
   };
 }
@@ -91,35 +91,6 @@ function ConfiguracoesAdmin() {
     setSalvo(false);
   }
 
-  function alterarArea(indice, campo, valor) {
-    setDados((atuais) => ({
-      ...atuais,
-      areasEntrega: atuais.areasEntrega.map((area, posicao) => (
-        posicao === indice ? { ...area, [campo]: valor } : area
-      ))
-    }));
-    setAlterado(true);
-    setSalvo(false);
-  }
-
-  function adicionarArea() {
-    setDados((atuais) => ({
-      ...atuais,
-      areasEntrega: [...atuais.areasEntrega, { bairro: '', taxa: atuais.taxaEntrega ?? 0 }]
-    }));
-    setAlterado(true);
-    setSalvo(false);
-  }
-
-  function removerArea(indice) {
-    setDados((atuais) => ({
-      ...atuais,
-      areasEntrega: atuais.areasEntrega.filter((_, posicao) => posicao !== indice)
-    }));
-    setAlterado(true);
-    setSalvo(false);
-  }
-
   function alterarModo(valor) {
     setDados((atuais) => ({
       ...atuais,
@@ -162,11 +133,6 @@ function ConfiguracoesAdmin() {
       const configuracaoSalva = await setConfiguracao({
         ...dados,
         taxaEntrega: Number(dados.taxaEntrega),
-        pedidoMinimo: Number(dados.pedidoMinimo),
-        areasEntrega: dados.areasEntrega.map((area) => ({
-          bairro: area.bairro,
-          taxa: Number(area.taxa)
-        })),
         horarios: dados.horarios.map((dia) => ({
           dia: dia.dia,
           aberto: dia.aberto === true,
@@ -257,10 +223,8 @@ function ConfiguracoesAdmin() {
               <div className={styles.campo}><label htmlFor="entregaAtiva">Delivery</label><select id="entregaAtiva" value={dados.entregaAtiva ? 'ativo' : 'inativo'} onChange={(event) => alterar('entregaAtiva', event.target.value === 'ativo')}><option value="ativo">Entrega ativa</option><option value="inativo">Entrega indisponível</option></select></div>
               <div className={styles.campo}><label htmlFor="retiradaAtiva">Retirada no balcão</label><select id="retiradaAtiva" value={dados.retiradaAtiva ? 'ativo' : 'inativo'} onChange={(event) => alterar('retiradaAtiva', event.target.value === 'ativo')}><option value="ativo">Retirada ativa</option><option value="inativo">Retirada indisponível</option></select></div>
               <div className={styles.campo}><label htmlFor="atendimentoGarcomAtivo">Atendimento por garçom</label><select id="atendimentoGarcomAtivo" value={dados.atendimentoGarcomAtivo ? 'ativo' : 'inativo'} onChange={(event) => alterar('atendimentoGarcomAtivo', event.target.value === 'ativo')}><option value="ativo">Salão ativo</option><option value="inativo">Salão indisponível</option></select></div>
-              <div className={styles.campo}><label htmlFor="taxaEntrega">Taxa padrão de entrega</label><input id="taxaEntrega" min="0" required type="number" step="0.01" value={dados.taxaEntrega ?? 0} onChange={(event) => alterar('taxaEntrega', event.target.value)} /></div>
-              <div className={styles.campo}><label htmlFor="tempoEntrega">Tempo estimado</label><input id="tempoEntrega" required maxLength="60" value={dados.tempoEntrega ?? ''} onChange={(event) => alterar('tempoEntrega', event.target.value)} placeholder="30–45 min" /></div>
-              <div className={styles.campo}><label htmlFor="pedidoMinimo">Pedido mínimo</label><input id="pedidoMinimo" min="0" required type="number" step="0.01" value={dados.pedidoMinimo ?? 0} onChange={(event) => alterar('pedidoMinimo', event.target.value)} /></div>
-            </div>
+              <div className={styles.campo}><label htmlFor="taxaEntrega">Taxa única de entrega <span>(sem áreas cadastradas)</span></label><input id="taxaEntrega" min="0" required type="number" step="0.01" value={dados.taxaEntrega ?? 0} onChange={(event) => alterar('taxaEntrega', event.target.value)} /></div>
+              <div className={styles.campo}><label htmlFor="tempoEntrega">Tempo estimado</label><input id="tempoEntrega" required maxLength="60" value={dados.tempoEntrega ?? ''} onChange={(event) => alterar('tempoEntrega', event.target.value)} placeholder="30–45 min" /></div>            </div>
 
             <div className={`${styles.tituloCampoComAcao} ${configStyles.blocoSecao}`}>
               <div><h2>Horário de funcionamento</h2><p>Marque os dias e as horas de abertura. No modo automático, o cardápio abre e fecha sozinho.</p></div>
@@ -294,18 +258,8 @@ function ConfiguracoesAdmin() {
             </div>
 
             <div className={`${styles.tituloCampoComAcao} ${configStyles.blocoSecao}`}>
-              <div><h2>Áreas de entrega</h2><p>Sem bairros cadastrados, qualquer bairro informado usa a taxa padrão.</p></div>
-              <button type="button" className={styles.botaoSecundario} onClick={adicionarArea}><Plus size={16} /> Adicionar bairro</button>
-            </div>
-            {dados.areasEntrega.length === 0 && <div className={styles.aviso}>Nenhuma área específica cadastrada.</div>}
-            <div className={styles.listaAreasEntrega}>
-              {dados.areasEntrega.map((area, indice) => (
-                <div className={styles.linhaAreaEntrega} key={`area-${indice}`}>
-                  <div className={styles.campo}><label htmlFor={`bairro-${indice}`}>Bairro</label><input id={`bairro-${indice}`} required maxLength="120" value={area.bairro} onChange={(event) => alterarArea(indice, 'bairro', event.target.value)} /></div>
-                  <div className={styles.campo}><label htmlFor={`taxa-${indice}`}>Taxa</label><input id={`taxa-${indice}`} min="0" required type="number" step="0.01" value={area.taxa} onChange={(event) => alterarArea(indice, 'taxa', event.target.value)} /></div>
-                  <button type="button" className={styles.botaoIcone} onClick={() => removerArea(indice)} aria-label={`Remover ${area.bairro || 'área'}`}><Trash2 size={16} /></button>
-                </div>
-              ))}
+              <div><h2>Áreas de entrega</h2><p>Bairros ou regiões com taxa e tempo estimado próprios. Sem áreas cadastradas, vale a taxa única acima.</p></div>
+              {temPermissao('delivery.editar') && <Link className={styles.botaoSecundario} to="/admin/areas-entrega"><MapPin size={16} /> Gerenciar áreas</Link>}
             </div>
           </section>
 

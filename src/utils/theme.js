@@ -36,6 +36,24 @@ function numeroNaoNegativo(valor) {
   return Number.isFinite(numero) && numero >= 0 ? numero : 0;
 }
 
+function minutosEstimados(valor) {
+  const minutos = Number(valor);
+  return Number.isInteger(minutos) && minutos >= 1 && minutos <= 600 ? minutos : null;
+}
+
+/* Área de entrega pública: sem id, nome ou tempo coerente, não aparece no checkout. */
+function normalizarAreaEntrega(area) {
+  const id = Number(area?.id);
+  const nome = texto(area?.nome, 120);
+  const tempoEstimadoMin = minutosEstimados(area?.tempoEstimadoMin);
+  const tempoEstimadoMax = minutosEstimados(area?.tempoEstimadoMax);
+  if (!Number.isSafeInteger(id) || id <= 0 || !nome || tempoEstimadoMin === null
+      || tempoEstimadoMax === null || tempoEstimadoMax < tempoEstimadoMin) {
+    return null;
+  }
+  return { id, nome, taxa: numeroNaoNegativo(area.taxa), tempoEstimadoMin, tempoEstimadoMax };
+}
+
 function normalizarFonte(valor) {
   return FONTES.get(texto(valor, 80).toLowerCase()) ?? FONTES.get('poppins');
 }
@@ -109,7 +127,6 @@ export function normalizarConfiguracaoPublica(recebida = {}) {
     facebookUrl: urlPublica(recebida.facebookUrl),
     taxaEntrega: numeroNaoNegativo(recebida.taxaEntrega),
     tempoEntrega: texto(recebida.tempoEntrega, 60),
-    pedidoMinimo: numeroNaoNegativo(recebida.pedidoMinimo),
     horarios,
     funcionamentoAutomatico,
     lojaAbertaManual: recebida.lojaAbertaManual === true,
@@ -129,8 +146,10 @@ export function normalizarConfiguracaoPublica(recebida = {}) {
     formasPagamento: Array.isArray(recebida.formasPagamento)
       ? recebida.formasPagamento.filter((item) => typeof item === 'string').slice(0, 20)
       : [],
+    // true quando a loja cadastrou áreas, mesmo que nenhuma esteja ativa agora.
+    entregaPorArea: recebida.entregaPorArea === true,
     areasEntrega: Array.isArray(recebida.areasEntrega)
-      ? recebida.areasEntrega.filter((area) => area && typeof area.bairro === 'string').slice(0, 200)
+      ? recebida.areasEntrega.map(normalizarAreaEntrega).filter(Boolean).slice(0, 200)
       : [],
     politicaCancelamento: texto(recebida.politicaCancelamento),
     informacoesLegais: texto(recebida.informacoesLegais),

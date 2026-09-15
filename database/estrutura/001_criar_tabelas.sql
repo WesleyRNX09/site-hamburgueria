@@ -344,6 +344,24 @@ CREATE TABLE IF NOT EXISTS comanda_item_adicionais (
   INDEX idx_comanda_item_adicionais_adicional (adicional_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Áreas de entrega (bairro ou região) com taxa e tempo estimado próprios. Loja
+-- sem nenhuma área cadastrada usa a taxa única de configuracoes_estabelecimento.
+CREATE TABLE IF NOT EXISTS areas_entrega (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  id_estabelecimento BIGINT UNSIGNED NOT NULL,
+  nome VARCHAR(120) NOT NULL,
+  taxa_entrega_centavos INT UNSIGNED NOT NULL DEFAULT 0,
+  tempo_estimado_min SMALLINT UNSIGNED NOT NULL,
+  tempo_estimado_max SMALLINT UNSIGNED NOT NULL,
+  ativo TINYINT(1) NOT NULL DEFAULT 1,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_areas_entrega_estabelecimento_nome (id_estabelecimento, nome),
+  UNIQUE KEY uk_areas_entrega_estabelecimento_id (id_estabelecimento, id),
+  CONSTRAINT chk_areas_entrega_tempo
+    CHECK (tempo_estimado_min > 0 AND tempo_estimado_max >= tempo_estimado_min)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS pedidos (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   id_estabelecimento BIGINT UNSIGNED,
@@ -358,6 +376,8 @@ CREATE TABLE IF NOT EXISTS pedidos (
   rua VARCHAR(180),
   numero VARCHAR(30),
   bairro VARCHAR(120),
+  -- Área escolhida no pedido. A taxa cobrada fica em taxa_entrega_centavos.
+  area_entrega_id BIGINT UNSIGNED,
   complemento VARCHAR(160),
   referencia VARCHAR(255),
   taxa_entrega_centavos INT UNSIGNED NOT NULL DEFAULT 0,

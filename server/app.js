@@ -29,7 +29,9 @@ import {
   alternarStatusFuncionario,
   alternarStatusAdministrador,
   alterarSenhaAdministrador,
+  alterarStatusAreaEntrega,
   arquivarAdministrador,
+  atualizarAreaEntrega,
   atualizarQuantidadeItemComandaAdmin,
   cancelarComandaAdmin,
   atualizarStatusPedido,
@@ -40,6 +42,7 @@ import {
   buscarPromocao,
   confirmarPagamento,
   criarAdministrador,
+  criarAreaEntrega,
   criarMesa,
   criarPedidoDelivery,
   desarquivarAdministrador,
@@ -47,10 +50,13 @@ import {
   enviarComandaAdmin,
   estornarPagamento,
   excluirAdministrador,
+  excluirAreaEntrega,
   excluirFuncionario,
   excluirPromocao,
   finalizarComandaAdmin,
   listarAdministradores,
+  listarAreasEntrega,
+  listarAreasEntregaPublicas,
   listarDadosAdmin,
   listarDadosGarcom,
   listarDadosPublicos,
@@ -465,6 +471,12 @@ async function rotaPublica({ banco, requisicao, resposta, caminho, url, limitado
     responderJson(resposta, 200, {
       configuracao: await buscarConfiguracaoPublica(banco, idEstabelecimento)
     });
+    return true;
+  }
+
+  if (requisicao.method === 'GET' && caminho === '/api/publico/areas-entrega') {
+    resposta.setHeader('Cache-Control', 'no-store');
+    responderJson(resposta, 200, await listarAreasEntregaPublicas(banco, idEstabelecimento));
     return true;
   }
 
@@ -1383,6 +1395,69 @@ async function rotaAdmin({
     } catch (erro) {
       if (novaLogo) await removerImagemLocal(novaLogo, pastaUploads, idEstabelecimento);
       if (novoBanner) await removerImagemLocal(novoBanner, pastaUploads, idEstabelecimento);
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  if (requisicao.method === 'GET' && caminho === '/api/admin/areas-entrega') {
+    responderJson(resposta, 200, { areasEntrega: await listarAreasEntrega(banco, idEstabelecimento) });
+    return true;
+  }
+
+  if (requisicao.method === 'POST' && caminho === '/api/admin/areas-entrega') {
+    const dados = await lerJson(requisicao);
+    try {
+      responderJson(resposta, 201, {
+        areaEntrega: await criarAreaEntrega(banco, idEstabelecimento, dados, administradorAutenticado.id)
+      });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  const areaEntregaStatus = caminho.match(/^\/api\/admin\/areas-entrega\/(\d+)\/status$/);
+  if (requisicao.method === 'PATCH' && areaEntregaStatus) {
+    const dados = await lerJson(requisicao);
+    const areaEntrega = await alterarStatusAreaEntrega(
+      banco,
+      idEstabelecimento,
+      Number(areaEntregaStatus[1]),
+      dados?.ativo,
+      administradorAutenticado.id
+    );
+    if (!areaEntrega) throw new ErroHttp(404, 'Área de entrega não encontrada.');
+    responderJson(resposta, 200, { areaEntrega });
+    return true;
+  }
+
+  const areaEntregaId = caminho.match(/^\/api\/admin\/areas-entrega\/(\d+)$/);
+  if (requisicao.method === 'PUT' && areaEntregaId) {
+    const dados = await lerJson(requisicao);
+    try {
+      const areaEntrega = await atualizarAreaEntrega(
+        banco,
+        idEstabelecimento,
+        Number(areaEntregaId[1]),
+        dados,
+        administradorAutenticado.id
+      );
+      if (!areaEntrega) throw new ErroHttp(404, 'Área de entrega não encontrada.');
+      responderJson(resposta, 200, { areaEntrega });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  if (requisicao.method === 'DELETE' && areaEntregaId) {
+    try {
+      if (!await excluirAreaEntrega(banco, idEstabelecimento, Number(areaEntregaId[1]), administradorAutenticado.id)) {
+        throw new ErroHttp(404, 'Área de entrega não encontrada.');
+      }
+      responderJson(resposta, 200, { sucesso: true });
+    } catch (erro) {
       tratarErroDados(erro);
     }
     return true;

@@ -19,6 +19,7 @@ import FuncionariosAdmin from './pages/admin/funcionarios';
 import MesasAdmin from './pages/admin/mesas';
 import RelatoriosAdmin from './pages/admin/relatorios';
 import ConfiguracoesAdmin from './pages/admin/configuracoes';
+import AreasEntregaAdmin from './pages/admin/areasEntrega';
 import AcessosAdmin from './pages/admin/acessos';
 import AcessoGarcom from './pages/garcom/acesso';
 import MesasGarcom from './pages/garcom/mesas';
@@ -88,6 +89,9 @@ function App() {
         </Route>
         <Route element={<RequirePermissao algumaDe={PERMISSOES_TELAS_ADMIN.configuracoes} />}>
           <Route path="/admin/configuracoes" element={<ConfiguracoesAdmin />} />
+        </Route>
+        <Route element={<RequirePermissao algumaDe={PERMISSOES_TELAS_ADMIN.areasEntrega} />}>
+          <Route path="/admin/areas-entrega" element={<AreasEntregaAdmin />} />
         </Route>
         {/* Aberta a todo administrador: a troca da própria senha mora aqui. */}
         <Route path="/admin/acessos" element={<AcessosAdmin />} />

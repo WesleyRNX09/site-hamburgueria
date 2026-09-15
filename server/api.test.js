@@ -17,6 +17,7 @@ import {
   buscarIndicadoresDashboard,
   buscarItensValidados,
   calcularTotaisPedido,
+  criarPedidoDelivery,
   intervaloIndicadores,
   salvarConfiguracao
 } from './operations.js';
@@ -310,12 +311,6 @@ test('publica somente configurações seguras do tenant resolvido pelo domínio'
       atendimento_garcom_ativo: 0,
       aceita_cartao: 1,
       aceita_dinheiro: 1,
-      areas_entrega_json: JSON.stringify([
-        { bairro: 'Centro', taxaCentavos: 500 },
-        null,
-        { bairro: 'Taxa inválida', taxaCentavos: -1 },
-        { bairro: 'centro', taxaCentavos: 900 }
-      ]),
       formas_pagamento_json: JSON.stringify(['Pix', 'Dinheiro', 'Pix', 'Pagamento arbitrário']),
       politica_cancelamento: 'Cancelamentos devem ser solicitados antes do preparo.',
       informacoes_legais: 'Informações legais da Loja A.',
@@ -360,11 +355,16 @@ test('publica somente configurações seguras do tenant resolvido pelo domínio'
       atendimento_garcom_ativo: 1,
       aceita_cartao: 0,
       aceita_dinheiro: 1,
-      areas_entrega_json: 'JSON inválido',
       formas_pagamento_json: null,
       politica_cancelamento: null,
       informacoes_legais: null
     }]
+  ]);
+  const areasPorLoja = new Map([
+    [11, [
+      { id: 3, nome: 'Centro', taxa_entrega_centavos: 500, tempo_estimado_min: 30, tempo_estimado_max: 45, ativo: 1 },
+      { id: 4, nome: 'Desativada', taxa_entrega_centavos: 900, tempo_estimado_min: 50, tempo_estimado_max: 70, ativo: 0 }
+    ]]
   ]);
   let consultasConfiguracaoInativa = 0;
   const banco = {
@@ -384,6 +384,10 @@ test('publica somente configurações seguras do tenant resolvido pelo domínio'
         const idEstabelecimento = Number(parametros[0]);
         if (idEstabelecimento === 33) consultasConfiguracaoInativa += 1;
         return [[configuracoes.get(idEstabelecimento)].filter(Boolean)];
+      }
+      if (sql.includes('FROM areas_entrega')) {
+        assert.equal(/SELECT\s+\*/i.test(sql), false);
+        return [areasPorLoja.get(Number(parametros[0])) ?? []];
       }
       throw new Error(`Consulta inesperada no teste: ${sql}`);
     }
@@ -412,7 +416,12 @@ test('publica somente configurações seguras do tenant resolvido pelo domínio'
     assert.equal(configuracaoA.corPrincipal, '#A1B2C3');
     assert.equal(configuracaoA.fonte, 'Georgia');
     assert.deepEqual(configuracaoA.formasPagamento, ['Pix', 'Dinheiro']);
-    assert.deepEqual(configuracaoA.areasEntrega, [{ bairro: 'Centro', taxa: 5 }]);
+    // Só áreas ativas saem para o público; a desativada ainda conta como cadastro.
+    assert.deepEqual(configuracaoA.areasEntrega, [
+      { id: 3, nome: 'Centro', bairro: 'Centro', taxa: 5, tempoEstimadoMin: 30, tempoEstimadoMax: 45 }
+    ]);
+    assert.equal(configuracaoA.entregaPorArea, true);
+    assert.equal('pedidoMinimo' in configuracaoA, false);
     assert.equal('segredoInterno' in configuracaoA, false);
     assert.equal('idEstabelecimento' in configuracaoA, false);
     assert.equal(configuracaoA.bannerTitulo, 'O Verdadeiro Hambúrguer Artesanal');
@@ -429,6 +438,7 @@ test('publica somente configurações seguras do tenant resolvido pelo domínio'
     assert.equal(configuracaoB.fonte, 'Poppins');
     assert.deepEqual(configuracaoB.formasPagamento, ['Dinheiro']);
     assert.deepEqual(configuracaoB.areasEntrega, []);
+    assert.equal(configuracaoB.entregaPorArea, false);
     assert.equal(configuracaoB.bannerBotaoTexto, 'Clique aqui');
     assert.equal(configuracaoB.bannerBotaoDestino, '');
     assert.equal(configuracaoB.bannerTitulo, '');
@@ -571,28 +581,31 @@ test('salva toda a configuração somente no tenant autenticado e valida o tema'
   assert.equal(/SELECT\s+\*/i.test(gravacao.sql), false);
   assert.equal(gravacao.parametros[0], 11);
   assert.equal(gravacao.parametros.includes(22), false);
-  assert.equal(gravacao.parametros[12], '/uploads/banner-seguro.webp');
-  assert.equal(gravacao.parametros[13], 'O Verdadeiro Hambúrguer Artesanal');
-  assert.equal(gravacao.parametros[14], 'Carne grelhada na hora, sempre fresca.');
-  assert.equal(gravacao.parametros[15], 'Peça agora');
-  assert.equal(gravacao.parametros[16], 'cardapio');
-  assert.equal(gravacao.parametros[17], 'Nosso cardápio');
-  assert.equal(gravacao.parametros[18], 'Escolha o seu hambúrguer favorito.');
-  assert.equal(gravacao.parametros[19], 'Hambúrguer de verdade, feito do nosso jeito.');
-  assert.equal(gravacao.parametros[20], 'Ingredientes selecionados e preparo na hora.');
-  assert.equal(gravacao.parametros[21], 'Feito com carinho para você.');
-  assert.deepEqual(JSON.parse(gravacao.parametros[32]), ['Cartão', 'Dinheiro']);
-  assert.equal(gravacao.parametros[33], 'Cancelamento antes do preparo.');
-  assert.equal(gravacao.parametros[34], 'Informações legais da Loja A.');
+  assert.equal(gravacao.parametros[11], '/uploads/banner-seguro.webp');
+  assert.equal(gravacao.parametros[12], 'O Verdadeiro Hambúrguer Artesanal');
+  assert.equal(gravacao.parametros[13], 'Carne grelhada na hora, sempre fresca.');
+  assert.equal(gravacao.parametros[14], 'Peça agora');
+  assert.equal(gravacao.parametros[15], 'cardapio');
+  assert.equal(gravacao.parametros[16], 'Nosso cardápio');
+  assert.equal(gravacao.parametros[17], 'Escolha o seu hambúrguer favorito.');
+  assert.equal(gravacao.parametros[18], 'Hambúrguer de verdade, feito do nosso jeito.');
+  assert.equal(gravacao.parametros[19], 'Ingredientes selecionados e preparo na hora.');
+  assert.equal(gravacao.parametros[20], 'Feito com carinho para você.');
+  assert.deepEqual(JSON.parse(gravacao.parametros[30]), ['Cartão', 'Dinheiro']);
+  assert.equal(gravacao.parametros[31], 'Cancelamento antes do preparo.');
+  assert.equal(gravacao.parametros[32], 'Informações legais da Loja A.');
+  // Pedido mínimo e a lista antiga de bairros saíram: mesmo enviados, nada é gravado.
+  assert.equal(/pedido_minimo_centavos|areas_entrega_json/.test(gravacao.sql), false);
+  assert.equal(gravacao.parametros.length, 35);
   // Cores e fonte pertencem ao superadministrador: o painel do estabelecimento
   // não pode gravar essas colunas nem enviando os campos na requisição.
   assert.equal(/cor_principal|cor_secundaria|cor_fundo|cor_card|cor_texto|fonte/i.test(gravacao.sql), false);
   assert.equal(gravacao.parametros.includes('#E95420'), false);
   assert.equal(gravacao.parametros.includes('Georgia'), false);
   // O funcionamento manual só muda por lojaAbertaManual, campo mapeado à parte.
-  assert.equal(gravacao.parametros[7], 1);
-  assert.equal(gravacao.parametros[35], null);
-  assert.equal(gravacao.parametros[36], 0);
+  assert.equal(gravacao.parametros[6], 1);
+  assert.equal(gravacao.parametros[33], null);
+  assert.equal(gravacao.parametros[34], 0);
 
   const auditoria = comandos.find(({ sql }) => sql.includes('INSERT INTO auditoria_admin'));
   assert.deepEqual(auditoria.parametros.slice(0, 5), [11, 7, 'configuracao.atualizada', 'configuracao', '11']);
@@ -612,8 +625,8 @@ test('salva toda a configuração somente no tenant autenticado e valida o tema'
   await salvarConfiguracao(banco, 11, { ...dados, bannerBotaoTexto: '', bannerBotaoDestino: '' }, 7);
   const gravacoes = comandos.filter(({ sql }) => sql.includes('INSERT INTO configuracoes_estabelecimento'));
   const ultimaGravacao = gravacoes[gravacoes.length - 1];
+  assert.equal(ultimaGravacao.parametros[14], null);
   assert.equal(ultimaGravacao.parametros[15], null);
-  assert.equal(ultimaGravacao.parametros[16], null);
   assert.equal(conexoesAbertas, 2);
 
   // Horário automático: a grade vira a fonte do texto público e do estado.
@@ -626,11 +639,11 @@ test('salva toda a configuração somente no tenant autenticado e valida o tema'
   const comHorario = comandos
     .filter(({ sql }) => sql.includes('INSERT INTO configuracoes_estabelecimento'))
     .at(-1);
-  assert.equal(comHorario.parametros[36], 1);
-  assert.equal(comHorario.parametros[7], 0);
-  assert.equal(comHorario.parametros[23], 'Segunda-feira: 19:00 às 23:00');
+  assert.equal(comHorario.parametros[34], 1);
+  assert.equal(comHorario.parametros[6], 0);
+  assert.equal(comHorario.parametros[22], 'Segunda-feira: 19:00 às 23:00');
   assert.deepEqual(
-    JSON.parse(comHorario.parametros[35])[1],
+    JSON.parse(comHorario.parametros[33])[1],
     { dia: 1, aberto: true, abre: '19:00', fecha: '23:00' }
   );
   await assert.rejects(
@@ -1088,6 +1101,148 @@ test('rejeita formatos e volumes abusivos antes de persistir o pedido', async ()
     () => calcularTotaisPedido([{ precoCentavos: 100_000_000, quantidade: 50 }], 0),
     (erro) => erro.status === 400 && /excede o limite/i.test(erro.message)
   );
+});
+
+/* Banco simulado do fechamento de pedido: loja 11, produto 5 a R$ 49,90 e as
+   áreas informadas (de qualquer loja). Guarda o que foi gravado em pedidos. */
+function bancoPedidoComAreas({ areas = [], taxaUnicaCentavos = 700 } = {}) {
+  const estado = { pedido: null };
+  const catalogo = conexaoCatalogo();
+  const conexao = {
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    release() {},
+    async execute(sql, parametros = []) {
+      assert.equal(/SELECT\s+\*/i.test(sql), false);
+      if (sql.includes('FROM configuracoes_estabelecimento')) {
+        return [[{
+          loja_aberta: 1, funcionamento_automatico: 0, horarios_json: null,
+          entrega_ativa: 1, retirada_ativa: 1, aceita_cartao: 1, aceita_dinheiro: 1,
+          pix_chave: null, pix_beneficiario: null, pix_cidade: null,
+          taxa_entrega_centavos: taxaUnicaCentavos
+        }]];
+      }
+      if (sql.includes('FROM produtos p')) return catalogo.execute(sql, parametros);
+      if (sql.includes('FROM areas_entrega')) {
+        assert.equal(Number(parametros[0]), 11, 'área consultada fora da loja do pedido');
+        const daLoja = areas.filter((area) => area.tenant === Number(parametros[0]));
+        if (sql.includes('COUNT(id)')) {
+          return [[{ total: daLoja.length, ativas: String(daLoja.filter((area) => area.ativo).length) }]];
+        }
+        const porId = sql.includes('AND id = ?');
+        const area = daLoja.find((item) => item.ativo && (porId
+          ? item.id === Number(parametros[1])
+          : item.nome.toLowerCase() === String(parametros[1]).toLowerCase()));
+        return [[area && { id: area.id, nome: area.nome, taxa_entrega_centavos: area.taxaCentavos }].filter(Boolean)];
+      }
+      if (sql.includes('INSERT INTO pedidos')) {
+        estado.pedido = parametros;
+        return [{ insertId: 900 }];
+      }
+      if (/^\s*INSERT\b/i.test(sql)) return [{ insertId: 1 }];
+      throw new Error(`Consulta inesperada no teste: ${sql}`);
+    }
+  };
+  const banco = {
+    async getConnection() { return conexao; },
+    async execute(sql) {
+      if (sql.includes('FROM pedidos p') && estado.pedido) {
+        const p = estado.pedido;
+        return [[{
+          id: 900, origem: p[3], cliente: p[4], telefone: p[5], email: p[6], status: 'Recebido',
+          pagamento: p[7], rua: p[8], numero: p[9], bairro: p[10], area_entrega_id: p[11],
+          complemento: p[12], referencia: p[13], taxa_entrega_centavos: p[14], total_centavos: p[15],
+          comanda_id: null, mesa_id: null, funcionario_id: null, criado_em: new Date(),
+          pagamento_status: 'Pagamento na entrega', sem_troco: null, troco_para_centavos: null
+        }]];
+      }
+      if (/^\s*SELECT\b/i.test(sql)) return [[]];
+      throw new Error(`Consulta inesperada no teste: ${sql}`);
+    }
+  };
+  return { banco, estado };
+}
+
+function pedidoDeliveryTeste(sobrescritas = {}) {
+  return {
+    nome: 'Cliente',
+    telefone: '(11) 90000-0000',
+    email: 'cliente@teste.local',
+    rua: 'Rua A',
+    numero: '10',
+    bairro: 'Centro',
+    modalidade: 'delivery',
+    pagamento: 'Cartão na entrega',
+    chaveIdempotencia: randomUUID(),
+    itens: [{ produtoId: 5, quantidade: 1 }],
+    ...sobrescritas
+  };
+}
+
+test('fecha o pedido com a taxa da área escolhida e ignora taxa e total enviados pelo navegador', async () => {
+  const areas = [
+    { id: 1, tenant: 11, nome: 'Centro', taxaCentavos: 500, ativo: true },
+    { id: 2, tenant: 11, nome: 'Bairro Sul', taxaCentavos: 850, ativo: true },
+    { id: 77, tenant: 22, nome: 'Área da loja B', taxaCentavos: 0, ativo: true }
+  ];
+  const { banco, estado } = bancoPedidoComAreas({ areas });
+  const pedido = await criarPedidoDelivery(banco, 11, pedidoDeliveryTeste({
+    areaEntregaId: 2,
+    bairro: 'Centro',
+    taxaEntrega: 0,
+    taxaEntregaCentavos: 0,
+    total: 0.01
+  }));
+  assert.equal(pedido.taxaEntrega, 8.5);
+  assert.equal(pedido.total, 58.4);
+  assert.equal(pedido.areaEntregaId, 2);
+  // Grava o id da área, o nome dela como bairro e a taxa do momento.
+  assert.equal(estado.pedido[10], 'Bairro Sul');
+  assert.equal(estado.pedido[11], 2);
+  assert.equal(estado.pedido[14], 850);
+  assert.equal(estado.pedido[15], 5840);
+
+  const peloNome = bancoPedidoComAreas({ areas });
+  assert.equal((await criarPedidoDelivery(peloNome.banco, 11, pedidoDeliveryTeste({ bairro: 'bairro sul' }))).taxaEntrega, 8.5);
+
+  // Área de outra loja, id que não existe e bairro fora da cobertura.
+  for (const dados of [{ areaEntregaId: 77 }, { areaEntregaId: 999 }, { areaEntregaId: undefined, bairro: 'Longe' }]) {
+    const simulado = bancoPedidoComAreas({ areas });
+    await assert.rejects(criarPedidoDelivery(simulado.banco, 11, pedidoDeliveryTeste(dados)), (erro) => erro.status === 409);
+    assert.equal(simulado.estado.pedido, null);
+  }
+  for (const areaEntregaId of ['abc', -2, 1.5, true, { id: 2 }]) {
+    await assert.rejects(
+      criarPedidoDelivery(bancoPedidoComAreas({ areas }).banco, 11, pedidoDeliveryTeste({ areaEntregaId })),
+      (erro) => erro.status === 400 && /área de entrega válida/i.test(erro.message)
+    );
+  }
+});
+
+test('sem áreas cadastradas o pedido usa a taxa única; com todas desativadas o delivery é recusado', async () => {
+  const semAreas = bancoPedidoComAreas({ taxaUnicaCentavos: 700 });
+  const pedido = await criarPedidoDelivery(semAreas.banco, 11, pedidoDeliveryTeste({ bairro: 'Qualquer Bairro', taxaEntrega: 0 }));
+  assert.equal(pedido.taxaEntrega, 7);
+  assert.equal(pedido.total, 56.9);
+  assert.equal(pedido.areaEntregaId, null);
+  assert.equal(semAreas.estado.pedido[10], 'Qualquer Bairro');
+
+  const desativadas = bancoPedidoComAreas({ areas: [{ id: 1, tenant: 11, nome: 'Centro', taxaCentavos: 500, ativo: false }] });
+  await assert.rejects(
+    criarPedidoDelivery(desativadas.banco, 11, pedidoDeliveryTeste()),
+    (erro) => erro.status === 409 && /Nenhuma área de entrega disponível/.test(erro.message)
+  );
+  assert.equal(desativadas.estado.pedido, null);
+
+  // Retirada não passa por área nenhuma, nem valida o id enviado.
+  const retirada = await criarPedidoDelivery(desativadas.banco, 11, pedidoDeliveryTeste({
+    modalidade: 'retirada',
+    pagamento: 'Cartão na retirada',
+    areaEntregaId: 'abc'
+  }));
+  assert.equal(retirada.taxaEntrega, 0);
+  assert.equal(desativadas.estado.pedido[11], null);
 });
 
 test('limita tentativas repetidas de autenticação', () => {
@@ -1991,7 +2146,6 @@ if (!executarIntegracao) {
     facebookUrl: '',
     taxaEntrega: 7.9,
     tempoEntrega: '30–45 min',
-    pedidoMinimo: 20,
     lojaAbertaManual: true,
     entregaAtiva: true,
     aceitaCartao: true,
@@ -2000,11 +2154,7 @@ if (!executarIntegracao) {
     pixBeneficiario: '',
     pixCidade: '',
     retiradaAtiva: true,
-    logo: '',
-    areasEntrega: [
-      { bairro: 'Centro', taxa: 5 },
-      { bairro: 'Bairro Sul', taxa: 8.5 }
-    ]
+    logo: ''
   };
 
   const nomeBanco = `${process.env.DB_NAME || 'hamburgueria'}_testes`;
@@ -2188,10 +2338,26 @@ if (!executarIntegracao) {
     const publico = await chamar('/api/publico/inicial');
     assert.equal(publico.corpo.configuracao.nomeLoja, 'Hambúrguer Teste');
     assert.equal(publico.corpo.configuracao.whatsapp, '(11) 98888-7777');
-    assert.deepEqual(publico.corpo.configuracao.areasEntrega, [
-      { bairro: 'Centro', taxa: 5 },
-      { bairro: 'Bairro Sul', taxa: 8.5 }
-    ]);
+    assert.equal(publico.corpo.configuracao.entregaPorArea, false);
+
+    for (const area of [
+      { nome: 'Centro', taxaEntrega: 5, tempoEstimadoMin: 30, tempoEstimadoMax: 45 },
+      { nome: 'Bairro Sul', taxaEntrega: '8,50', tempoEstimadoMin: '40', tempoEstimadoMax: 60 }
+    ]) {
+      const criada = await chamar('/api/admin/areas-entrega', { metodo: 'POST', token: tokenAdmin, dados: area });
+      assert.equal(criada.status, 201);
+    }
+    const comAreas = await chamar('/api/publico/inicial');
+    assert.equal(comAreas.corpo.configuracao.entregaPorArea, true);
+    assert.deepEqual(
+      comAreas.corpo.configuracao.areasEntrega.map(({ nome, bairro, taxa, tempoEstimadoMin, tempoEstimadoMax }) => (
+        { nome, bairro, taxa, tempoEstimadoMin, tempoEstimadoMax }
+      )),
+      [
+        { nome: 'Bairro Sul', bairro: 'Bairro Sul', taxa: 8.5, tempoEstimadoMin: 40, tempoEstimadoMax: 60 },
+        { nome: 'Centro', bairro: 'Centro', taxa: 5, tempoEstimadoMin: 30, tempoEstimadoMax: 45 }
+      ]
+    );
   });
 
   test('cria delivery com preços recalculados e acompanhamento protegido', async () => {
@@ -2241,7 +2407,7 @@ if (!executarIntegracao) {
     assert.equal(acompanhado.corpo.pedido.status, 'Recebido');
   });
 
-  test('bloqueia pedido com loja fechada e abaixo do mínimo', async () => {
+  test('bloqueia pedido com loja fechada e não exige mais pedido mínimo', async () => {
     const fechadaConfigurada = await salvarConfiguracaoTeste({ lojaAbertaManual: false });
     assert.equal(fechadaConfigurada.status, 200);
     const fechada = await chamar('/api/pedidos', {
@@ -2251,14 +2417,15 @@ if (!executarIntegracao) {
     assert.equal(fechada.status, 409);
     assert.match(fechada.corpo.erro, /fechada/i);
 
+    // O campo antigo é ignorado: um pedido pequeno continua sendo aceito.
     const minimoConfigurado = await salvarConfiguracaoTeste({ pedidoMinimo: 100 });
     assert.equal(minimoConfigurado.status, 200);
-    const minimo = await chamar('/api/pedidos', {
+    assert.equal('pedidoMinimo' in minimoConfigurado.corpo.configuracao, false);
+    const pequeno = await chamar('/api/pedidos', {
       metodo: 'POST',
       dados: dadosPedido()
     });
-    assert.equal(minimo.status, 409);
-    assert.match(minimo.corpo.erro, /pedido mínimo/i);
+    assert.equal(pequeno.status, 201);
 
     assert.equal((await salvarConfiguracaoTeste()).status, 200);
   });
@@ -2285,6 +2452,265 @@ if (!executarIntegracao) {
     assert.equal(areaValida.status, 201);
     assert.equal(areaValida.corpo.pedido.taxaEntrega, 8.5);
     assert.match(areaValida.corpo.pedido.endereco, /Bairro Sul/);
+  });
+
+  /* Áreas de entrega. Os pedidos saem por um servidor próprio para não
+     disputar o limite de pedidos por minuto com os outros testes. */
+  async function comServidorDePedidos(executar) {
+    const servidorPedidos = criarServidor({ banco, pastaUploads, jwtSecret: JWT_SECRET_TESTE, limitePedidosPorMinuto: 1000 });
+    await aguardarServidor(servidorPedidos, 0);
+    try {
+      const baseUrl = `http://127.0.0.1:${servidorPedidos.address().port}`;
+      await executar((dados) => chamar('/api/pedidos', { metodo: 'POST', dados, baseUrl }));
+    } finally {
+      await fecharServidor(servidorPedidos);
+    }
+  }
+
+  async function areaPeloNome(nome) {
+    const lista = await chamar('/api/admin/areas-entrega', { token: tokenAdmin });
+    assert.equal(lista.status, 200);
+    return lista.corpo.areasEntrega.find((area) => area.nome === nome);
+  }
+
+  test('recalcula a taxa pela área escolhida, ignora a taxa adulterada e preserva o histórico', async () => {
+    const sul = await areaPeloNome('Bairro Sul');
+    await comServidorDePedidos(async (pedir) => {
+      const criado = await pedir(dadosPedido({
+        areaEntregaId: sul.id,
+        bairro: 'Centro',
+        taxaEntrega: 0,
+        taxaEntregaCentavos: 0,
+        total: 0.01
+      }));
+      assert.equal(criado.status, 201);
+      assert.equal(criado.corpo.pedido.taxaEntrega, 8.5);
+      assert.equal(criado.corpo.pedido.areaEntregaId, sul.id);
+      assert.match(criado.corpo.pedido.endereco, /Bairro Sul/);
+
+      const idPedido = Number(criado.corpo.pedido.id.replace('#PED', ''));
+      const lerPedido = async () => (await banco.execute(
+        'SELECT area_entrega_id, bairro, taxa_entrega_centavos, total_centavos FROM pedidos WHERE id = ?',
+        [idPedido]
+      ))[0][0];
+      const gravado = await lerPedido();
+      assert.equal(Number(gravado.area_entrega_id), sul.id);
+      assert.equal(Number(gravado.taxa_entrega_centavos), 850);
+
+      // Mudar a taxa e o nome da área depois não altera o pedido já feito.
+      const alterada = await chamar(`/api/admin/areas-entrega/${sul.id}`, {
+        metodo: 'PUT',
+        token: tokenAdmin,
+        dados: { nome: 'Bairro Sul Novo', taxaEntrega: 12, tempoEstimadoMin: 50, tempoEstimadoMax: 70 }
+      });
+      assert.equal(alterada.status, 200);
+      assert.equal(alterada.corpo.areaEntrega.taxaEntrega, 12);
+      assert.deepEqual(await lerPedido(), gravado);
+      const restaurada = await chamar(`/api/admin/areas-entrega/${sul.id}`, {
+        metodo: 'PUT',
+        token: tokenAdmin,
+        dados: { nome: 'Bairro Sul', taxaEntrega: 8.5, tempoEstimadoMin: 40, tempoEstimadoMax: 60, ativo: true }
+      });
+      assert.equal(restaurada.status, 200);
+
+      // Área de outra loja e id em formato inválido.
+      const idTenantB = await idDaLoja('loja-b');
+      const [areaB] = await banco.execute(`
+        INSERT INTO areas_entrega (id_estabelecimento, nome, taxa_entrega_centavos, tempo_estimado_min, tempo_estimado_max)
+        VALUES (?, 'Área só da loja B', 0, 10, 20)
+      `, [idTenantB]);
+      try {
+        assert.equal((await pedir(dadosPedido({ areaEntregaId: Number(areaB.insertId) }))).status, 409);
+      } finally {
+        await banco.execute('DELETE FROM areas_entrega WHERE id = ? AND id_estabelecimento = ?', [areaB.insertId, idTenantB]);
+      }
+      assert.equal((await pedir(dadosPedido({ areaEntregaId: 'abc' }))).status, 400);
+    });
+  });
+
+  test('valida a área, não exclui área já usada e sem área ativa bloqueia o delivery', async () => {
+    const centro = await areaPeloNome('Centro');
+    const sul = await areaPeloNome('Bairro Sul');
+    const criar = (dados) => chamar('/api/admin/areas-entrega', { metodo: 'POST', token: tokenAdmin, dados });
+    const status = (id, ativo) => chamar(`/api/admin/areas-entrega/${id}/status`, { metodo: 'PATCH', token: tokenAdmin, dados: { ativo } });
+
+    for (const invalida of [
+      { nome: '   ', taxaEntrega: 1, tempoEstimadoMin: 10, tempoEstimadoMax: 20 },
+      { nome: 'x'.repeat(121), taxaEntrega: 1, tempoEstimadoMin: 10, tempoEstimadoMax: 20 },
+      { nome: 'Negativa', taxaEntrega: -1, tempoEstimadoMin: 10, tempoEstimadoMax: 20 },
+      { nome: 'Cara demais', taxaEntrega: 10000.01, tempoEstimadoMin: 10, tempoEstimadoMax: 20 },
+      { nome: 'Invertida', taxaEntrega: 1, tempoEstimadoMin: 30, tempoEstimadoMax: 20 },
+      { nome: 'Fracionada', taxaEntrega: 1, tempoEstimadoMin: 10.5, tempoEstimadoMax: 20 },
+      { nome: 'Ativo em texto', taxaEntrega: 1, tempoEstimadoMin: 10, tempoEstimadoMax: 20, ativo: 'sim' }
+    ]) {
+      assert.equal((await criar(invalida)).status, 400, invalida.nome);
+    }
+    const repetida = await criar({ nome: 'CENTRO', taxaEntrega: 1, tempoEstimadoMin: 10, tempoEstimadoMax: 20 });
+    assert.equal(repetida.status, 409);
+    assert.equal((await status(centro.id, 'false')).status, 400);
+
+    const contarArea = async (id) => Number((await banco.execute('SELECT COUNT(id) AS total FROM areas_entrega WHERE id = ?', [id]))[0][0].total);
+    const usada = await chamar(`/api/admin/areas-entrega/${sul.id}`, { metodo: 'DELETE', token: tokenAdmin });
+    assert.equal(usada.status, 409);
+    assert.match(usada.corpo.erro, /Desative/);
+    assert.equal(await contarArea(sul.id), 1);
+
+    const nova = await criar({ nome: 'Área sem pedidos', taxaEntrega: 3, tempoEstimadoMin: 15, tempoEstimadoMax: 25 });
+    assert.equal(nova.status, 201);
+    assert.equal((await chamar(`/api/admin/areas-entrega/${nova.corpo.areaEntrega.id}`, { metodo: 'DELETE', token: tokenAdmin })).status, 200);
+    assert.equal(await contarArea(nova.corpo.areaEntrega.id), 0);
+
+    await comServidorDePedidos(async (pedir) => {
+      try {
+        const desativada = await status(sul.id, false);
+        assert.equal(desativada.status, 200);
+        assert.equal(desativada.corpo.areaEntrega.ativo, false);
+        const publico = await chamar('/api/publico/areas-entrega');
+        assert.equal(publico.corpo.entregaPorArea, true);
+        assert.deepEqual(publico.corpo.areasEntrega.map((area) => area.id), [centro.id]);
+        assert.equal((await pedir(dadosPedido({ areaEntregaId: sul.id }))).status, 409);
+
+        assert.equal((await status(centro.id, false)).status, 200);
+        const semAtivas = await chamar('/api/publico/areas-entrega');
+        assert.deepEqual(semAtivas.corpo, { entregaPorArea: true, areasEntrega: [] });
+        const bloqueado = await pedir(dadosPedido());
+        assert.equal(bloqueado.status, 409);
+        assert.match(bloqueado.corpo.erro, /Nenhuma área de entrega disponível/);
+
+        const retirada = await pedir(dadosPedido({ modalidade: 'retirada', pagamento: 'Cartão na retirada' }));
+        assert.equal(retirada.status, 201);
+        assert.equal(retirada.corpo.pedido.taxaEntrega, 0);
+      } finally {
+        await status(sul.id, true);
+        await status(centro.id, true);
+      }
+    });
+  });
+
+  test('administrador da loja A não lista, edita, ativa nem exclui áreas de entrega da loja B', async () => {
+    const idTenantA = await idDaLoja('estabelecimento-padrao');
+    const idTenantB = await idDaLoja('loja-b');
+    const [criadaB] = await banco.execute(`
+      INSERT INTO areas_entrega (id_estabelecimento, nome, taxa_entrega_centavos, tempo_estimado_min, tempo_estimado_max)
+      VALUES (?, 'Exclusiva da loja B', 400, 20, 30)
+    `, [idTenantB]);
+    const idAreaB = Number(criadaB.insertId);
+    try {
+      const listaA = await chamar('/api/admin/areas-entrega', { token: tokenAdmin });
+      assert.equal(listaA.corpo.areasEntrega.some((area) => area.id === idAreaB), false);
+      for (const [metodo, caminho, dados] of [
+        ['PUT', `/api/admin/areas-entrega/${idAreaB}`, { nome: 'Tomada', taxaEntrega: 0, tempoEstimadoMin: 1, tempoEstimadoMax: 2 }],
+        ['PATCH', `/api/admin/areas-entrega/${idAreaB}/status`, { ativo: false }],
+        ['DELETE', `/api/admin/areas-entrega/${idAreaB}`]
+      ]) {
+        assert.equal((await chamar(caminho, { metodo, token: tokenAdmin, dados })).status, 404, `${metodo} ${caminho}`);
+      }
+      const cruzada = await chamar(`/api/admin/areas-entrega/${idAreaB}`, { metodo: 'DELETE', token: tokenAdmin, baseUrl: urlBaseTenantB });
+      assert.equal(cruzada.status, 403);
+
+      const [[areaB]] = await banco.execute(
+        'SELECT nome, taxa_entrega_centavos, ativo FROM areas_entrega WHERE id = ? AND id_estabelecimento = ?',
+        [idAreaB, idTenantB]
+      );
+      assert.deepEqual({ ...areaB, taxa_entrega_centavos: Number(areaB.taxa_entrega_centavos), ativo: Number(areaB.ativo) },
+        { nome: 'Exclusiva da loja B', taxa_entrega_centavos: 400, ativo: 1 });
+
+      const publicoA = await chamar('/api/publico/areas-entrega');
+      const publicoB = await chamar('/api/publico/areas-entrega', { baseUrl: urlBaseTenantB });
+      assert.equal(publicoA.corpo.areasEntrega.some((area) => area.id === idAreaB), false);
+      assert.deepEqual(publicoB.corpo.areasEntrega.map((area) => area.id), [idAreaB]);
+
+      // id_estabelecimento no corpo é ignorado: a área nasce na loja da sessão.
+      const intrusa = await chamar('/api/admin/areas-entrega', {
+        metodo: 'POST',
+        token: tokenAdmin,
+        dados: { nome: 'Enviada para B', taxaEntrega: 1, tempoEstimadoMin: 5, tempoEstimadoMax: 10, id_estabelecimento: idTenantB, idEstabelecimento: idTenantB }
+      });
+      assert.equal(intrusa.status, 201);
+      const [[dono]] = await banco.execute('SELECT id_estabelecimento FROM areas_entrega WHERE id = ?', [intrusa.corpo.areaEntrega.id]);
+      assert.equal(Number(dono.id_estabelecimento), idTenantA);
+      assert.equal((await chamar(`/api/admin/areas-entrega/${intrusa.corpo.areaEntrega.id}`, { metodo: 'DELETE', token: tokenAdmin })).status, 200);
+    } finally {
+      await banco.execute('DELETE FROM areas_entrega WHERE id = ? AND id_estabelecimento = ?', [idAreaB, idTenantB]);
+    }
+  });
+
+  test('estabelecimento sem áreas cadastradas fecha o pedido normalmente com a taxa única', async () => {
+    const idTenantB = await idDaLoja('loja-b');
+    await banco.execute(`
+      UPDATE configuracoes_estabelecimento
+      SET aceita_dinheiro = 1, taxa_entrega_centavos = 600, tempo_entrega = '20–30 min'
+      WHERE id_estabelecimento = ?
+    `, [idTenantB]);
+    const [[produtoB]] = await banco.execute('SELECT id FROM produtos WHERE id_estabelecimento = ? ORDER BY id LIMIT 1', [idTenantB]);
+    const publicoB = await chamar('/api/publico/areas-entrega', { baseUrl: urlBaseTenantB });
+    assert.deepEqual(publicoB.corpo, { entregaPorArea: false, areasEntrega: [] });
+
+    const criado = await chamar('/api/pedidos', {
+      metodo: 'POST',
+      baseUrl: urlBaseTenantB,
+      dados: dadosPedido({
+        bairro: 'Bairro Qualquer',
+        pagamento: 'Dinheiro',
+        semTroco: true,
+        taxaEntrega: 0,
+        itens: [{ id: Number(produtoB.id), quantidade: 1 }]
+      })
+    });
+    assert.equal(criado.status, 201);
+    assert.equal(criado.corpo.pedido.taxaEntrega, 6);
+    assert.equal(criado.corpo.pedido.total, 31);
+    assert.equal(criado.corpo.pedido.areaEntregaId, null);
+    assert.match(criado.corpo.pedido.endereco, /Bairro Qualquer/);
+  });
+
+  test('migration 019 copia os bairros do JSON antigo com o tempo lido do texto', async () => {
+    const idTenantB = await idDaLoja('loja-b');
+    const migration = await readFile(new URL('../database/migrations/019_areas_entrega.sql', import.meta.url), 'utf8');
+    const copia = migration
+      .split(/;\s*(?:\r?\n|$)/)
+      .map((instrucao) => instrucao.trim())
+      .find((instrucao) => instrucao.startsWith('INSERT INTO areas_entrega'));
+    assert.ok(copia);
+    const areasB = async () => (await banco.execute(`
+      SELECT nome, taxa_entrega_centavos, tempo_estimado_min, tempo_estimado_max, ativo
+      FROM areas_entrega WHERE id_estabelecimento = ? ORDER BY nome
+    `, [idTenantB]))[0].map((linha) => [
+      linha.nome, Number(linha.taxa_entrega_centavos), Number(linha.tempo_estimado_min), Number(linha.tempo_estimado_max), Number(linha.ativo)
+    ]);
+    const jsonAntigo = JSON.stringify([
+      { bairro: 'Centro', taxaCentavos: 500 },
+      { bairro: '  Vila Nova ', taxaCentavos: 750 },
+      { bairro: 'centro', taxaCentavos: 900 },
+      null,
+      { bairro: 'Sem taxa' },
+      { bairro: '', taxaCentavos: 100 },
+      { bairro: 'Taxa quebrada', taxaCentavos: 'abc' }
+    ]);
+    async function aplicar(tempoEntrega) {
+      await banco.execute('DELETE FROM areas_entrega WHERE id_estabelecimento = ?', [idTenantB]);
+      await banco.execute(
+        'UPDATE configuracoes_estabelecimento SET areas_entrega_json = ?, tempo_entrega = ? WHERE id_estabelecimento = ?',
+        [jsonAntigo, tempoEntrega, idTenantB]
+      );
+      await banco.query(copia);
+      return areasB();
+    }
+    try {
+      assert.deepEqual(await aplicar('35–50 min'), [['Centro', 500, 35, 50, 1], ['Vila Nova', 750, 35, 50, 1]]);
+      // Rodar de novo não duplica nem altera.
+      await banco.query(copia);
+      assert.deepEqual(await areasB(), [['Centro', 500, 35, 50, 1], ['Vila Nova', 750, 35, 50, 1]]);
+      for (const tempo of ['Rápido', '40 min', '50–40 min', '0–20 min', null]) {
+        assert.deepEqual((await aplicar(tempo)).map(([, , minimo, maximo]) => [minimo, maximo]), [[30, 45], [30, 45]], String(tempo));
+      }
+    } finally {
+      await banco.execute('DELETE FROM areas_entrega WHERE id_estabelecimento = ?', [idTenantB]);
+      await banco.execute(
+        "UPDATE configuracoes_estabelecimento SET areas_entrega_json = NULL, tempo_entrega = '20–30 min' WHERE id_estabelecimento = ?",
+        [idTenantB]
+      );
+    }
   });
 
   test('valida troco em dinheiro e persiste a opção escolhida', async () => {

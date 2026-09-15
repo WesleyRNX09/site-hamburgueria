@@ -493,7 +493,6 @@ async function criarOperacaoInicial(
           endereco: '',
           taxaEntregaCentavos: 0,
           tempoEntrega: '',
-          pedidoMinimoCentavos: 0,
           lojaAberta: false
         };
     await conexao.execute(`
@@ -504,16 +503,15 @@ async function criarOperacaoInicial(
     await conexao.execute(`
       INSERT INTO configuracoes_estabelecimento
         (id_estabelecimento, telefone, email, endereco, taxa_entrega_centavos,
-         tempo_entrega, pedido_minimo_centavos, loja_aberta, entrega_ativa,
+         tempo_entrega, loja_aberta, entrega_ativa,
          retirada_ativa, atendimento_garcom_ativo, aceita_cartao, aceita_dinheiro)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         telefone = VALUES(telefone),
         email = VALUES(email),
         endereco = VALUES(endereco),
         taxa_entrega_centavos = VALUES(taxa_entrega_centavos),
         tempo_entrega = VALUES(tempo_entrega),
-        pedido_minimo_centavos = VALUES(pedido_minimo_centavos),
         loja_aberta = VALUES(loja_aberta),
         entrega_ativa = VALUES(entrega_ativa),
         retirada_ativa = VALUES(retirada_ativa),
@@ -527,7 +525,6 @@ async function criarOperacaoInicial(
       configuracaoInicial.endereco,
       configuracaoInicial.taxaEntregaCentavos,
       configuracaoInicial.tempoEntrega,
-      configuracaoInicial.pedidoMinimoCentavos,
       configuracaoInicial.lojaAberta ? 1 : 0,
       incluirDadosDemonstracao ? 1 : 0,
       incluirDadosDemonstracao ? 1 : 0,

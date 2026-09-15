@@ -14,7 +14,6 @@ export const configuracaoInicial = {
   endereco: '',
   taxaEntrega: 0,
   tempoEntrega: '',
-  pedidoMinimo: 0,
   lojaAberta: false,
   lojaAbertaManual: false,
   funcionamentoAutomatico: false,
@@ -32,6 +31,7 @@ export const configuracaoInicial = {
   aceitaCartao: false,
   aceitaDinheiro: false,
   formasPagamento: [],
+  entregaPorArea: false,
   areasEntrega: [],
   politicaCancelamento: '',
   informacoesLegais: ''

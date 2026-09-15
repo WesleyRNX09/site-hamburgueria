@@ -35,7 +35,15 @@ test('normaliza o tema público e rejeita valores configuráveis inseguros', () 
     fonte: 'Georgia',
     lojaAberta: true,
     entregaAtiva: 'true',
-    areasEntrega: [null, { bairro: 'Centro', taxa: 5 }],
+    entregaPorArea: 'true',
+    pedidoMinimo: 30,
+    areasEntrega: [
+      null,
+      { id: 3, nome: '  Centro ', bairro: 'Centro', taxa: 5, tempoEstimadoMin: 30, tempoEstimadoMax: 45 },
+      { id: 'x', nome: 'Sem id', taxa: 5, tempoEstimadoMin: 30, tempoEstimadoMax: 45 },
+      { id: 4, nome: 'Tempo invertido', taxa: 5, tempoEstimadoMin: 50, tempoEstimadoMax: 40 },
+      { id: 5, nome: '<b>Taxa negativa</b>', taxa: -3, tempoEstimadoMin: 10, tempoEstimadoMax: 10 }
+    ],
     formasPagamento: ['Pix', { nome: 'inseguro' }],
     bannerTitulo: '  O Verdadeiro Hambúrguer  ',
     bannerBotaoTexto: 'Peça agora',
@@ -52,7 +60,13 @@ test('normaliza o tema público e rejeita valores configuráveis inseguros', () 
   assert.equal(configuracao.fonte, 'Georgia');
   assert.equal(configuracao.lojaAberta, true);
   assert.equal(configuracao.entregaAtiva, false);
-  assert.deepEqual(configuracao.areasEntrega, [{ bairro: 'Centro', taxa: 5 }]);
+  // Texto continua texto: o React escapa o nome ao renderizar.
+  assert.deepEqual(configuracao.areasEntrega, [
+    { id: 3, nome: 'Centro', taxa: 5, tempoEstimadoMin: 30, tempoEstimadoMax: 45 },
+    { id: 5, nome: '<b>Taxa negativa</b>', taxa: 0, tempoEstimadoMin: 10, tempoEstimadoMax: 10 }
+  ]);
+  assert.equal(configuracao.entregaPorArea, false);
+  assert.equal('pedidoMinimo' in configuracao, false);
   assert.deepEqual(configuracao.formasPagamento, ['Pix']);
   assert.equal('css' in configuracao, false);
   assert.equal('javascript' in configuracao, false);

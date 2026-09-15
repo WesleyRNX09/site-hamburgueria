@@ -349,6 +349,24 @@ CREATE TABLE IF NOT EXISTS comanda_item_adicionais (
   INDEX idx_comanda_item_adicionais_adicional (adicional_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Áreas de entrega (bairro ou região) com taxa e tempo estimado próprios. Loja
+-- sem nenhuma área cadastrada usa a taxa única de configuracoes_estabelecimento.
+CREATE TABLE IF NOT EXISTS areas_entrega (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  id_estabelecimento BIGINT UNSIGNED NOT NULL,
+  nome VARCHAR(120) NOT NULL,
+  taxa_entrega_centavos INT UNSIGNED NOT NULL DEFAULT 0,
+  tempo_estimado_min SMALLINT UNSIGNED NOT NULL,
+  tempo_estimado_max SMALLINT UNSIGNED NOT NULL,
+  ativo TINYINT(1) NOT NULL DEFAULT 1,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_areas_entrega_estabelecimento_nome (id_estabelecimento, nome),
+  UNIQUE KEY uk_areas_entrega_estabelecimento_id (id_estabelecimento, id),
+  CONSTRAINT chk_areas_entrega_tempo
+    CHECK (tempo_estimado_min > 0 AND tempo_estimado_max >= tempo_estimado_min)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS pedidos (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   id_estabelecimento BIGINT UNSIGNED,
@@ -363,6 +381,8 @@ CREATE TABLE IF NOT EXISTS pedidos (
   rua VARCHAR(180),
   numero VARCHAR(30),
   bairro VARCHAR(120),
+  -- Área escolhida no pedido. A taxa cobrada fica em taxa_entrega_centavos.
+  area_entrega_id BIGINT UNSIGNED,
   complemento VARCHAR(160),
   referencia VARCHAR(255),
   taxa_entrega_centavos INT UNSIGNED NOT NULL DEFAULT 0,
@@ -494,6 +514,8 @@ CREATE INDEX idx_pedido_itens_estabelecimento ON pedido_itens (id_estabeleciment
 CREATE INDEX idx_pedido_item_adicionais_estabelecimento
   ON pedido_item_adicionais (id_estabelecimento);
 CREATE INDEX idx_pagamentos_estabelecimento ON pagamentos (id_estabelecimento);
+CREATE INDEX idx_areas_entrega_estabelecimento ON areas_entrega (id_estabelecimento);
+CREATE INDEX idx_pedidos_estabelecimento_area_entrega ON pedidos (id_estabelecimento, area_entrega_id);
 CREATE INDEX idx_configuracoes_estabelecimento_legado ON configuracoes (id_estabelecimento);
 CREATE INDEX idx_sessoes_admin_expiracao ON sessoes_admin (expira_em);
 CREATE INDEX idx_auditoria_admin_criado_em ON auditoria_admin (criado_em);
@@ -637,6 +659,11 @@ ALTER TABLE comanda_item_adicionais
   ADD CONSTRAINT fk_comanda_item_adicionais_adicional
     FOREIGN KEY (adicional_id) REFERENCES adicionais(id) ON DELETE SET NULL;
 
+ALTER TABLE areas_entrega
+  ADD CONSTRAINT fk_areas_entrega_estabelecimento
+  FOREIGN KEY (id_estabelecimento)
+  REFERENCES estabelecimentos(id_estabelecimento) ON DELETE RESTRICT;
+
 ALTER TABLE pedidos
   ADD CONSTRAINT fk_pedidos_estabelecimento
     FOREIGN KEY (id_estabelecimento)
@@ -646,7 +673,12 @@ ALTER TABLE pedidos
   ADD CONSTRAINT fk_pedidos_mesa
     FOREIGN KEY (mesa_id) REFERENCES mesas(id) ON DELETE SET NULL,
   ADD CONSTRAINT fk_pedidos_funcionario
-    FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id) ON DELETE SET NULL;
+    FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id) ON DELETE SET NULL,
+  -- Com id_estabelecimento: o pedido nunca aponta para área de outra loja, e
+  -- área usada em pedido não pode ser apagada.
+  ADD CONSTRAINT fk_pedidos_area_entrega
+    FOREIGN KEY (id_estabelecimento, area_entrega_id)
+    REFERENCES areas_entrega(id_estabelecimento, id) ON DELETE RESTRICT;
 
 ALTER TABLE pedido_itens
   ADD CONSTRAINT fk_pedido_itens_estabelecimento
@@ -710,7 +742,8 @@ INSERT INTO schema_migrations (versao, checksum) VALUES
   ('015_horario_automatico_da_loja.sql', '4ec43857d55a1e0ecdbb547855406e0cab47ac47383e6e2a7892778b7ad4897e'),
   ('016_indice_pedidos_por_periodo.sql', '6d2b3da9d4f619e59ab9682ebd8ddd38ed4ce036e3632de0fbb01e3a78edaf39'),
   ('017_permissoes_administradores.sql', '1630b466b47154b28b0d5c2d7d0714c3e0874fd9dbfd534aeaa8ec9cae1b809f'),
-  ('018_arquivar_administradores.sql', '7bdc15d4289120e9766ba52f1cdebacd10127bcc92748adeaeda58750a84dd33')
+  ('018_arquivar_administradores.sql', '7bdc15d4289120e9766ba52f1cdebacd10127bcc92748adeaeda58750a84dd33'),
+  ('019_areas_entrega.sql', '74127c736bef982a1c643a8c6186e14bc9cdfde341539201e65bdf43fd703993')
 ON DUPLICATE KEY UPDATE versao = VALUES(versao);
 
 INSERT INTO estabelecimentos

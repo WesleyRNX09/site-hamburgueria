@@ -29,6 +29,8 @@ CREATE INDEX idx_pedido_itens_estabelecimento ON pedido_itens (id_estabeleciment
 CREATE INDEX idx_pedido_item_adicionais_estabelecimento
   ON pedido_item_adicionais (id_estabelecimento);
 CREATE INDEX idx_pagamentos_estabelecimento ON pagamentos (id_estabelecimento);
+CREATE INDEX idx_areas_entrega_estabelecimento ON areas_entrega (id_estabelecimento);
+CREATE INDEX idx_pedidos_estabelecimento_area_entrega ON pedidos (id_estabelecimento, area_entrega_id);
 CREATE INDEX idx_configuracoes_estabelecimento_legado ON configuracoes (id_estabelecimento);
 CREATE INDEX idx_sessoes_admin_expiracao ON sessoes_admin (expira_em);
 CREATE INDEX idx_auditoria_admin_criado_em ON auditoria_admin (criado_em);

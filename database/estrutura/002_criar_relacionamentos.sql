@@ -127,6 +127,11 @@ ALTER TABLE comanda_item_adicionais
   ADD CONSTRAINT fk_comanda_item_adicionais_adicional
     FOREIGN KEY (adicional_id) REFERENCES adicionais(id) ON DELETE SET NULL;
 
+ALTER TABLE areas_entrega
+  ADD CONSTRAINT fk_areas_entrega_estabelecimento
+  FOREIGN KEY (id_estabelecimento)
+  REFERENCES estabelecimentos(id_estabelecimento) ON DELETE RESTRICT;
+
 ALTER TABLE pedidos
   ADD CONSTRAINT fk_pedidos_estabelecimento
     FOREIGN KEY (id_estabelecimento)
@@ -136,7 +141,12 @@ ALTER TABLE pedidos
   ADD CONSTRAINT fk_pedidos_mesa
     FOREIGN KEY (mesa_id) REFERENCES mesas(id) ON DELETE SET NULL,
   ADD CONSTRAINT fk_pedidos_funcionario
-    FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id) ON DELETE SET NULL;
+    FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id) ON DELETE SET NULL,
+  -- Com id_estabelecimento: o pedido nunca aponta para área de outra loja, e
+  -- área usada em pedido não pode ser apagada.
+  ADD CONSTRAINT fk_pedidos_area_entrega
+    FOREIGN KEY (id_estabelecimento, area_entrega_id)
+    REFERENCES areas_entrega(id_estabelecimento, id) ON DELETE RESTRICT;
 
 ALTER TABLE pedido_itens
   ADD CONSTRAINT fk_pedido_itens_estabelecimento

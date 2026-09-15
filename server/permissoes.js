@@ -25,6 +25,12 @@ const ROTAS_ADMIN = [
   ['PUT', /^\/api\/admin\/configuracao$/, null],
   ['GET', /^\/api\/admin\/dashboard\/indicadores$/, 'relatorios.visualizar'],
 
+  ['GET', /^\/api\/admin\/areas-entrega$/, 'delivery.editar'],
+  ['POST', /^\/api\/admin\/areas-entrega$/, 'delivery.editar'],
+  ['PUT', /^\/api\/admin\/areas-entrega\/\d+$/, 'delivery.editar'],
+  ['PATCH', /^\/api\/admin\/areas-entrega\/\d+\/status$/, 'delivery.editar'],
+  ['DELETE', /^\/api\/admin\/areas-entrega\/\d+$/, 'delivery.editar'],
+
   ['PATCH', /^\/api\/admin\/pedidos\/[^/]+\/status$/, 'pedidos.alterar_status'],
   ['POST', /^\/api\/admin\/pedidos\/[^/]+\/pagamento\/(?:confirmar|estornar)$/, 'pedidos.gerenciar_pagamento'],
 
@@ -74,7 +80,7 @@ export const CAMPOS_CONFIGURACAO_POR_PERMISSAO = Object.freeze({
     'mensagemRodape'
   ]),
   'delivery.editar': Object.freeze([
-    'entregaAtiva', 'retiradaAtiva', 'taxaEntrega', 'areasEntrega', 'pedidoMinimo', 'tempoEntrega'
+    'entregaAtiva', 'retiradaAtiva', 'taxaEntrega', 'tempoEntrega'
   ]),
   'configuracoes.editar': Object.freeze([
     'telefone', 'email', 'endereco', 'whatsapp', 'instagramUrl', 'facebookUrl',

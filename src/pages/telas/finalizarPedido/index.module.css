@@ -953,8 +953,17 @@
   font-weight: 700;
 }
 
-.valoresPedido .valorValido { color: var(--cor-ok); }
-.valoresPedido .valorPendente { color: var(--cor-erro-texto); }
+/* Taxa e tempo da área escolhida, logo abaixo do campo. */
+.infoAreaEntrega {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1.2rem;
+  margin: 0.2rem 0 0;
+  color: var(--cor-texto-medio);
+  font-size: 1.05rem;
+}
+
+.infoAreaEntrega strong { color: var(--cor-texto); font-weight: 700; }
 
 
 /* =========================

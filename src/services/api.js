@@ -409,6 +409,26 @@ export function salvarConfiguracaoApi(dados) {
   return requisicao('/api/admin/configuracao', { metodo: 'PUT', dados, autenticacao: 'admin' });
 }
 
+export function listarAreasEntregaApi() {
+  return requisicao('/api/admin/areas-entrega', { autenticacao: 'admin' });
+}
+
+export function criarAreaEntregaApi(dados) {
+  return requisicao('/api/admin/areas-entrega', { metodo: 'POST', dados, autenticacao: 'admin' });
+}
+
+export function atualizarAreaEntregaApi(id, dados) {
+  return requisicao(`/api/admin/areas-entrega/${id}`, { metodo: 'PUT', dados, autenticacao: 'admin' });
+}
+
+export function alterarStatusAreaEntregaApi(id, ativo) {
+  return requisicao(`/api/admin/areas-entrega/${id}/status`, { metodo: 'PATCH', dados: { ativo }, autenticacao: 'admin' });
+}
+
+export function excluirAreaEntregaApi(id) {
+  return requisicao(`/api/admin/areas-entrega/${id}`, { metodo: 'DELETE', autenticacao: 'admin' });
+}
+
 export function loginGarcom(token, senha) {
   return requisicao('/api/garcom/login', { metodo: 'POST', dados: { token, senha } });
 }

@@ -63,13 +63,37 @@ Fluxo de leitura/escrita:
 | `lojaAbertaManual` | `loja_aberta` | booleano usado só fora do modo automático | booleano estrito (`=== true`) |
 | `instagramUrl`, `facebookUrl` | `instagram_url`, `facebook_url` | URL http(s), opcional | `validarUrlOpcional` |
 | `entregaAtiva`, `retiradaAtiva`, `atendimentoGarcomAtivo`, `aceitaCartao`, `aceitaDinheiro` | booleanos | `TINYINT(1)` | booleano estrito (`=== true`) |
-| `taxaEntrega`, `pedidoMinimo` | `*_centavos` | número ≥ 0, convertido para centavos | `precoParaCentavos` |
+| `taxaEntrega` | `taxa_entrega_centavos` | número ≥ 0, convertido para centavos; taxa única usada só por loja sem áreas de entrega cadastradas | `precoParaCentavos` |
 | `pixChave`, `pixBeneficiario`, `pixCidade` | `pix_*` | texto; beneficiário/cidade exigidos se houver chave | `salvarConfiguracao` |
-| `areasEntrega` | `areas_entrega_json` | lista `{bairro, taxa}`, sem bairro duplicado | `salvarConfiguracao` |
 | `politicaCancelamento`, `informacoesLegais` | `politica_cancelamento`, `informacoes_legais` | texto, 2000, opcional | `salvarConfiguracao` |
 
 Nenhum desses campos aceita HTML, JSX, CSS completo ou JavaScript. Todos são
 renderizados como texto simples pelo React (sem `dangerouslySetInnerHTML`).
+
+O pedido mínimo foi retirado do sistema: `pedido_minimo_centavos` continua no
+banco, mas não é lido, gravado nem validado.
+
+### Áreas de entrega
+
+Ficam na tabela `areas_entrega` (migration 019), fora do `PUT
+/api/admin/configuracao`, e são gerenciadas pelas rotas
+`/api/admin/areas-entrega` com a permissão `delivery.editar`.
+
+| Campo da API | Coluna | Validação |
+| --- | --- | --- |
+| `nome` | `nome` | texto com trim, 1 a 120, único na loja (sem diferenciar maiúsculas e acentos) |
+| `taxaEntrega` | `taxa_entrega_centavos` | número de R$ 0,00 a R$ 10.000,00 |
+| `tempoEstimadoMin`, `tempoEstimadoMax` | `tempo_estimado_min`, `tempo_estimado_max` | inteiros de 1 a 600 minutos; máximo ≥ mínimo |
+| `ativo` | `ativo` | booleano estrito; opcional na criação (padrão ativo) |
+
+- Loja sem nenhuma área cadastrada: checkout e pedido usam a taxa única.
+- Loja com áreas, mas todas desativadas: o delivery é recusado com
+  "Nenhuma área de entrega disponível".
+- O pedido grava `area_entrega_id`, o nome da área em `bairro` e a taxa do
+  momento em `taxa_entrega_centavos`; mudar a área depois não altera o
+  histórico. Área já usada em pedido não pode ser excluída, só desativada.
+- `GET /api/publico/areas-entrega` (e `areasEntrega`/`entregaPorArea` na
+  configuração pública) devolve só as áreas ativas da loja do host.
 
 ## 3. Valores padrão (fallback)
 
@@ -173,7 +197,7 @@ O runner cria e depois apaga automaticamente um banco descartável chamado
   um valor de uma allowlist fixa (fonte, destino do botão do banner).
 - O backend nunca confia em `id_estabelecimento` enviado pelo cliente; o
   tenant vem sempre do host (público) ou da sessão JWT (administrativo).
-- Preço, total, taxa de entrega e pedido mínimo continuam calculados e
+- Preço, total e taxa de entrega continuam calculados e
   validados no servidor no momento do pedido — a personalização visual nunca
   altera essas regras.
 - Mass assignment é impedido por mapeamento explícito de campos em

@@ -134,40 +134,6 @@ function normalizarToken(nome) {
   return `${base}-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
 }
 
-function normalizarBairro(valor) {
-  return texto(valor, 120)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase('pt-BR');
-}
-
-function lerAreasEntrega(valor) {
-  if (!valor) return [];
-  try {
-    const areas = typeof valor === 'string' ? JSON.parse(valor) : valor;
-    return Array.isArray(areas) ? areas : [];
-  } catch {
-    return [];
-  }
-}
-
-function mapearAreasEntregaPublicas(valor) {
-  const bairros = new Set();
-  const resultado = [];
-  for (const area of lerAreasEntrega(valor).slice(0, 200)) {
-    const bairro = texto(area?.bairro, 120);
-    const taxaCentavos = Number(area?.taxaCentavos);
-    const bairroNormalizado = normalizarBairro(bairro);
-    if (!bairro || !Number.isInteger(taxaCentavos) || taxaCentavos < 0
-        || taxaCentavos > MAX_TOTAL_CENTAVOS || bairros.has(bairroNormalizado)) {
-      continue;
-    }
-    bairros.add(bairroNormalizado);
-    resultado.push({ bairro, taxa: taxaCentavos / 100 });
-  }
-  return resultado;
-}
-
 function lerListaTextos(valor, limiteItens = 20, limiteTexto = 80) {
   if (!valor) return [];
   try {
@@ -307,7 +273,6 @@ function mapearConfiguracao(linha) {
     endereco: linha.endereco ?? '',
     taxaEntrega: centavosParaNumero(linha.taxa_entrega_centavos),
     tempoEntrega: linha.tempo_entrega ?? '',
-    pedidoMinimo: centavosParaNumero(linha.pedido_minimo_centavos),
     horarios,
     funcionamentoAutomatico,
     lojaAbertaManual: Boolean(linha.loja_aberta),
@@ -345,8 +310,7 @@ function mapearConfiguracao(linha) {
     aceitaDinheiro: Boolean(linha.aceita_dinheiro),
     formasPagamento,
     politicaCancelamento: linha.politica_cancelamento ?? '',
-    informacoesLegais: linha.informacoes_legais ?? '',
-    areasEntrega: mapearAreasEntregaPublicas(linha.areas_entrega_json)
+    informacoesLegais: linha.informacoes_legais ?? ''
   };
 }
 
@@ -377,7 +341,6 @@ export async function buscarConfiguracao(banco, idEstabelecimento) {
       ce.endereco,
       ce.taxa_entrega_centavos,
       ce.tempo_entrega,
-      ce.pedido_minimo_centavos,
       ce.loja_aberta,
       ce.pix_chave,
       ce.pix_beneficiario,
@@ -393,7 +356,6 @@ export async function buscarConfiguracao(banco, idEstabelecimento) {
       ce.atendimento_garcom_ativo,
       ce.aceita_cartao,
       ce.aceita_dinheiro,
-      ce.areas_entrega_json,
       ce.formas_pagamento_json,
       ce.politica_cancelamento,
       ce.informacoes_legais
@@ -438,7 +400,6 @@ export function selecionarConfiguracaoPublica(configuracao) {
     instagramUrl: configuracao.instagramUrl,
     facebookUrl: configuracao.facebookUrl,
     lojaAberta: configuracao.lojaAberta,
-    pedidoMinimo: configuracao.pedidoMinimo,
     taxaEntrega: configuracao.taxaEntrega,
     tempoEntrega: configuracao.tempoEntrega,
     entregaAtiva: configuracao.entregaAtiva,
@@ -450,14 +411,246 @@ export function selecionarConfiguracaoPublica(configuracao) {
     pixChave: configuracao.pixChave,
     pixBeneficiario: configuracao.pixBeneficiario,
     pixCidade: configuracao.pixCidade,
-    areasEntrega: configuracao.areasEntrega,
     politicaCancelamento: configuracao.politicaCancelamento,
     informacoesLegais: configuracao.informacoesLegais
   };
 }
 
 export async function buscarConfiguracaoPublica(banco, idEstabelecimento) {
-  return selecionarConfiguracaoPublica(await buscarConfiguracao(banco, idEstabelecimento));
+  const [configuracao, areas] = await Promise.all([
+    buscarConfiguracao(banco, idEstabelecimento),
+    listarAreasEntregaPublicas(banco, idEstabelecimento)
+  ]);
+  return { ...selecionarConfiguracaoPublica(configuracao), ...areas };
+}
+
+/*
+  Áreas de entrega (bairro ou região), cada uma com taxa e tempo estimado.
+
+  Loja sem nenhuma área cadastrada continua com a taxa única da configuração.
+  Com áreas cadastradas, o delivery só atende as ativas, e o servidor é quem
+  decide a taxa do pedido pela área escolhida.
+*/
+const MAX_AREAS_ENTREGA = 200;
+const MAX_TAXA_AREA_CENTAVOS = 1_000_000;
+const MAX_TEMPO_ESTIMADO_MINUTOS = 600;
+
+function mapearAreaEntrega(linha) {
+  return {
+    id: Number(linha.id),
+    nome: linha.nome,
+    taxaEntrega: centavosParaNumero(linha.taxa_entrega_centavos),
+    tempoEstimadoMin: Number(linha.tempo_estimado_min),
+    tempoEstimadoMax: Number(linha.tempo_estimado_max),
+    ativo: Boolean(linha.ativo),
+    criadoEm: dataIso(linha.criado_em),
+    atualizadoEm: dataIso(linha.atualizado_em)
+  };
+}
+
+async function consultarAreasEntrega(banco, idEstabelecimento, { id = null } = {}) {
+  const parametros = [idEstabelecimento];
+  let filtro = '';
+  if (id !== null) {
+    filtro = 'AND id = ?';
+    parametros.push(id);
+  }
+  const [linhas] = await banco.execute(`
+    SELECT id, nome, taxa_entrega_centavos, tempo_estimado_min, tempo_estimado_max,
+      ativo, criado_em, atualizado_em
+    FROM areas_entrega
+    WHERE id_estabelecimento = ?
+    ${filtro}
+    ORDER BY nome, id
+    LIMIT ${MAX_AREAS_ENTREGA}
+  `, parametros);
+  return linhas.map(mapearAreaEntrega);
+}
+
+export function listarAreasEntrega(banco, idEstabelecimento) {
+  return consultarAreasEntrega(banco, idEstabelecimento);
+}
+
+/* `entregaPorArea` diz se a loja cadastrou áreas, mesmo com todas desativadas:
+   nesse caso o checkout não volta para a taxa única, o delivery fica bloqueado. */
+export async function listarAreasEntregaPublicas(banco, idEstabelecimento) {
+  const areas = await consultarAreasEntrega(banco, idEstabelecimento);
+  return {
+    entregaPorArea: areas.length > 0,
+    areasEntrega: areas
+      .filter((area) => area.ativo)
+      .map((area) => ({
+        id: area.id,
+        nome: area.nome,
+        // `bairro` e `taxa` mantêm o formato que o checkout já lia.
+        bairro: area.nome,
+        taxa: area.taxaEntrega,
+        tempoEstimadoMin: area.tempoEstimadoMin,
+        tempoEstimadoMax: area.tempoEstimadoMax
+      }))
+  };
+}
+
+function minutosInteiros(valor) {
+  if (typeof valor === 'number') return Number.isInteger(valor) ? valor : Number.NaN;
+  if (typeof valor === 'string' && /^\s*\d{1,4}\s*$/.test(valor)) return Number(valor);
+  return Number.NaN;
+}
+
+function validarAtivoAreaEntrega(ativo) {
+  if (typeof ativo !== 'boolean') throw erroDominio('Informe se a área de entrega está ativa.');
+  return ativo;
+}
+
+/* Só estes campos são lidos do corpo; qualquer outro (inclusive
+   id_estabelecimento) é ignorado. */
+function validarAreaEntrega(dados) {
+  const recebidos = dados && typeof dados === 'object' && !Array.isArray(dados) ? dados : {};
+  const nome = typeof recebidos.nome === 'string' ? recebidos.nome.trim() : '';
+  if (!nome) throw erroDominio('Informe o nome da área de entrega.');
+  if (nome.length > 120) throw erroDominio('O nome da área de entrega pode ter no máximo 120 caracteres.');
+  const taxaCentavos = ['number', 'string'].includes(typeof recebidos.taxaEntrega)
+    ? precoParaCentavos(recebidos.taxaEntrega)
+    : Number.NaN;
+  if (!Number.isInteger(taxaCentavos) || taxaCentavos < 0 || taxaCentavos > MAX_TAXA_AREA_CENTAVOS) {
+    throw erroDominio('Informe uma taxa de entrega entre R$ 0,00 e R$ 10.000,00.');
+  }
+  const tempoMin = minutosInteiros(recebidos.tempoEstimadoMin);
+  const tempoMax = minutosInteiros(recebidos.tempoEstimadoMax);
+  if (![tempoMin, tempoMax].every((tempo) => tempo >= 1 && tempo <= MAX_TEMPO_ESTIMADO_MINUTOS)) {
+    throw erroDominio(`Informe o tempo estimado em minutos inteiros, de 1 a ${MAX_TEMPO_ESTIMADO_MINUTOS}.`);
+  }
+  if (tempoMax < tempoMin) throw erroDominio('O tempo estimado máximo não pode ser menor que o mínimo.');
+  const ativo = recebidos.ativo === undefined ? null : validarAtivoAreaEntrega(recebidos.ativo);
+  return { nome, taxaCentavos, tempoMin, tempoMax, ativo };
+}
+
+function recusarNomeRepetido(erro) {
+  if (erro?.code === 'ER_DUP_ENTRY') {
+    throw erroDominio('Já existe uma área de entrega com esse nome.', 409);
+  }
+  throw erro;
+}
+
+async function travarAreaEntrega(conexao, idEstabelecimento, id) {
+  const [linhas] = await conexao.execute(`
+    SELECT id, nome, taxa_entrega_centavos, tempo_estimado_min, tempo_estimado_max, ativo
+    FROM areas_entrega
+    WHERE id_estabelecimento = ? AND id = ?
+    FOR UPDATE
+  `, [idEstabelecimento, id]);
+  return linhas[0] ?? null;
+}
+
+export async function criarAreaEntrega(banco, idEstabelecimento, dados, administradorId = null) {
+  const area = validarAreaEntrega(dados);
+  let id;
+  try {
+    id = await executarTransacao(banco, async (conexao) => {
+      const [[cadastradas]] = await conexao.execute(
+        'SELECT COUNT(id) AS total FROM areas_entrega WHERE id_estabelecimento = ?',
+        [idEstabelecimento]
+      );
+      if (Number(cadastradas.total) >= MAX_AREAS_ENTREGA) {
+        throw erroDominio(`O limite é de ${MAX_AREAS_ENTREGA} áreas de entrega por loja.`, 409);
+      }
+      const [resultado] = await conexao.execute(`
+        INSERT INTO areas_entrega
+          (id_estabelecimento, nome, taxa_entrega_centavos, tempo_estimado_min, tempo_estimado_max, ativo)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [idEstabelecimento, area.nome, area.taxaCentavos, area.tempoMin, area.tempoMax, area.ativo === false ? 0 : 1]);
+      await registrarAuditoria(conexao, idEstabelecimento, administradorId, 'area_entrega.criada', 'area_entrega', resultado.insertId, {
+        nome: area.nome,
+        taxaCentavos: area.taxaCentavos,
+        tempoMin: area.tempoMin,
+        tempoMax: area.tempoMax
+      });
+      return Number(resultado.insertId);
+    });
+  } catch (erro) {
+    recusarNomeRepetido(erro);
+  }
+  const [criada] = await consultarAreasEntrega(banco, idEstabelecimento, { id });
+  return criada;
+}
+
+export async function atualizarAreaEntrega(banco, idEstabelecimento, id, dados, administradorId = null) {
+  const area = validarAreaEntrega(dados);
+  let encontrada;
+  try {
+    encontrada = await executarTransacao(banco, async (conexao) => {
+      const anterior = await travarAreaEntrega(conexao, idEstabelecimento, id);
+      if (!anterior) return false;
+      await conexao.execute(`
+        UPDATE areas_entrega
+        SET nome = ?, taxa_entrega_centavos = ?, tempo_estimado_min = ?, tempo_estimado_max = ?, ativo = ?
+        WHERE id_estabelecimento = ? AND id = ?
+      `, [
+        area.nome,
+        area.taxaCentavos,
+        area.tempoMin,
+        area.tempoMax,
+        area.ativo === null ? Number(anterior.ativo) : Number(area.ativo),
+        idEstabelecimento,
+        id
+      ]);
+      await registrarAuditoria(conexao, idEstabelecimento, administradorId, 'area_entrega.atualizada', 'area_entrega', id, {
+        nomeAnterior: anterior.nome,
+        nome: area.nome,
+        taxaAnteriorCentavos: Number(anterior.taxa_entrega_centavos),
+        taxaCentavos: area.taxaCentavos,
+        tempoMin: area.tempoMin,
+        tempoMax: area.tempoMax
+      });
+      return true;
+    });
+  } catch (erro) {
+    recusarNomeRepetido(erro);
+  }
+  if (!encontrada) return null;
+  const [atualizada] = await consultarAreasEntrega(banco, idEstabelecimento, { id });
+  return atualizada;
+}
+
+export async function alterarStatusAreaEntrega(banco, idEstabelecimento, id, ativo, administradorId = null) {
+  validarAtivoAreaEntrega(ativo);
+  const encontrada = await executarTransacao(banco, async (conexao) => {
+    const anterior = await travarAreaEntrega(conexao, idEstabelecimento, id);
+    if (!anterior) return false;
+    await conexao.execute(
+      'UPDATE areas_entrega SET ativo = ? WHERE id_estabelecimento = ? AND id = ?',
+      [ativo ? 1 : 0, idEstabelecimento, id]
+    );
+    await registrarAuditoria(conexao, idEstabelecimento, administradorId, 'area_entrega.status_alterado', 'area_entrega', id, {
+      nome: anterior.nome,
+      ativo
+    });
+    return true;
+  });
+  if (!encontrada) return null;
+  const [atualizada] = await consultarAreasEntrega(banco, idEstabelecimento, { id });
+  return atualizada;
+}
+
+/* Área que já apareceu em pedido não é apagada: o histórico aponta para ela.
+   A chave estrangeira RESTRICT de pedidos garante o mesmo no banco. */
+export async function excluirAreaEntrega(banco, idEstabelecimento, id, administradorId = null) {
+  return executarTransacao(banco, async (conexao) => {
+    const area = await travarAreaEntrega(conexao, idEstabelecimento, id);
+    if (!area) return false;
+    const [usos] = await conexao.execute(
+      'SELECT id FROM pedidos WHERE id_estabelecimento = ? AND area_entrega_id = ? LIMIT 1',
+      [idEstabelecimento, id]
+    );
+    if (usos[0]) {
+      throw erroDominio('Esta área já foi usada em pedidos e não pode ser excluída. Desative-a para tirá-la do checkout.', 409);
+    }
+    await conexao.execute('DELETE FROM areas_entrega WHERE id_estabelecimento = ? AND id = ?', [idEstabelecimento, id]);
+    await registrarAuditoria(conexao, idEstabelecimento, administradorId, 'area_entrega.excluida', 'area_entrega', id, {
+      nome: area.nome
+    });
+    return true;
+  });
 }
 
 export async function salvarConfiguracao(banco, idEstabelecimento, dados, administradorId = null) {
@@ -507,7 +700,6 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
   const politicaCancelamento = texto(dados.politicaCancelamento, 2000);
   const informacoesLegais = texto(dados.informacoesLegais, 2000);
   const taxaEntregaCentavos = precoParaCentavos(dados.taxaEntrega);
-  const pedidoMinimoCentavos = precoParaCentavos(dados.pedidoMinimo);
   const aceitaCartao = dados.aceitaCartao === true;
   const aceitaDinheiro = dados.aceitaDinheiro === true;
   const formasPagamento = [
@@ -515,19 +707,6 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
     aceitaCartao ? 'Cartão' : null,
     aceitaDinheiro ? 'Dinheiro' : null
   ].filter(Boolean);
-  const areasRecebidas = Array.isArray(dados.areasEntrega) ? dados.areasEntrega : [];
-  const bairros = new Set();
-  const areasEntrega = areasRecebidas.map((area) => {
-    const bairro = texto(area?.bairro, 120);
-    const taxaCentavos = precoParaCentavos(area?.taxa);
-    const bairroNormalizado = normalizarBairro(bairro);
-    if (!bairro || !Number.isInteger(taxaCentavos) || taxaCentavos < 0) {
-      throw erroDominio('Informe bairro e taxa válidos em todas as áreas de entrega.');
-    }
-    if (bairros.has(bairroNormalizado)) throw erroDominio(`O bairro ${bairro} está repetido nas áreas de entrega.`);
-    bairros.add(bairroNormalizado);
-    return { bairro, taxaCentavos };
-  });
 
   if (!nomeLoja || !telefone || !email || !endereco || !tempoEntrega || !horarioFuncionamento) {
     throw erroDominio('Preencha todos os dados da lanchonete.');
@@ -539,9 +718,8 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
   if (pixCidade && !pixChave) {
     throw erroDominio('Cadastre a chave Pix antes de informar a cidade do recebedor.');
   }
-  if (!Number.isInteger(taxaEntregaCentavos) || taxaEntregaCentavos < 0
-      || !Number.isInteger(pedidoMinimoCentavos) || pedidoMinimoCentavos < 0) {
-    throw erroDominio('Informe valores válidos para entrega e pedido mínimo.');
+  if (!Number.isInteger(taxaEntregaCentavos) || taxaEntregaCentavos < 0) {
+    throw erroDominio('Informe um valor válido para a taxa de entrega.');
   }
   if (!pixChave && !aceitaCartao && !aceitaDinheiro) {
     throw erroDominio('Habilite ao menos uma forma de pagamento.');
@@ -556,18 +734,18 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
     await conexao.execute(`
     INSERT INTO configuracoes_estabelecimento
       (id_estabelecimento, telefone, email, endereco, taxa_entrega_centavos,
-       tempo_entrega, pedido_minimo_centavos, loja_aberta, pix_chave, pix_beneficiario, pix_cidade,
+       tempo_entrega, loja_aberta, pix_chave, pix_beneficiario, pix_cidade,
        logo_url, banner_url, banner_titulo, banner_subtitulo, banner_botao_texto, banner_botao_destino,
        titulo_cardapio, texto_apresentacao, titulo_sobre, texto_sobre, mensagem_rodape,
        whatsapp, horario_funcionamento, instagram_url, facebook_url, entrega_ativa, retirada_ativa,
-       atendimento_garcom_ativo, aceita_cartao, aceita_dinheiro, areas_entrega_json,
+       atendimento_garcom_ativo, aceita_cartao, aceita_dinheiro,
        formas_pagamento_json, politica_cancelamento, informacoes_legais,
        horarios_json, funcionamento_automatico)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       telefone = VALUES(telefone), email = VALUES(email), endereco = VALUES(endereco),
       taxa_entrega_centavos = VALUES(taxa_entrega_centavos),
-      tempo_entrega = VALUES(tempo_entrega), pedido_minimo_centavos = VALUES(pedido_minimo_centavos),
+      tempo_entrega = VALUES(tempo_entrega),
       loja_aberta = VALUES(loja_aberta), pix_chave = VALUES(pix_chave),
       pix_beneficiario = VALUES(pix_beneficiario), pix_cidade = VALUES(pix_cidade),
       logo_url = VALUES(logo_url), banner_url = VALUES(banner_url),
@@ -581,7 +759,6 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
       entrega_ativa = VALUES(entrega_ativa), retirada_ativa = VALUES(retirada_ativa),
       atendimento_garcom_ativo = VALUES(atendimento_garcom_ativo),
       aceita_cartao = VALUES(aceita_cartao), aceita_dinheiro = VALUES(aceita_dinheiro),
-      areas_entrega_json = VALUES(areas_entrega_json),
       formas_pagamento_json = VALUES(formas_pagamento_json),
       politica_cancelamento = VALUES(politica_cancelamento),
       informacoes_legais = VALUES(informacoes_legais),
@@ -594,7 +771,6 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
     endereco,
     taxaEntregaCentavos,
     tempoEntrega,
-    pedidoMinimoCentavos,
     dados.lojaAbertaManual === true ? 1 : 0,
     pixChave || null,
     pixChave ? pixBeneficiario : null,
@@ -619,7 +795,6 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
     dados.atendimentoGarcomAtivo === true ? 1 : 0,
     aceitaCartao ? 1 : 0,
     aceitaDinheiro ? 1 : 0,
-    areasEntrega.length ? JSON.stringify(areasEntrega) : null,
     JSON.stringify(formasPagamento),
     politicaCancelamento || null,
     informacoesLegais || null,
@@ -1197,7 +1372,7 @@ export async function listarPedidos(banco, idEstabelecimento, { id = null } = {}
   }
   const [pedidos] = await banco.execute(`
     SELECT p.id, p.origem, p.cliente, p.telefone, p.email, p.status, p.pagamento,
-      p.rua, p.numero, p.bairro, p.complemento, p.referencia,
+      p.rua, p.numero, p.bairro, p.area_entrega_id, p.complemento, p.referencia,
       p.taxa_entrega_centavos, p.total_centavos, p.comanda_id, p.mesa_id,
       p.funcionario_id, p.criado_em,
       m.numero AS mesa_numero, f.nome AS garcom,
@@ -1295,6 +1470,7 @@ export async function listarPedidos(banco, idEstabelecimento, { id = null } = {}
       referencia: pedido.referencia ?? '',
       itens: itensPorPedido.get(Number(pedido.id)) ?? [],
       taxaEntrega: Number(pedido.taxa_entrega_centavos) / 100,
+      areaEntregaId: pedido.area_entrega_id ? Number(pedido.area_entrega_id) : null,
       total: Number(pedido.total_centavos) / 100,
       comandaId: pedido.comanda_id ? String(pedido.comanda_id) : null,
       mesaId: pedido.mesa_id ? Number(pedido.mesa_id) : null,
@@ -1570,7 +1746,17 @@ export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
   const modalidade = texto(dados.modalidade, 20);
   const chaveIdempotencia = texto(dados.chaveIdempotencia, 100);
   const retirada = modalidade === 'retirada';
-  if (!nome || !telefone || !email || (!retirada && (!rua || !numero || !bairro))) {
+  // Só o id da área é aceito do navegador; taxa e total vêm sempre do banco.
+  const areaEntregaInformada = !retirada
+    && dados.areaEntregaId !== undefined && dados.areaEntregaId !== null && dados.areaEntregaId !== '';
+  const areaEntregaId = areaEntregaInformada
+    && (typeof dados.areaEntregaId === 'number' || /^\d{1,19}$/.test(String(dados.areaEntregaId)))
+    ? Number(dados.areaEntregaId)
+    : null;
+  if (areaEntregaInformada && !(Number.isSafeInteger(areaEntregaId) && areaEntregaId > 0)) {
+    throw erroDominio('Selecione uma área de entrega válida.');
+  }
+  if (!nome || !telefone || !email || (!retirada && (!rua || !numero || (!bairro && !areaEntregaInformada)))) {
     throw erroDominio(retirada
       ? 'Preencha os dados essenciais do cliente.'
       : 'Preencha os dados do cliente e o endereço de entrega.');
@@ -1624,7 +1810,7 @@ export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
         SELECT loja_aberta, funcionamento_automatico, horarios_json,
           entrega_ativa, retirada_ativa, aceita_cartao,
           aceita_dinheiro, pix_chave, pix_beneficiario, pix_cidade,
-          areas_entrega_json, taxa_entrega_centavos, pedido_minimo_centavos
+          taxa_entrega_centavos
         FROM configuracoes_estabelecimento
         WHERE id_estabelecimento = ?
         FOR UPDATE
@@ -1655,22 +1841,40 @@ export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
         dados.itens,
         { canal: 'online' }
       );
-      const areasEntrega = retirada ? [] : lerAreasEntrega(configuracao.areas_entrega_json);
-      const areaEntrega = retirada
-        ? null
-        : areasEntrega.find((area) => normalizarBairro(area.bairro) === normalizarBairro(bairro));
-      if (!retirada && areasEntrega.length > 0 && !areaEntrega) {
-        throw erroDominio('O bairro informado está fora da área de entrega.', 409);
+      let areaEntrega = null;
+      let taxaEntrega = 0;
+      if (!retirada) {
+        const [[cadastro]] = await conexao.execute(`
+          SELECT COUNT(id) AS total, COALESCE(SUM(ativo), 0) AS ativas
+          FROM areas_entrega
+          WHERE id_estabelecimento = ?
+        `, [idEstabelecimento]);
+        if (Number(cadastro.total) === 0) {
+          // Loja sem áreas cadastradas: taxa única, exatamente como antes.
+          if (!bairro) throw erroDominio('Preencha os dados do cliente e o endereço de entrega.');
+          taxaEntrega = Number(configuracao.taxa_entrega_centavos);
+        } else {
+          if (Number(cadastro.ativas) === 0) throw erroDominio('Nenhuma área de entrega disponível.', 409);
+          /* Pelo id escolhido no checkout ou, para quem ainda envia só o texto,
+            pelo nome (a collation ignora maiúsculas e acentos). A linha fica
+            travada até o pedido gravar, para a área não sumir no meio. */
+          const [areas] = await conexao.execute(`
+            SELECT id, nome, taxa_entrega_centavos
+            FROM areas_entrega
+            WHERE id_estabelecimento = ? AND ativo = 1 AND ${areaEntregaInformada ? 'id = ?' : 'nome = ?'}
+            LIMIT 1
+            FOR UPDATE
+          `, [idEstabelecimento, areaEntregaInformada ? areaEntregaId : bairro]);
+          areaEntrega = areas[0] ?? null;
+          if (!areaEntrega) {
+            throw erroDominio(areaEntregaInformada
+              ? 'A área de entrega escolhida não está disponível. Selecione outra área.'
+              : 'O bairro informado está fora da área de entrega.', 409);
+          }
+          taxaEntrega = Number(areaEntrega.taxa_entrega_centavos);
+        }
       }
-      const taxaEntrega = retirada
-        ? 0
-        : areaEntrega
-        ? Number(areaEntrega.taxaCentavos)
-        : Number(configuracao.taxa_entrega_centavos);
-      const { subtotalCentavos, totalCentavos } = calcularTotaisPedido(itens, taxaEntrega);
-      if (!retirada && subtotalCentavos < Number(configuracao.pedido_minimo_centavos)) {
-        throw erroDominio(`O pedido mínimo é R$ ${formatarPreco(configuracao.pedido_minimo_centavos)}.`, 409);
-      }
+      const { totalCentavos } = calcularTotaisPedido(itens, taxaEntrega);
       if (trocoParaCentavos !== null && trocoParaCentavos < totalCentavos) {
         throw erroDominio('O valor entregue em dinheiro não pode ser menor que o total do pedido.', 409);
       }
@@ -1682,13 +1886,14 @@ export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
         INSERT INTO pedidos
           (id_estabelecimento, token_acompanhamento_hash, chave_idempotencia_hash,
            origem, cliente, telefone, email, status, pagamento,
-           rua, numero, bairro, complemento, referencia,
+           rua, numero, bairro, area_entrega_id, complemento, referencia,
            taxa_entrega_centavos, total_centavos)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'Recebido', ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'Recebido', ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         idEstabelecimento,
         hashIdempotencia, hashIdempotencia, modalidade, nome, telefone, email, pagamento,
-        retirada ? null : rua, retirada ? null : numero, retirada ? null : (areaEntrega?.bairro ?? bairro),
+        retirada ? null : rua, retirada ? null : numero, retirada ? null : (areaEntrega?.nome ?? bairro),
+        areaEntrega ? Number(areaEntrega.id) : null,
         retirada ? null : (texto(dados.complemento, 160) || null),
         texto(dados.referencia, 255) || null, taxaEntrega, totalCentavos
       ]);

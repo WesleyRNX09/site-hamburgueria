@@ -84,4 +84,13 @@ A pasta `legado/` preserva o histórico anterior e não é executada pelo runner
 - `018_arquivar_administradores.sql`: acrescenta `arquivado_em` a
   `administradores`, para arquivar uma conta sem apagar a linha e sem perder o
   autor no histórico. Coluna opcional: nenhuma conta existente é arquivada.
+- `019_areas_entrega.sql`: cria `areas_entrega` (nome único por
+  estabelecimento, taxa e tempo estimado mínimo/máximo em minutos, ativo) e
+  `pedidos.area_entrega_id`, com chave estrangeira composta por
+  `id_estabelecimento` e RESTRICT: área usada em pedido não é apagada e a taxa
+  cobrada continua gravada no próprio pedido. Copia os bairros de
+  `areas_entrega_json` para a tabela, lendo o tempo dos dois números de
+  `tempo_entrega` (30 e 45 quando não houver). `areas_entrega_json` e
+  `pedido_minimo_centavos` ficam no banco sem uso; nenhuma linha é alterada ou
+  removida.
 - `legado/20260824_operacao_comercial.sql`: histórico anterior, fora do runner.
