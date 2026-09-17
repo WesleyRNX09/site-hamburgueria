@@ -19,6 +19,8 @@ import {
   atualizarCategoriaApi,
   atualizarFuncionarioApi,
   atualizarItemComandaAdminApi,
+  atualizarObservacaoComandaApi,
+  atualizarObservacaoComandaAdminApi,
   atualizarProdutoApi,
   atualizarPromocaoApi,
   atualizarStatusPedidoApi,
@@ -784,6 +786,11 @@ export function AppProvider({ children }) {
     await recarregarAdmin();
   }
 
+  async function atualizarObservacaoComandaAdmin(comandaId, observacao) {
+    await atualizarObservacaoComandaAdminApi(comandaId, observacao);
+    await recarregarAdmin();
+  }
+
   async function lancarComandaAdmin(comandaId) {
     await lancarComandaAdminApi(comandaId);
     await recarregarAdmin();
@@ -831,6 +838,11 @@ export function AppProvider({ children }) {
     const { removidos } = await limparItensPendentesApi(comandaId);
     await recarregarGarcom();
     return removidos;
+  }
+
+  async function atualizarObservacaoComanda(comandaId, observacao) {
+    await atualizarObservacaoComandaApi(comandaId, observacao);
+    await recarregarGarcom();
   }
 
   async function enviarComanda(comandaId) {
@@ -915,11 +927,13 @@ export function AppProvider({ children }) {
     abrirComandaAdmin,
     adicionarItemComanda,
     removerItemComanda,
+    atualizarObservacaoComanda,
     enviarComanda,
     limparItensPendentes,
     adicionarItemComandaAdmin,
     atualizarItemComandaAdmin,
     removerItemComandaAdmin,
+    atualizarObservacaoComandaAdmin,
     lancarComandaAdmin,
     limparItensPendentesAdmin,
     cancelarComandaAdmin,

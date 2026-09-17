@@ -29,6 +29,7 @@ function ComandaGarcom() {
     abrirComanda,
     adicionarItemComanda,
     removerItemComanda,
+    atualizarObservacaoComanda,
     enviarComanda,
     limparItensPendentes,
     numeroPreco
@@ -45,6 +46,12 @@ function ComandaGarcom() {
   const [quantidade, setQuantidade] = useState(1);
   const [extras, setExtras] = useState([]);
   const [observacao, setObservacao] = useState('');
+  /* Recado da mesa: o rascunho fica local para o garçom poder digitar sem
+     salvar a cada tecla, e volta a acompanhar o servidor quando o texto
+     salvo muda — inclusive quando quem alterou foi o caixa. */
+  const observacaoSalva = comanda?.observacao ?? '';
+  const [observacaoMesa, setObservacaoMesa] = useState(observacaoSalva);
+  const observacaoSincronizada = useRef(observacaoSalva);
   const [mensagem, setMensagem] = useState('');
   const [processando, setProcessando] = useState(null);
   const modalRef = useRef(null);
@@ -56,6 +63,12 @@ function ComandaGarcom() {
     setProdutoSelecionado(null);
     setConfirmacaoAberta(false);
   }
+
+  useEffect(() => {
+    if (observacaoSincronizada.current === observacaoSalva) return;
+    observacaoSincronizada.current = observacaoSalva;
+    setObservacaoMesa(observacaoSalva);
+  }, [observacaoSalva]);
 
   useEffect(() => {
     if (!modalAberto) return undefined;
@@ -149,6 +162,19 @@ function ComandaGarcom() {
     (soma, item) => soma + Number(item.preco) * item.quantidade,
     0
   );
+
+  /* Encerrada ou cancelada some da lista do servidor, mas a regra fica
+     escrita aqui também: comanda fechada não recebe mais recado. */
+  const comandaEditavel = comanda.status !== 'Encerrada' && comanda.status !== 'Cancelada';
+  const observacaoAlterada = observacaoMesa !== observacaoSalva;
+
+  async function salvarObservacaoMesa() {
+    const resultado = await executarAcao(
+      'observacao',
+      () => atualizarObservacaoComanda(comanda.id, observacaoMesa)
+    );
+    if (resultado !== null) setMensagem('Observação da mesa salva.');
+  }
 
   function abrirProduto(produto) {
     setProdutoSelecionado(produto);
@@ -279,6 +305,31 @@ function ComandaGarcom() {
                 <Trash2 size={16} /> {processando === 'limpar' ? 'Excluindo…' : 'Excluir não lançados'}
               </button>
             )}
+          </div>
+
+          {/* Recado que vale para a mesa inteira — alergia, aniversário,
+              cliente com pressa. Separado da observação de cada item. */}
+          <div className={styles.observacaoMesa}>
+            <label htmlFor="observacao-comanda">Observação da mesa <span>(opcional)</span></label>
+            <div className={styles.observacaoLinha}>
+              <input
+                id="observacao-comanda"
+                type="text"
+                maxLength={500}
+                value={observacaoMesa}
+                disabled={!comandaEditavel || Boolean(processando)}
+                placeholder="Ex: aniversário, alergia, cliente com pressa…"
+                onChange={(evento) => setObservacaoMesa(evento.target.value)}
+              />
+              <button
+                type="button"
+                className={styles.botaoSecundario}
+                disabled={!comandaEditavel || Boolean(processando) || !observacaoAlterada}
+                onClick={salvarObservacaoMesa}
+              >
+                {processando === 'observacao' ? 'Salvando…' : 'Salvar'}
+              </button>
+            </div>
           </div>
 
           {comanda.itens.length === 0 ? (

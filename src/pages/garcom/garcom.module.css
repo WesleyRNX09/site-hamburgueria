@@ -80,6 +80,16 @@
 .itemCatalogo:hover:not(:disabled) img { outline: 2px solid var(--cor-principal); outline-offset: 1px; }
 .itemCatalogo:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Recado da mesa inteira: uma linha só, com o salvar ao lado. No celular o
+   botão desce para baixo do campo em vez de espremê-lo. */
+.observacaoMesa { display: grid; gap: 8px; margin-bottom: 16px; }
+.observacaoMesa label { color: #ddd; font-size: 12px; font-weight: 800; }
+.observacaoMesa label span { color: #7f7f7f; font-weight: 700; }
+.observacaoLinha { display: flex; flex-wrap: wrap; gap: 8px; }
+.observacaoLinha input { flex: 1 1 200px; min-width: 0; height: 44px; border: 1px solid #363636; border-radius: 10px; outline: none; background: color-mix(in srgb, var(--cor-secundaria) 85%, black); padding: 0 13px; color: var(--cor-texto); font: inherit; font-size: 13px; }
+.observacaoLinha input:focus { border-color: var(--cor-principal); }
+.observacaoLinha input:disabled { opacity: 0.55; cursor: not-allowed; }
+
 .listaItens { display: grid; }
 .itemCabecalho,
 .itemComanda { display: grid; grid-template-columns: 46px minmax(0, 1fr) 34px 76px 38px; align-items: center; gap: 9px; }

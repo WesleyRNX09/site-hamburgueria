@@ -18,6 +18,7 @@ import {
   buscarItensValidados,
   calcularTotaisPedido,
   criarPedidoDelivery,
+  buscarImpressoraDeCaixa,
   intervaloIndicadores,
   salvarConfiguracao
 } from './operations.js';
@@ -35,6 +36,7 @@ import {
   identificarEstabelecimentoPeloHost,
   resolverEstabelecimento
 } from './tenant.js';
+import { montarRecibo } from '../agente-impressao/escpos.js';
 import { CHAVES_PERMISSOES } from '../src/utils/permissoes.js';
 
 const JWT_SECRET_TESTE = 'segredo-jwt-exclusivo-para-testes-com-mais-de-32-bytes';
@@ -3211,6 +3213,120 @@ if (!executarIntegracao) {
     assert.equal(comandaConferida.itens.at(-1).enviadoPor.nome, 'Ana Souza');
   });
 
+  test('garçom salva, relê e apaga a observação geral da própria comanda', async () => {
+    const dados = await chamar('/api/garcom/dados', { token: tokenSessaoGarcom });
+    const comanda = dados.corpo.comandas.find((item) => item.mesaId === 1);
+    assert.ok(comanda);
+    // Comanda sem recado chega como string vazia, nunca como null: é o que
+    // deixa o campo do formulário nascer controlado nas duas telas.
+    assert.equal(comanda.observacao, '');
+
+    const salva = await chamar(`/api/garcom/comandas/${comanda.id}/observacao`, {
+      metodo: 'PUT',
+      token: tokenSessaoGarcom,
+      dados: { observacao: '  Mesa com alergia a amendoim.  ' }
+    });
+    assert.equal(salva.status, 200);
+    assert.equal(salva.corpo.observacao, 'Mesa com alergia a amendoim.');
+
+    const relida = await chamar('/api/garcom/dados', { token: tokenSessaoGarcom });
+    assert.equal(
+      relida.corpo.comandas.find((item) => item.id === comanda.id).observacao,
+      'Mesa com alergia a amendoim.'
+    );
+    // Mesma comanda, mesmo recado: o caixa lê pelo painel, sem rota própria.
+    const noPainel = await chamar('/api/admin/dados', { token: tokenAdmin });
+    assert.equal(
+      noPainel.corpo.comandas.find((item) => item.id === comanda.id).observacao,
+      'Mesa com alergia a amendoim.'
+    );
+
+    const longa = await chamar(`/api/garcom/comandas/${comanda.id}/observacao`, {
+      metodo: 'PUT',
+      token: tokenSessaoGarcom,
+      dados: { observacao: 'a'.repeat(501) }
+    });
+    assert.equal(longa.status, 400);
+    assert.match(longa.corpo.erro, /500 caracteres/);
+    // Recusado é recusado: o texto anterior continua inteiro no banco.
+    const intacta = await chamar('/api/garcom/dados', { token: tokenSessaoGarcom });
+    assert.equal(
+      intacta.corpo.comandas.find((item) => item.id === comanda.id).observacao,
+      'Mesa com alergia a amendoim.'
+    );
+
+    // Apagar o recado é salvar o campo vazio.
+    const limpa = await chamar(`/api/garcom/comandas/${comanda.id}/observacao`, {
+      metodo: 'PUT',
+      token: tokenSessaoGarcom,
+      dados: { observacao: '   ' }
+    });
+    assert.equal(limpa.status, 200);
+    assert.equal(limpa.corpo.observacao, '');
+    const [[noBanco]] = await banco.execute(
+      'SELECT observacao FROM comandas WHERE id = ?',
+      [comanda.id]
+    );
+    assert.equal(noBanco.observacao, null);
+  });
+
+  test('observação de comanda de outro estabelecimento não é alcançada nem pelo garçom nem pelo caixa', async () => {
+    const [[lojaB]] = await banco.execute(
+      'SELECT id_estabelecimento FROM estabelecimentos WHERE slug = ?',
+      ['loja-b']
+    );
+    const idTenantB = Number(lojaB.id_estabelecimento);
+    const [mesaB] = await banco.execute(`
+      INSERT INTO mesas (id_estabelecimento, numero, ativo)
+      VALUES (?, 901, 1)
+    `, [idTenantB]);
+    const [comandaB] = await banco.execute(`
+      INSERT INTO comandas (id_estabelecimento, mesa_id, status, observacao)
+      VALUES (?, ?, 'Aberta', 'Recado da Loja B')
+    `, [idTenantB, mesaB.insertId]);
+    const idComandaB = Number(comandaB.insertId);
+
+    try {
+      // A loja A conhece o id, mas não a comanda: o tenant vem da sessão, e
+      // nem o garçom nem o administrador saem do próprio estabelecimento.
+      const peloGarcom = await chamar(`/api/garcom/comandas/${idComandaB}/observacao`, {
+        metodo: 'PUT',
+        token: tokenSessaoGarcom,
+        dados: { observacao: 'Invasão pelo salão' }
+      });
+      assert.equal(peloGarcom.status, 404);
+
+      const peloCaixa = await chamar(`/api/admin/comandas/${idComandaB}/observacao`, {
+        metodo: 'PUT',
+        token: tokenAdmin,
+        dados: { observacao: 'Invasão pelo caixa' }
+      });
+      assert.equal(peloCaixa.status, 404);
+
+      // Sessão da loja A apontada para o domínio da loja B também não passa:
+      // a sessão é da loja A e não vira credencial da loja B.
+      const trocandoODominio = await chamar(`/api/garcom/comandas/${idComandaB}/observacao`, {
+        metodo: 'PUT',
+        token: tokenSessaoGarcom,
+        dados: { observacao: 'Invasão pelo domínio' },
+        baseUrl: urlBaseTenantB
+      });
+      assert.equal(trocandoODominio.status, 403);
+
+      const [[intacta]] = await banco.execute(
+        'SELECT observacao FROM comandas WHERE id = ? AND id_estabelecimento = ?',
+        [idComandaB, idTenantB]
+      );
+      assert.equal(intacta.observacao, 'Recado da Loja B');
+      // E a comanda da loja B não aparece no painel da loja A.
+      const painelA = await chamar('/api/admin/dados', { token: tokenAdmin });
+      assert.equal(painelA.corpo.comandas.some((item) => item.id === String(idComandaB)), false);
+    } finally {
+      await banco.execute('DELETE FROM comandas WHERE id = ? AND id_estabelecimento = ?', [idComandaB, idTenantB]);
+      await banco.execute('DELETE FROM mesas WHERE id = ? AND id_estabelecimento = ?', [mesaB.insertId, idTenantB]);
+    }
+  });
+
   test('separa o cardápio do salão do cardápio online', async () => {
     const categoriaSalao = await chamar('/api/admin/categorias', {
       metodo: 'POST',
@@ -3403,6 +3519,74 @@ if (!executarIntegracao) {
     const pedido = depois.corpo.pedidos.find((item) => item.comandaId === comanda.id);
     assert.equal(pedido.status, 'Entregue na mesa');
     assert.equal(pedido.pagamentoStatus, 'Pago');
+  });
+
+  test('administrador salva e relê a observação geral da comanda pela rota do painel', async () => {
+    const mesaLivre = (await chamar('/api/admin/dados', { token: tokenAdmin }))
+      .corpo.mesas.find((mesa) => mesa.status === 'Livre');
+    assert.ok(mesaLivre);
+
+    const aberta = await chamar('/api/admin/comandas', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { mesaId: mesaLivre.id }
+    });
+    assert.equal(aberta.status, 201);
+    const comandaId = aberta.corpo.comanda.id;
+    assert.equal(aberta.corpo.comanda.observacao, '');
+
+    const salva = await chamar(`/api/admin/comandas/${comandaId}/observacao`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { observacao: '  Aniversário: bolo às 21h.  ' }
+    });
+    assert.equal(salva.status, 200);
+    assert.equal(salva.corpo.observacao, 'Aniversário: bolo às 21h.');
+
+    const painel = await chamar('/api/admin/dados', { token: tokenAdmin });
+    assert.equal(
+      painel.corpo.comandas.find((item) => item.id === comandaId).observacao,
+      'Aniversário: bolo às 21h.'
+    );
+    // O garçom lê o mesmo recado no app, sem precisar salvá-lo de novo.
+    const salao = await chamar('/api/garcom/dados', { token: tokenSessaoGarcom });
+    assert.equal(
+      salao.corpo.comandas.find((item) => item.id === comandaId).observacao,
+      'Aniversário: bolo às 21h.'
+    );
+
+    const longa = await chamar(`/api/admin/comandas/${comandaId}/observacao`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { observacao: 'a'.repeat(501) }
+    });
+    assert.equal(longa.status, 400);
+
+    // Alteração feita pelo painel fica na auditoria, sem copiar o recado.
+    const [[registro]] = await banco.execute(`
+      SELECT detalhes_json FROM auditoria_admin
+      WHERE acao = 'comanda.observacao_alterada' AND entidade_id = ?
+      ORDER BY id DESC LIMIT 1
+    `, [comandaId]);
+    assert.ok(registro);
+    const detalhes = typeof registro.detalhes_json === 'string'
+      ? JSON.parse(registro.detalhes_json)
+      : registro.detalhes_json;
+    assert.equal(detalhes.preenchida, true);
+    assert.equal('observacao' in detalhes, false);
+
+    const cancelada = await chamar(`/api/admin/comandas/${comandaId}/cancelar`, {
+      metodo: 'POST',
+      token: tokenAdmin
+    });
+    assert.equal(cancelada.status, 200);
+    // Comanda fechada não recebe mais recado.
+    const depoisDeFechar = await chamar(`/api/admin/comandas/${comandaId}/observacao`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { observacao: 'Tarde demais' }
+    });
+    assert.equal(depoisDeFechar.status, 409);
   });
 
   test('administrador limpa itens pendentes e cancela a comanda liberando a mesa', async () => {
@@ -3916,6 +4100,24 @@ if (!executarIntegracao) {
     return { status: resposta.status, corpo: await resposta.json() };
   }
 
+  /* ESC E 1: liga o negrito. É o prefixo que prova que a linha saiu
+     destacada no papel, e não como texto comum. */
+  const NEGRITO_LIGADO = '\x1bE\x01';
+
+  /* O que realmente sai no papel: o agente monta o recibo em ESC/POS,
+     transliterando acentos e escrevendo em latin1. Ler de volta do mesmo
+     jeito é o que deixa o teste conferir o ticket, e não só o JSON. */
+  function ticketDoTrabalho(trabalho) {
+    return montarRecibo(trabalho).toString('latin1');
+  }
+
+  async function confirmarFila(token = tokenDispositivoImpressao) {
+    const { corpo } = await filaDoDispositivo(token);
+    for (const trabalho of corpo.trabalhos) {
+      await chamar(`/api/impressao/trabalhos/${trabalho.id}/confirmar`, { metodo: 'POST', token });
+    }
+  }
+
   test('produto sem impressora configurada não gera trabalho e não impede pedido nem comanda', async () => {
     // Nenhuma impressora cadastrada ainda: é o estado de quem acabou de instalar.
     const dispositivo = await chamar('/api/admin/impressao/dispositivos', {
@@ -4122,6 +4324,324 @@ if (!executarIntegracao) {
       metodo: 'POST',
       token: tokenDispositivoImpressao
     });
+  });
+
+  test('ticket da comanda traz o número da comanda e a observação da mesa, e não quebra sem ela', async () => {
+    const dados = await chamar('/api/admin/dados', { token: tokenAdmin });
+    const categoriaHamburgueres = dados.corpo.categorias.find((categoria) => categoria.nome === 'Hambúrgueres');
+    const produto = dados.corpo.produtos.find((item) => item.categoriaId === categoriaHamburgueres.id);
+    assert.ok(produto);
+
+    const mesa = await chamar('/api/admin/mesas', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { numero: '78' }
+    });
+    assert.equal(mesa.status, 201);
+    const comanda = await chamar('/api/admin/comandas', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { mesaId: mesa.corpo.mesa.id }
+    });
+    assert.equal(comanda.status, 201);
+    const comandaId = comanda.corpo.comanda.id;
+
+    const recado = 'Alergia a amendoim (avó)';
+    assert.equal((await chamar(`/api/admin/comandas/${comandaId}/observacao`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { observacao: recado }
+    })).status, 200);
+
+    await chamar(`/api/admin/comandas/${comandaId}/itens`, {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { produtoId: produto.id, quantidade: 1, adicionais: [] }
+    });
+    assert.equal((await chamar(`/api/admin/comandas/${comandaId}/lancar`, {
+      metodo: 'POST',
+      token: tokenAdmin
+    })).status, 200);
+
+    const fila = await filaDoDispositivo(tokenDispositivoImpressao);
+    assert.equal(fila.corpo.trabalhos.length, 1);
+    const trabalho = fila.corpo.trabalhos[0];
+    assert.equal(trabalho.conteudo.cabecalho.numeroMesa, '78');
+    assert.equal(trabalho.conteudo.cabecalho.observacaoComanda, recado);
+    // `mesa` continua no registro do trabalho, mesmo sem ir para o papel.
+    assert.equal(trabalho.conteudo.cabecalho.mesa, 'Mesa 78');
+
+    const ticket = ticketDoTrabalho(trabalho);
+    // A comanda é identificada pela mesa, no próprio título: nada de uma
+    // linha "Comanda #" e outra "Mesa" repetindo a mesma informação.
+    assert.ok(ticket.includes('COMANDA 78'), ticket);
+    assert.equal(ticket.includes('Comanda #'), false, ticket);
+    assert.equal(/^Mesa /m.test(ticket), false, ticket);
+    // O papel não tem acento: o agente translitera antes de imprimir.
+    assert.ok(ticket.includes('OBS DA MESA: Alergia a amendoim (avo)'), ticket);
+    // O setor sai da folha: o papel já nasce na impressora daquele setor.
+    assert.equal(ticket.includes('Setor:'), false, ticket);
+    // O número do trabalho fica no log do agente, não no papel da cozinha.
+    assert.equal(ticket.includes('Trabalho #'), false, ticket);
+    // Recibo de cozinha não leva preço: o item sai só com quantidade e nome.
+    assert.equal(/R\$|\d+,\d{2}/.test(ticket), false, ticket);
+
+    /* Negrito só no título: é o único ESC E 1 do recibo inteiro, e ele vem
+       antes de "COMANDA". Recado e itens saem em texto normal. */
+    assert.equal(ticket.split(NEGRITO_LIGADO).length - 1, 1, ticket);
+    assert.ok(ticket.includes(`${NEGRITO_LIGADO}COMANDA 78`), ticket);
+    await confirmarFila();
+
+    // Recado apagado: o ticket seguinte sai sem a linha e sem quebrar.
+    assert.equal((await chamar(`/api/admin/comandas/${comandaId}/observacao`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { observacao: '' }
+    })).status, 200);
+    await chamar(`/api/admin/comandas/${comandaId}/itens`, {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { produtoId: produto.id, quantidade: 1, adicionais: [] }
+    });
+    assert.equal((await chamar(`/api/admin/comandas/${comandaId}/lancar`, {
+      metodo: 'POST',
+      token: tokenAdmin
+    })).status, 200);
+
+    const semRecado = await filaDoDispositivo(tokenDispositivoImpressao);
+    assert.equal(semRecado.corpo.trabalhos.length, 1);
+    const trabalhoSemRecado = semRecado.corpo.trabalhos[0];
+    assert.equal(trabalhoSemRecado.conteudo.cabecalho.observacaoComanda, null);
+    const ticketSemRecado = ticketDoTrabalho(trabalhoSemRecado);
+    assert.equal(ticketSemRecado.includes('OBS DA MESA'), false, ticketSemRecado);
+    // O número da mesa continua no título, mesmo sem recado.
+    assert.ok(ticketSemRecado.includes('COMANDA 78'), ticketSemRecado);
+    await confirmarFila();
+
+    // Recado comprido não estoura a largura do papel: quebra em linhas.
+    const comprido = ticketDoTrabalho({
+      id: 2,
+      conteudo: {
+        origem: 'comanda',
+        cabecalho: {
+          numeroMesa: '78',
+          mesa: 'Mesa 78',
+          observacaoComanda: 'Mesa com alergia grave a amendoim e a frutos do mar, avisar o chef antes'
+        },
+        itens: []
+      }
+    });
+    /* O recado quebra em 42 colunas e nenhum pedaço some por estourar a
+       largura do papel — agora em texto normal, sem negrito. */
+    assert.ok(comprido.includes('OBS DA MESA: Mesa com alergia grave a\n'), comprido);
+    assert.ok(comprido.includes('  amendoim e a frutos do mar, avisar o chef\n'), comprido);
+    assert.ok(comprido.includes('  antes\n'), comprido);
+    assert.equal(comprido.split(NEGRITO_LIGADO).length - 1, 1, comprido);
+
+    // Trabalho antigo, gravado antes desta mudança e ainda na fila: sem
+    // `numeroMesa` o título volta a ser só "COMANDA", em vez de quebrar.
+    const antigo = ticketDoTrabalho({
+      id: 1,
+      conteudo: { origem: 'comanda', cabecalho: { mesa: 'Mesa 9' }, itens: [] }
+    });
+    assert.ok(antigo.includes(`${NEGRITO_LIGADO}COMANDA\n`), antigo);
+    assert.equal(antigo.includes('Comanda #'), false, antigo);
+    assert.equal(antigo.includes('OBS DA MESA'), false, antigo);
+  });
+
+  test('ticket de delivery não mostra mais a forma de pagamento', async () => {
+    const dados = await chamar('/api/admin/dados', { token: tokenAdmin });
+    const categoriaHamburgueres = dados.corpo.categorias.find((categoria) => categoria.nome === 'Hambúrgueres');
+    // Produto com impressora resolvida, senão o pedido não gera trabalho nenhum.
+    const produto = dados.corpo.produtos.find((item) => item.categoriaId === categoriaHamburgueres.id);
+    assert.ok(produto);
+
+    // Fila limpa antes: o que sobrar de outro teste não entra na conferência.
+    await confirmarFila();
+    const pedido = await chamar('/api/pedidos', {
+      metodo: 'POST',
+      dados: dadosPedido({
+        pagamento: 'Cartão na entrega',
+        itens: [{ id: produto.id, quantidade: 1 }]
+      })
+    });
+    assert.equal(pedido.status, 201, JSON.stringify(pedido.corpo));
+
+    const fila = await filaDoDispositivo(tokenDispositivoImpressao);
+    assert.ok(fila.corpo.trabalhos.length > 0);
+    for (const trabalho of fila.corpo.trabalhos) {
+      assert.equal(trabalho.conteudo.origem, 'delivery');
+      assert.equal('pagamento' in trabalho.conteudo.cabecalho, false);
+
+      const ticket = ticketDoTrabalho(trabalho);
+      assert.equal(/Pagamento/i.test(ticket), false, ticket);
+      // O resto do cabeçalho continua lá: é por ele que a cozinha se orienta.
+      assert.ok(ticket.includes('Cliente: Cliente Teste'), ticket);
+      assert.ok(ticket.includes(`Pedido ${pedido.corpo.pedido.id}`), ticket);
+      // Mesma regra visual da comanda: setor e trabalho fora, negrito só no título.
+      assert.equal(ticket.includes('Setor:'), false, ticket);
+      assert.equal(ticket.includes('Trabalho #'), false, ticket);
+      assert.equal(ticket.split(NEGRITO_LIGADO).length - 1, 1, ticket);
+      assert.ok(ticket.includes(`${NEGRITO_LIGADO}PEDIDO`), ticket);
+    }
+
+    // O dado não foi perdido: sumiu do papel, não do banco.
+    assert.equal(pedido.corpo.pedido.pagamento, 'Cartão na entrega');
+    const [[gravado]] = await banco.execute(`
+      SELECT p.pagamento, g.forma
+      FROM pedidos p
+      INNER JOIN pagamentos g ON g.pedido_id = p.id AND g.id_estabelecimento = p.id_estabelecimento
+      WHERE p.id = ?
+    `, [Number(String(pedido.corpo.pedido.id).replace(/\D/g, ''))]);
+    assert.equal(gravado.pagamento, 'Cartão na entrega');
+    assert.equal(gravado.forma, 'Cartão na entrega');
+    await confirmarFila();
+  });
+
+  test('marcar uma impressora como caixa desmarca a que estava marcada antes', async () => {
+    const [[lojaA]] = await banco.execute(
+      'SELECT id_estabelecimento FROM estabelecimentos WHERE slug = ?',
+      ['estabelecimento-padrao']
+    );
+    const idLojaA = Number(lojaA.id_estabelecimento);
+    const nomes = (lista) => lista.filter((i) => i.ehCaixa).map((i) => i.nome).sort();
+    const listar = async () => (await chamar('/api/admin/impressoras', { token: tokenAdmin })).corpo.impressoras;
+
+    // Nenhuma impressora nasce como caixa: a loja escolhe.
+    assert.deepEqual(nomes(await listar()), []);
+    assert.equal(await buscarImpressoraDeCaixa(banco, idLojaA), null);
+
+    const marcar = (id, nome, host, ehCaixa) => chamar(`/api/admin/impressoras/${id}`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { nome, host, porta: 9100, ehCaixa }
+    });
+
+    const cozinha = await marcar(idImpressoraCozinha, 'Cozinha', '192.168.0.50', true);
+    assert.equal(cozinha.status, 200);
+    assert.equal(cozinha.corpo.impressora.ehCaixa, true);
+    assert.deepEqual(nomes(await listar()), ['Cozinha']);
+    assert.equal((await buscarImpressoraDeCaixa(banco, idLojaA)).id, idImpressoraCozinha);
+
+    // Marcar o Bar tira a marca da Cozinha, sem ninguém precisar desmarcá-la.
+    const bar = await marcar(idImpressoraBar, 'Bar', 'impressora-bar.local', true);
+    assert.equal(bar.status, 200);
+    assert.equal(bar.corpo.impressora.ehCaixa, true);
+    assert.deepEqual(nomes(await listar()), ['Bar']);
+    assert.equal((await buscarImpressoraDeCaixa(banco, idLojaA)).id, idImpressoraBar);
+
+    // Uma impressora nova já nascendo como caixa também desmarca a anterior.
+    const balcao = await chamar('/api/admin/impressoras', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { nome: 'Balcao', host: '192.168.0.77', porta: 9100, ehCaixa: true }
+    });
+    assert.equal(balcao.status, 201);
+    assert.equal(balcao.corpo.impressora.ehCaixa, true);
+    assert.deepEqual(nomes(await listar()), ['Balcao']);
+
+    /* Nunca mais de uma marcada no banco: é a regra que a aplicação garante
+       na transação, já que o MySQL não tem índice único parcial. */
+    const contarCaixas = async (idEstabelecimento) => {
+      const [[linha]] = await banco.execute(
+        'SELECT COUNT(id) AS total FROM impressoras WHERE id_estabelecimento = ? AND eh_caixa = 1',
+        [idEstabelecimento]
+      );
+      return Number(linha.total);
+    };
+    assert.equal(await contarCaixas(idLojaA), 1);
+
+    // Salvar sem falar de caixa não mexe na marcação (mesmo tratamento de `ativa`).
+    const soRenomeia = await chamar(`/api/admin/impressoras/${balcao.corpo.impressora.id}`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { nome: 'Balcao principal', host: '192.168.0.77', porta: 9100 }
+    });
+    assert.equal(soRenomeia.status, 200);
+    assert.equal(soRenomeia.corpo.impressora.ehCaixa, true);
+    assert.equal(await contarCaixas(idLojaA), 1);
+
+    // E desmarcar deixa a loja sem impressora de caixa, sem eleger outra.
+    const desmarcada = await chamar(`/api/admin/impressoras/${balcao.corpo.impressora.id}`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { nome: 'Balcao principal', host: '192.168.0.77', porta: 9100, ehCaixa: false }
+    });
+    assert.equal(desmarcada.status, 200);
+    assert.equal(desmarcada.corpo.impressora.ehCaixa, false);
+    assert.equal(await contarCaixas(idLojaA), 0);
+    assert.equal(await buscarImpressoraDeCaixa(banco, idLojaA), null);
+
+    // Valor de outro tipo é recusado antes de gravar.
+    const invalida = await chamar(`/api/admin/impressoras/${idImpressoraCozinha}`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { nome: 'Cozinha', host: '192.168.0.50', porta: 9100, ehCaixa: 'sim' }
+    });
+    assert.equal(invalida.status, 400);
+  });
+
+  test('a impressora de caixa de uma loja não interfere na da outra', async () => {
+    const [[tenantB]] = await banco.execute(
+      'SELECT id_estabelecimento FROM estabelecimentos WHERE slug = ?',
+      ['loja-b']
+    );
+    const idTenantB = Number(tenantB.id_estabelecimento);
+    const [[lojaA]] = await banco.execute(
+      'SELECT id_estabelecimento FROM estabelecimentos WHERE slug = ?',
+      ['estabelecimento-padrao']
+    );
+    const idLojaA = Number(lojaA.id_estabelecimento);
+    const [caixaB] = await banco.execute(`
+      INSERT INTO impressoras (id_estabelecimento, nome, host, porta, ativa, eh_caixa)
+      VALUES (?, 'Caixa da Loja B', '10.0.0.77', 9100, 1, 1)
+    `, [idTenantB]);
+    const idCaixaB = Number(caixaB.insertId);
+
+    try {
+      // Marcar o caixa da loja A não pode encostar na loja B.
+      const marcada = await chamar(`/api/admin/impressoras/${idImpressoraCozinha}`, {
+        metodo: 'PUT',
+        token: tokenAdmin,
+        dados: { nome: 'Cozinha', host: '192.168.0.50', porta: 9100, ehCaixa: true }
+      });
+      assert.equal(marcada.status, 200);
+      assert.equal(marcada.corpo.impressora.ehCaixa, true);
+
+      const [[aindaCaixa]] = await banco.execute(
+        'SELECT eh_caixa FROM impressoras WHERE id = ? AND id_estabelecimento = ?',
+        [idCaixaB, idTenantB]
+      );
+      assert.equal(Number(aindaCaixa.eh_caixa), 1);
+
+      // Cada loja enxerga a própria, e só a própria.
+      const caixaDeA = await buscarImpressoraDeCaixa(banco, idLojaA);
+      const caixaDeB = await buscarImpressoraDeCaixa(banco, idTenantB);
+      assert.equal(caixaDeA.id, idImpressoraCozinha);
+      assert.equal(caixaDeB.id, idCaixaB);
+      assert.equal(caixaDeB.nome, 'Caixa da Loja B');
+
+      // A loja A não lista nem edita a impressora da loja B, nem sabendo o id.
+      const painelA = await chamar('/api/admin/impressoras', { token: tokenAdmin });
+      assert.equal(painelA.corpo.impressoras.some((i) => i.id === idCaixaB), false);
+      const cruzada = await chamar(`/api/admin/impressoras/${idCaixaB}`, {
+        metodo: 'PUT',
+        token: tokenAdmin,
+        dados: { nome: 'Invasao', host: '10.0.0.77', porta: 9100, ehCaixa: true }
+      });
+      assert.equal(cruzada.status, 404);
+      const [[intacta]] = await banco.execute(
+        'SELECT nome, eh_caixa FROM impressoras WHERE id = ? AND id_estabelecimento = ?',
+        [idCaixaB, idTenantB]
+      );
+      assert.equal(intacta.nome, 'Caixa da Loja B');
+      assert.equal(Number(intacta.eh_caixa), 1);
+    } finally {
+      await banco.execute(
+        'DELETE FROM impressoras WHERE id = ? AND id_estabelecimento = ?',
+        [idCaixaB, idTenantB]
+      );
+    }
   });
 
   test('dois estabelecimentos não enxergam os trabalhos de impressão um do outro', async () => {

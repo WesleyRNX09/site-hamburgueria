@@ -93,4 +93,29 @@ A pasta `legado/` preserva o histórico anterior e não é executada pelo runner
   `tempo_entrega` (30 e 45 quando não houver). `areas_entrega_json` e
   `pedido_minimo_centavos` ficam no banco sem uso; nenhuma linha é alterada ou
   removida.
+- `020_adicionar_impressao.sql`: cria `impressoras` (nome e endereço de rede
+  por estabelecimento), `dispositivos_impressao` (cada agente local pareado,
+  com o token guardado só como hash) e `trabalhos_impressao` (a fila, com o
+  recibo já montado pelo servidor em `conteudo_json` e chave estrangeira da
+  impressora composta por `id_estabelecimento`). Acrescenta
+  `categorias.impressora_id` e `produtos.impressora_id` — a impressora efetiva
+  de um item é a do produto, ou a da categoria quando o produto não tem
+  exceção — e `comanda_itens.impresso_em`, para reenviar uma comanda sem
+  reimprimir o que a cozinha já recebeu; o histórico já lançado nasce marcado
+  com a data do próprio lançamento. As colunas acrescentadas a tabelas
+  existentes são todas opcionais e nada é removido nem reescrito: sem
+  impressora cadastrada, o sistema continua funcionando como antes.
+- `021_observacao_geral_da_comanda.sql`: acrescenta `comandas.observacao`
+  (TEXT NULL), o recado que vale para a mesa inteira — aniversário, alergia,
+  cliente com pressa — separado da observação de cada item. Coluna opcional e
+  sem DEFAULT: nenhuma comanda existente é reescrita, e o limite de 500
+  caracteres, com trim, é aplicado pelo servidor.
+- `022_impressora_do_caixa.sql`: acrescenta `impressoras.eh_caixa` (TINYINT
+  NOT NULL DEFAULT 0) e o índice `idx_impressoras_caixa
+  (id_estabelecimento, eh_caixa)`, para a loja dizer qual impressora fica no
+  balcão em vez de numa praça de preparo. No máximo uma por estabelecimento,
+  garantido pela aplicação dentro da transação que grava — o MySQL não tem
+  índice único parcial, e um UNIQUE na coluna barraria ter duas impressoras
+  comuns na mesma loja. Coluna com DEFAULT: nenhuma linha é reescrita e
+  nenhuma loja ganha impressora de caixa sem alguém escolher.
 - `legado/20260824_operacao_comercial.sql`: histórico anterior, fora do runner.

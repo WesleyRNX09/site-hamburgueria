@@ -202,6 +202,10 @@ CREATE TABLE IF NOT EXISTS impressoras (
   host VARCHAR(255) NOT NULL,
   porta INT UNSIGNED NOT NULL DEFAULT 9100,
   ativa TINYINT(1) NOT NULL DEFAULT 1,
+  -- A impressora do balcao: no maximo uma por estabelecimento, garantido pela
+  -- aplicacao (o MySQL nao tem indice unico parcial para "unico entre as
+  -- linhas com eh_caixa = 1").
+  eh_caixa TINYINT(1) NOT NULL DEFAULT 0,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_impressoras_estabelecimento_nome (id_estabelecimento, nome),
@@ -334,6 +338,9 @@ CREATE TABLE IF NOT EXISTS comandas (
   aberta_por_admin_id BIGINT UNSIGNED,
   status VARCHAR(40) NOT NULL DEFAULT 'Aberta',
   pagamento VARCHAR(40),
+  -- Recado que vale para a mesa inteira, não para um item: aniversário,
+  -- alergia, cliente com pressa. O limite de 500 caracteres é do servidor.
+  observacao TEXT,
   aberta_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   encerrada_em DATETIME,
   atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -591,6 +598,7 @@ CREATE INDEX idx_pagamentos_status ON pagamentos (status);
 
 -- Impressão: fila por loja/impressora e as colunas de roteamento do catálogo.
 CREATE INDEX idx_impressoras_estabelecimento ON impressoras (id_estabelecimento);
+CREATE INDEX idx_impressoras_caixa ON impressoras (id_estabelecimento, eh_caixa);
 CREATE INDEX idx_dispositivos_impressao_estabelecimento
   ON dispositivos_impressao (id_estabelecimento);
 CREATE INDEX idx_trabalhos_impressao_fila
@@ -841,7 +849,9 @@ INSERT INTO schema_migrations (versao, checksum) VALUES
   ('017_permissoes_administradores.sql', '1630b466b47154b28b0d5c2d7d0714c3e0874fd9dbfd534aeaa8ec9cae1b809f'),
   ('018_arquivar_administradores.sql', '7bdc15d4289120e9766ba52f1cdebacd10127bcc92748adeaeda58750a84dd33'),
   ('019_areas_entrega.sql', '74127c736bef982a1c643a8c6186e14bc9cdfde341539201e65bdf43fd703993'),
-  ('020_adicionar_impressao.sql', '5f16a543cda46d77e573cb2fdb012c2928a89e4ea6afe0e30235e31db33d8658')
+  ('020_adicionar_impressao.sql', '5f16a543cda46d77e573cb2fdb012c2928a89e4ea6afe0e30235e31db33d8658'),
+  ('021_observacao_geral_da_comanda.sql', '6d8d045464806ecf39f4007e322bceb64dc1740b3eb44a70baa02ceb4f683e04'),
+  ('022_impressora_do_caixa.sql', '8d9bc13565eef36400913ae00b4571d5f416e6e35932ef58ded80a302a0f9879')
 ON DUPLICATE KEY UPDATE versao = VALUES(versao);
 
 INSERT INTO estabelecimentos

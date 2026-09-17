@@ -305,6 +305,28 @@
   white-space: nowrap;
 }
 
+/* Recado da mesa inteira: uma linha só, com o salvar ao lado. Em tela
+   estreita o botão desce para baixo do campo em vez de espremê-lo. */
+.observacaoMesa {
+  margin-bottom: 2px;
+}
+
+.observacaoLinha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.observacaoLinha input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.observacaoLinha input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* Barra que substitui o antigo select: o cardápio inteiro passou a morar em
    um modal, aberto sem sair da tela de mesas. */
 .barraCardapio {

@@ -113,8 +113,8 @@ Este projeto não usa pastas `/frontend` e `/backend` separadas: é um único
 ## Qualidade
 
 - Lint: `npm run lint`.
-- Testes (backend + utilitários de frontend, sem integração MySQL):
-  `npm test`.
+- Testes (backend, agente de impressão e utilitários de frontend, sem
+  integração MySQL): `npm test`.
 - Testes de isolamento multiempresa: `npm run test:security`.
 - Integração MySQL real (opt-in, banco descartável): `RUN_MYSQL_TESTS=1 npm test`
   — nunca aponte para um banco remoto/persistente ao usar essa variável.

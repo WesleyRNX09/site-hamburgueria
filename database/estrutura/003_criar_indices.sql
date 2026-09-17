@@ -47,6 +47,7 @@ CREATE INDEX idx_pagamentos_status ON pagamentos (status);
 
 -- Impressão: fila por loja/impressora e as colunas de roteamento do catálogo.
 CREATE INDEX idx_impressoras_estabelecimento ON impressoras (id_estabelecimento);
+CREATE INDEX idx_impressoras_caixa ON impressoras (id_estabelecimento, eh_caixa);
 CREATE INDEX idx_dispositivos_impressao_estabelecimento
   ON dispositivos_impressao (id_estabelecimento);
 CREATE INDEX idx_trabalhos_impressao_fila

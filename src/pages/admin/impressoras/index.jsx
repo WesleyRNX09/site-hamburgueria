@@ -13,10 +13,27 @@ import {
 } from '../../../services/api';
 import styles from '../shared.module.css';
 
-const vazio = { id: null, nome: '', host: '', porta: '9100' };
+const vazio = { id: null, nome: '', host: '', porta: '9100', ehCaixa: false };
 
 function ordenar(impressoras) {
   return [...impressoras].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+/*
+  Encaixa a impressora salva na lista da tela, criada ou atualizada.
+
+  Quando ela vira a do caixa, o servidor desmarca a anterior na mesma
+  transação; a lista precisa acompanhar, senão duas apareceriam marcadas até
+  alguém recarregar a página.
+*/
+function aplicarNaLista(atuais, salva) {
+  const demais = atuais.filter((impressora) => impressora.id !== salva.id);
+  return ordenar([
+    ...(salva.ehCaixa
+      ? demais.map((impressora) => (impressora.ehCaixa ? { ...impressora, ehCaixa: false } : impressora))
+      : demais),
+    salva
+  ]);
 }
 
 /* Só orienta quem preenche: o servidor valida tudo de novo. */
@@ -71,6 +88,8 @@ function ImpressorasAdmin() {
 
   const carregando = carregamento.concluida !== carregamento.tentativa;
   const ativas = impressoras.filter((impressora) => impressora.ativa).length;
+  // No máximo uma, garantido pelo servidor; aqui só é lida para orientar.
+  const caixaAtual = impressoras.find((impressora) => impressora.ehCaixa) ?? null;
   const filtradas = useMemo(() => impressoras.filter((impressora) =>
     impressora.nome.toLowerCase().includes(busca.trim().toLowerCase())
     || impressora.host.toLowerCase().includes(busca.trim().toLowerCase())), [impressoras, busca]);
@@ -85,7 +104,8 @@ function ImpressorasAdmin() {
       id: impressora.id,
       nome: impressora.nome,
       host: impressora.host,
-      porta: String(impressora.porta)
+      porta: String(impressora.porta),
+      ehCaixa: Boolean(impressora.ehCaixa)
     });
     setErro('');
     setSucesso('');
@@ -109,20 +129,26 @@ function ImpressorasAdmin() {
     const campos = {
       nome: dados.nome.trim(),
       host: dados.host.trim(),
-      porta: Number(String(dados.porta).trim())
+      porta: Number(String(dados.porta).trim()),
+      ehCaixa: dados.ehCaixa
     };
+    // Quem era o caixa antes, para avisar que a marcação trocou de dono.
+    const caixaAnterior = impressoras.find((impressora) => impressora.ehCaixa) ?? null;
     setProcessando(true);
     setErro('');
     try {
-      if (dados.id) {
-        const { impressora } = await atualizarImpressoraApi(dados.id, campos);
-        substituir(impressora);
-        setSucesso(`Impressora ${impressora.nome} atualizada.`);
-      } else {
-        const { impressora } = await criarImpressoraApi(campos);
-        setImpressoras((atuais) => ordenar([...atuais, impressora]));
-        setSucesso(`Impressora ${impressora.nome} cadastrada.`);
-      }
+      const { impressora } = dados.id
+        ? await atualizarImpressoraApi(dados.id, campos)
+        : await criarImpressoraApi(campos);
+      setImpressoras((atuais) => aplicarNaLista(atuais, impressora));
+      const trocouOCaixa = impressora.ehCaixa
+        && caixaAnterior !== null
+        && caixaAnterior.id !== impressora.id;
+      setSucesso(
+        `Impressora ${impressora.nome} ${dados.id ? 'atualizada' : 'cadastrada'}.`
+        + (impressora.ehCaixa ? ' Agora é a impressora do caixa.' : '')
+        + (trocouOCaixa ? ` ${caixaAnterior.nome} deixou de ser.` : '')
+      );
       setDados(vazio);
     } catch (falha) {
       setErro(falha.message);
@@ -217,7 +243,10 @@ function ImpressorasAdmin() {
           <div className={styles.topoCard}>
             <div>
               <h2>Impressoras cadastradas</h2>
-              <p>{impressoras.length} {impressoras.length === 1 ? 'impressora' : 'impressoras'} • {ativas} {ativas === 1 ? 'ativa' : 'ativas'}</p>
+              <p>
+                {impressoras.length} {impressoras.length === 1 ? 'impressora' : 'impressoras'} • {ativas} {ativas === 1 ? 'ativa' : 'ativas'}
+                {caixaAtual ? ` • caixa: ${caixaAtual.nome}` : ' • nenhuma marcada como caixa'}
+              </p>
             </div>
           </div>
           <label className={styles.busca}>
@@ -236,7 +265,10 @@ function ImpressorasAdmin() {
               {filtradas.map((impressora) => (
                 <article className={styles.adicionalLinha} key={impressora.id}>
                   <div>
-                    <strong>{impressora.nome}</strong>
+                    <strong>
+                      {impressora.nome}
+                      {impressora.ehCaixa && <span className={styles.seloCaixa}>Caixa</span>}
+                    </strong>
                     <span>{impressora.host}:{impressora.porta}</span>
                   </div>
                   <button
@@ -286,6 +318,22 @@ function ImpressorasAdmin() {
                 <input id="portaImpressora" type="number" min="1" max="65535" step="1" inputMode="numeric" value={dados.porta} onChange={(event) => alterar('porta', event.target.value)} placeholder="9100" />
               </div>
             </div>
+            <label className={`${styles.opcaoCaixa} ${dados.ehCaixa ? styles.opcaoCaixaAtiva : ''}`} htmlFor="ehCaixaImpressora">
+              <input
+                id="ehCaixaImpressora"
+                type="checkbox"
+                checked={dados.ehCaixa}
+                onChange={(event) => alterar('ehCaixa', event.target.checked)}
+              />
+              <span>
+                <strong>Usar como impressora do caixa</strong>
+                <small>
+                  {caixaAtual && caixaAtual.id !== dados.id
+                    ? `Só uma por loja: marcar esta desmarca ${caixaAtual.nome}.`
+                    : 'Só uma por loja: marcar outra depois desmarca esta.'}
+                </small>
+              </span>
+            </label>
             <div aria-live="polite">
               {erro && <div className={styles.erro} role="alert">{erro}</div>}
               {sucesso && <div className={styles.sucesso} role="status">{sucesso}</div>}

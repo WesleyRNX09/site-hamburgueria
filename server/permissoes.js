@@ -50,6 +50,7 @@ const ROTAS_ADMIN = [
   ['PATCH', /^\/api\/admin\/comandas\/\d+\/itens\/\d+$/, 'mesas.operar'],
   ['DELETE', /^\/api\/admin\/comandas\/\d+\/itens\/\d+$/, 'mesas.operar'],
   ['POST', /^\/api\/admin\/comandas\/\d+\/lancar$/, 'mesas.operar'],
+  ['PUT', /^\/api\/admin\/comandas\/\d+\/observacao$/, 'mesas.operar'],
   ['DELETE', /^\/api\/admin\/comandas\/\d+\/itens-pendentes$/, 'mesas.operar'],
   ['POST', /^\/api\/admin\/comandas\/\d+\/(?:cancelar|finalizar)$/, 'mesas.fechar'],
 

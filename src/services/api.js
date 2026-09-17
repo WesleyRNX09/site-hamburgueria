@@ -288,6 +288,14 @@ export function removerItemComandaAdminApi(comandaId, itemId) {
   return requisicao(`/api/admin/comandas/${comandaId}/itens/${itemId}`, { metodo: 'DELETE', autenticacao: 'admin' });
 }
 
+export function atualizarObservacaoComandaAdminApi(comandaId, observacao) {
+  return requisicao(`/api/admin/comandas/${comandaId}/observacao`, {
+    metodo: 'PUT',
+    dados: { observacao },
+    autenticacao: 'admin'
+  });
+}
+
 export function lancarComandaAdminApi(comandaId) {
   return requisicao(`/api/admin/comandas/${comandaId}/lancar`, {
     metodo: 'POST',
@@ -486,6 +494,14 @@ export function adicionarItemComandaApi(comandaId, dados) {
 
 export function removerItemComandaApi(comandaId, itemId) {
   return requisicao(`/api/garcom/comandas/${comandaId}/itens/${itemId}`, { metodo: 'DELETE', autenticacao: 'garcom' });
+}
+
+export function atualizarObservacaoComandaApi(comandaId, observacao) {
+  return requisicao(`/api/garcom/comandas/${comandaId}/observacao`, {
+    metodo: 'PUT',
+    dados: { observacao },
+    autenticacao: 'garcom'
+  });
 }
 
 export function enviarComandaApi(comandaId) {

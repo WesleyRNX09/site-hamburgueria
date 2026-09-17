@@ -321,6 +321,39 @@
 .uploadConteudo .botaoSecundario { width: fit-content; }
 .arquivoInput { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 
+/* Marcacao da impressora do caixa: uma opcao so, com a regra de "uma por
+   loja" escrita ao lado em vez de virar surpresa depois de salvar. */
+.opcaoCaixa {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  border: 1px solid var(--cor-borda-forte);
+  border-radius: 11px;
+  background: var(--cor-campo);
+  padding: 13px;
+  cursor: pointer;
+}
+.opcaoCaixa input { width: 18px; height: 18px; flex: 0 0 auto; margin-top: 1px; accent-color: var(--cor-principal); }
+.opcaoCaixa strong { display: block; color: var(--cor-texto-suave); font-size: 13px; }
+.opcaoCaixa small { display: block; margin-top: 4px; color: var(--cor-texto-fraco); font-size: 12px; line-height: 1.5; }
+.opcaoCaixaAtiva { border-color: var(--cor-principal); background: rgb(from var(--cor-principal) r g b / 0.07); }
+.opcaoCaixaAtiva strong { color: var(--cor-principal); }
+
+/* Selo ao lado do nome, na lista: diz de relance qual e a do balcao. */
+.seloCaixa {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  margin-left: 8px;
+  border-radius: 999px;
+  background: var(--cor-principal);
+  padding: 0 9px;
+  color: var(--cor-sobre-principal);
+  font-size: 11px;
+  font-weight: 800;
+  vertical-align: middle;
+}
+
 .tituloCampoComAcao { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
 .tituloCampoComAcao p { margin: 5px 0 0; color: var(--cor-texto-fraco); font-size: 12px; }
 .gradeSelecaoAdicionais { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
@@ -351,11 +384,13 @@
 .listaAdicionaisAdmin { display: grid; gap: 9px; margin-top: 16px; }
 .adicionalLinha { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 13px; border: 1px solid var(--cor-borda); border-radius: 11px; background: var(--cor-campo); padding: 13px; }
 /* Só o bloco de texto da linha: a pílula de status é filha direta e precisa
-   manter o inline-flex centralizado do .status. */
+   manter o inline-flex centralizado do .status.
+   O `:not(.seloCaixa)` preserva a regra para o subtítulo (o endereço da
+   impressora) sem empurrar o selo para uma linha inteira só dele. */
 .adicionalLinha > div strong,
-.adicionalLinha > div span { display: block; }
+.adicionalLinha > div span:not(.seloCaixa) { display: block; }
 .adicionalLinha > div strong { color: var(--cor-texto-suave); font-size: 13px; }
-.adicionalLinha > div span { margin-top: 4px; color: var(--cor-texto-fraco); font-size: 12px; }
+.adicionalLinha > div span:not(.seloCaixa) { margin-top: 4px; color: var(--cor-texto-fraco); font-size: 12px; }
 
 .detalheGrid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.75fr); gap: 18px; }
 .listaInfo { display: grid; gap: 0; }
@@ -555,7 +590,7 @@
   .tituloCampoComAcao p,
   .opcaoAdicional strong,
   .opcaoAdicional small,
-  .adicionalLinha > div span,
+  .adicionalLinha > div span:not(.seloCaixa),
   .linhaInfo span,
   .linhaInfo strong,
   .itemPedido p,

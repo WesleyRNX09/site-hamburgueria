@@ -40,6 +40,7 @@ const VISIBILIDADE_ONLINE = filtroCanal('online', { aliasProduto: 'p', aliasCate
 const MAX_LINHAS_PEDIDO = 100;
 const MAX_UNIDADES_PEDIDO = 500;
 const MAX_ADICIONAIS_POR_ITEM = 50;
+const MAX_OBSERVACAO_COMANDA = 500;
 const MAX_TOTAL_CENTAVOS = 4_294_967_295;
 const STATUS_TERMINAIS = new Set(['Entregue', 'Entregue na mesa', 'Retirado', 'Cancelado']);
 // Uma comanda sai do salão tanto quando é paga ("Encerrada") quanto quando o
@@ -678,6 +679,7 @@ function mapearImpressora(linha) {
     host: linha.host,
     porta: Number(linha.porta),
     ativa: Boolean(linha.ativa),
+    ehCaixa: Boolean(linha.eh_caixa),
     criadoEm: dataIso(linha.criado_em),
     atualizadoEm: dataIso(linha.atualizado_em)
   };
@@ -691,7 +693,7 @@ async function consultarImpressoras(banco, idEstabelecimento, { id = null } = {}
     parametros.push(id);
   }
   const [linhas] = await banco.execute(`
-    SELECT id, nome, host, porta, ativa, criado_em, atualizado_em
+    SELECT id, nome, host, porta, ativa, eh_caixa, criado_em, atualizado_em
     FROM impressoras
     WHERE id_estabelecimento = ?
     ${filtro}
@@ -699,6 +701,22 @@ async function consultarImpressoras(banco, idEstabelecimento, { id = null } = {}
     LIMIT ${MAX_IMPRESSORAS}
   `, parametros);
   return linhas.map(mapearImpressora);
+}
+
+/*
+  A impressora do balcão da loja, ou `null` quando ninguém marcou nenhuma.
+  Recebe a conexão (e não o pool) para poder ser chamada de dentro de uma
+  transação em curso, junto com o que a originou.
+*/
+export async function buscarImpressoraDeCaixa(conexao, idEstabelecimento) {
+  const [linhas] = await conexao.execute(`
+    SELECT id, nome, host, porta, ativa, eh_caixa, criado_em, atualizado_em
+    FROM impressoras
+    WHERE id_estabelecimento = ? AND eh_caixa = 1
+    ORDER BY id
+    LIMIT 1
+  `, [idEstabelecimento]);
+  return linhas[0] ? mapearImpressora(linhas[0]) : null;
 }
 
 export function listarImpressoras(banco, idEstabelecimento) {
@@ -745,7 +763,33 @@ function validarImpressora(dados) {
     throw erroDominio('Informe uma porta entre 1 e 65535. A porta padrão das impressoras de rede é 9100.');
   }
   const ativa = recebidos.ativa === undefined ? null : validarAtivaImpressora(recebidos.ativa);
-  return { nome, host, porta, ativa };
+  if (recebidos.ehCaixa !== undefined && typeof recebidos.ehCaixa !== 'boolean') {
+    throw erroDominio('Informe se esta é a impressora do caixa.');
+  }
+  const ehCaixa = recebidos.ehCaixa === undefined ? null : recebidos.ehCaixa;
+  return { nome, host, porta, ativa, ehCaixa };
+}
+
+/*
+  Só uma impressora de caixa por loja. Como o MySQL não tem índice único
+  parcial, quem garante isso é esta função, sempre chamada dentro da mesma
+  transação que grava a impressora: as outras da loja são zeradas antes, então
+  não existe instante em que duas fiquem marcadas.
+
+  `exceto` é a impressora que está sendo salva agora, para a atualização não
+  desmarcar a si mesma.
+*/
+async function desmarcarOutrasImpressorasDeCaixa(conexao, idEstabelecimento, exceto = null) {
+  const parametros = [idEstabelecimento];
+  let filtro = '';
+  if (exceto !== null) {
+    filtro = 'AND id <> ?';
+    parametros.push(exceto);
+  }
+  await conexao.execute(`
+    UPDATE impressoras SET eh_caixa = 0
+    WHERE id_estabelecimento = ? AND eh_caixa = 1 ${filtro}
+  `, parametros);
 }
 
 function recusarImpressoraRepetida(erro) {
@@ -757,7 +801,7 @@ function recusarImpressoraRepetida(erro) {
 
 async function travarImpressora(conexao, idEstabelecimento, id) {
   const [linhas] = await conexao.execute(`
-    SELECT id, nome, host, porta, ativa
+    SELECT id, nome, host, porta, ativa, eh_caixa
     FROM impressoras
     WHERE id_estabelecimento = ? AND id = ?
     FOR UPDATE
@@ -777,20 +821,27 @@ export async function criarImpressora(banco, idEstabelecimento, dados, administr
       if (Number(cadastradas.total) >= MAX_IMPRESSORAS) {
         throw erroDominio(`O limite é de ${MAX_IMPRESSORAS} impressoras por loja.`, 409);
       }
+      // Zerar antes de inserir: entre uma coisa e outra ninguém enxerga duas
+      // impressoras de caixa, porque as duas acontecem na mesma transação.
+      if (impressora.ehCaixa === true) {
+        await desmarcarOutrasImpressorasDeCaixa(conexao, idEstabelecimento);
+      }
       const [resultado] = await conexao.execute(`
-        INSERT INTO impressoras (id_estabelecimento, nome, host, porta, ativa)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO impressoras (id_estabelecimento, nome, host, porta, ativa, eh_caixa)
+        VALUES (?, ?, ?, ?, ?, ?)
       `, [
         idEstabelecimento,
         impressora.nome,
         impressora.host,
         impressora.porta,
-        impressora.ativa === false ? 0 : 1
+        impressora.ativa === false ? 0 : 1,
+        impressora.ehCaixa === true ? 1 : 0
       ]);
       await registrarAuditoria(conexao, idEstabelecimento, administradorId, 'impressora.criada', 'impressora', resultado.insertId, {
         nome: impressora.nome,
         host: impressora.host,
-        porta: impressora.porta
+        porta: impressora.porta,
+        ehCaixa: impressora.ehCaixa === true
       });
       return Number(resultado.insertId);
     });
@@ -808,14 +859,21 @@ export async function atualizarImpressora(banco, idEstabelecimento, id, dados, a
     encontrada = await executarTransacao(banco, async (conexao) => {
       const anterior = await travarImpressora(conexao, idEstabelecimento, id);
       if (!anterior) return false;
+      /* Campo ausente no corpo mantém o valor atual, como já vale para
+        `ativa`: atualizar nome e host não muda quem é o caixa. */
+      const ehCaixa = impressora.ehCaixa === null
+        ? Boolean(anterior.eh_caixa)
+        : impressora.ehCaixa;
+      if (ehCaixa) await desmarcarOutrasImpressorasDeCaixa(conexao, idEstabelecimento, id);
       await conexao.execute(`
-        UPDATE impressoras SET nome = ?, host = ?, porta = ?, ativa = ?
+        UPDATE impressoras SET nome = ?, host = ?, porta = ?, ativa = ?, eh_caixa = ?
         WHERE id_estabelecimento = ? AND id = ?
       `, [
         impressora.nome,
         impressora.host,
         impressora.porta,
         impressora.ativa === null ? Number(anterior.ativa) : Number(impressora.ativa),
+        ehCaixa ? 1 : 0,
         idEstabelecimento,
         id
       ]);
@@ -824,7 +882,9 @@ export async function atualizarImpressora(banco, idEstabelecimento, id, dados, a
         nome: impressora.nome,
         hostAnterior: anterior.host,
         host: impressora.host,
-        porta: impressora.porta
+        porta: impressora.porta,
+        ehCaixaAnterior: Boolean(anterior.eh_caixa),
+        ehCaixa
       });
       return true;
     });
@@ -1740,8 +1800,8 @@ async function listarAdicionaisDeItens(banco, idEstabelecimento, tabela, campo, 
 export async function listarComandas(banco, idEstabelecimento) {
   const [comandas] = await banco.execute(`
     SELECT c.id, c.mesa_id, c.funcionario_id, c.aberta_por_admin_id, c.status,
-      c.pagamento, c.aberta_em, m.numero AS mesa_numero, f.nome AS garcom,
-      a.nome AS aberta_por_admin
+      c.pagamento, c.observacao, c.aberta_em, m.numero AS mesa_numero,
+      f.nome AS garcom, a.nome AS aberta_por_admin
     FROM comandas c
     INNER JOIN mesas m
       ON m.id = c.mesa_id
@@ -1819,6 +1879,9 @@ export async function listarComandas(banco, idEstabelecimento) {
       : (comanda.garcom ? { nome: comanda.garcom, tipo: 'funcionario' } : null),
     status: comanda.status,
     pagamento: comanda.pagamento ?? null,
+    // Recado da mesa inteira; string vazia, e não null, para o campo do
+    // formulário nascer controlado nas duas telas que o editam.
+    observacao: comanda.observacao ?? '',
     abertaEm: horaPtBr(comanda.aberta_em),
     itens: itensPorComanda.get(Number(comanda.id)) ?? []
   }));
@@ -2365,6 +2428,9 @@ export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
         origem: 'delivery',
         pedidoId: Number(resultado.insertId),
         itens,
+        /* O recibo da cozinha/bar não leva forma de pagamento: quem monta o
+          prato não cobra. O dado continua em `pedidos`/`pagamentos`, para o
+          caixa e os relatórios. */
         contexto: {
           pedido: codigoPedido(Number(resultado.insertId)),
           modalidade: retirada ? 'Retirada no balcão' : 'Entrega',
@@ -2376,8 +2442,7 @@ export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
                 `${rua}, ${numero}`,
                 texto(dados.complemento, 160) || null,
                 areaEntrega?.nome ?? bairro
-              ].filter(Boolean).join(' - '),
-          pagamento
+              ].filter(Boolean).join(' - ')
         }
       });
       const pixCopiaCola = pagamento === 'Pix'
@@ -2946,7 +3011,7 @@ async function obterComandaDoGarcom(
 ) {
   const [linhas] = await conexao.execute(`
     SELECT c.id, c.mesa_id, c.funcionario_id, c.status, c.pagamento,
-      c.aberta_em, m.numero AS mesa_numero
+      c.observacao, c.aberta_em, m.numero AS mesa_numero
     FROM comandas c
     INNER JOIN mesas m
       ON m.id = c.mesa_id
@@ -2981,7 +3046,7 @@ async function obterComandaDoGarcom(
 async function obterComandaAtiva(conexao, idEstabelecimento, comandaId) {
   const [linhas] = await conexao.execute(`
     SELECT c.id, c.mesa_id, c.funcionario_id, c.status, c.pagamento,
-      m.numero AS mesa_numero
+      c.observacao, m.numero AS mesa_numero
     FROM comandas c
     INNER JOIN mesas m
       ON m.id = c.mesa_id
@@ -3109,6 +3174,58 @@ export async function adicionarItemComanda(
       { bloquear: true }
     );
     await inserirItemNaComanda(conexao, idEstabelecimento, comandaId, comanda, dados);
+  });
+}
+
+/*
+  Observação geral da comanda: o recado que vale para a mesa inteira, e não
+  para um prato. Fica separada de `comanda_itens.observacao` de propósito —
+  "mesa com alergia a amendoim" não pertence a um hambúrguer específico.
+
+  O texto é opcional e apagar o recado é salvar o campo vazio, que volta a
+  NULL. O limite é validado aqui, e não truncado em silêncio: um recado de
+  cozinha cortado pela metade é pior do que um erro na tela.
+*/
+function observacaoDaComanda(valor) {
+  const limpa = texto(valor, MAX_OBSERVACAO_COMANDA + 1);
+  if (limpa.length > MAX_OBSERVACAO_COMANDA) {
+    throw erroDominio(
+      `A observação da comanda pode ter no máximo ${MAX_OBSERVACAO_COMANDA} caracteres.`
+    );
+  }
+  return limpa || null;
+}
+
+async function gravarObservacaoComanda(conexao, idEstabelecimento, comandaId, observacao) {
+  await conexao.execute(`
+    UPDATE comandas SET observacao = ?
+    WHERE id = ? AND id_estabelecimento = ?
+  `, [observacao, comandaId, idEstabelecimento]);
+  return observacao ?? '';
+}
+
+/*
+  Mesma porta do lançamento de item: quem valida a comanda é
+  `obterComandaDoGarcom`, então o garçom só alcança comanda aberta do próprio
+  estabelecimento — e comanda encerrada recusa a edição.
+*/
+export async function atualizarObservacaoComanda(
+  banco,
+  idEstabelecimento,
+  comandaId,
+  funcionarioId,
+  observacao
+) {
+  const limpa = observacaoDaComanda(observacao);
+  return executarTransacao(banco, async (conexao) => {
+    await obterComandaDoGarcom(
+      conexao,
+      idEstabelecimento,
+      comandaId,
+      funcionarioId,
+      { bloquear: true }
+    );
+    return gravarObservacaoComanda(conexao, idEstabelecimento, comandaId, limpa);
   });
 }
 
@@ -3293,6 +3410,37 @@ export async function adicionarItemComandaAdmin(banco, idEstabelecimento, comand
   await executarTransacao(banco, async (conexao) => {
     const comanda = await obterComandaAtiva(conexao, idEstabelecimento, comandaId);
     await inserirItemNaComanda(conexao, idEstabelecimento, comandaId, comanda, dados);
+  });
+}
+
+/*
+  Variante do caixa: o painel responde pela mesa e edita o recado de qualquer
+  comanda aberta do próprio estabelecimento, sem depender de haver garçom
+  responsável. Como toda alteração feita pelo painel, fica na auditoria.
+*/
+export async function atualizarObservacaoComandaAdmin(
+  banco,
+  idEstabelecimento,
+  comandaId,
+  administradorId,
+  observacao
+) {
+  const limpa = observacaoDaComanda(observacao);
+  return executarTransacao(banco, async (conexao) => {
+    await obterComandaAtiva(conexao, idEstabelecimento, comandaId);
+    const salva = await gravarObservacaoComanda(conexao, idEstabelecimento, comandaId, limpa);
+    await registrarAuditoria(
+      conexao,
+      idEstabelecimento,
+      administradorId,
+      'comanda.observacao_alterada',
+      'comanda',
+      Number(comandaId),
+      // O recado em si não vai para a auditoria: registrar se foi preenchido
+      // ou limpo basta, e evita duplicar o texto fora da comanda.
+      { preenchida: limpa !== null }
+    );
+    return salva;
   });
 }
 
@@ -3541,8 +3689,16 @@ async function lancarComandaNaCozinha(
       comandaId: Number(comandaId),
       itens: naoImpressos,
       contexto: {
+        /* A comanda é identificada pela mesa no papel: para a cozinha, o
+          número da comanda e o da mesa são a mesma coisa. `mesa` continua no
+          registro do trabalho; quem imprime usa `numeroMesa` no título. */
+        numeroMesa: String(comanda.mesa_numero),
         mesa: `Mesa ${comanda.mesa_numero}`,
-        garcom: await nomeDoGarcomDaComanda(conexao, idEstabelecimento, comanda)
+        garcom: await nomeDoGarcomDaComanda(conexao, idEstabelecimento, comanda),
+        /* Recado que vale para a mesa inteira. Vai em todo trabalho desta
+          leva, porque cada impressora recebe o seu recibo e a cozinha e o bar
+          precisam ler a mesma alergia. */
+        observacaoComanda: comanda.observacao ?? null
       }
     });
     const marcadores = naoImpressos.map(() => '?').join(', ');

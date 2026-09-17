@@ -6,6 +6,11 @@
       "runtimeExecutable": "cmd",
       "runtimeArgs": ["/c", "set PORT=3001&& npm run dev"],
       "port": 5173
+    },
+    {
+      "name": "hamburgueria-anexar",
+      "url": "http://localhost:5173",
+      "port": 5173
     }
   ]
 }

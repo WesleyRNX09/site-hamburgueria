@@ -54,6 +54,7 @@ function MesasAdmin() {
     adicionarItemComandaAdmin,
     atualizarItemComandaAdmin,
     removerItemComandaAdmin,
+    atualizarObservacaoComandaAdmin,
     lancarComandaAdmin,
     limparItensPendentesAdmin,
     cancelarComandaAdmin,
@@ -70,6 +71,11 @@ function MesasAdmin() {
   const [pagamentoAberto, setPagamentoAberto] = useState(false);
   const [valorRecebido, setValorRecebido] = useState('');
   const [mensagem, setMensagem] = useState('');
+  /* Rascunho do recado da mesa: digitar não salva, e o campo volta a
+     acompanhar o servidor quando a comanda muda ou quando o texto salvo
+     muda — inclusive quando quem alterou foi o garçom. */
+  const [observacaoMesa, setObservacaoMesa] = useState('');
+  const observacaoSincronizada = useRef({ comandaId: null, texto: '' });
   const [categoriaCardapio, setCategoriaCardapio] = useState('Todos');
   const [ultimoAdicionado, setUltimoAdicionado] = useState('');
   const modalRef = useRef(null);
@@ -88,6 +94,13 @@ function MesasAdmin() {
     (soma, item) => soma + Number(item.preco) * item.quantidade,
     0
   );
+  const observacaoSalva = comandaSelecionada?.observacao ?? '';
+  const observacaoAlterada = observacaoMesa !== observacaoSalva;
+  /* Encerrada ou cancelada nem chega nesta lista, mas a regra fica escrita:
+     comanda fechada não recebe mais recado. */
+  const comandaEditavel = Boolean(comandaSelecionada)
+    && comandaSelecionada.status !== 'Encerrada'
+    && comandaSelecionada.status !== 'Cancelada';
   const abertaPor = rotuloAutor(comandaSelecionada?.abertaPor);
   // Quem lançou pedido nesta comanda, na ordem em que apareceram, sem repetir.
   const autoresLancamento = [...new Set(
@@ -129,6 +142,16 @@ function MesasAdmin() {
     setConfirmacaoAberta(false);
     setPagamentoAberto(false);
   }
+
+  useEffect(() => {
+    const comandaId = comandaSelecionada?.id ?? null;
+    const anterior = observacaoSincronizada.current;
+    // Trocar de mesa também recomeça o rascunho: o recado de uma mesa nunca
+    // aparece no campo de outra.
+    if (anterior.comandaId === comandaId && anterior.texto === observacaoSalva) return;
+    observacaoSincronizada.current = { comandaId, texto: observacaoSalva };
+    setObservacaoMesa(observacaoSalva);
+  }, [comandaSelecionada?.id, observacaoSalva]);
 
   useEffect(() => {
     if (!modalAberto) return undefined;
@@ -246,6 +269,15 @@ function MesasAdmin() {
       `item-${item.linhaId}`,
       () => removerItemComandaAdmin(comandaSelecionada.id, item.linhaId)
     );
+  }
+
+  async function salvarObservacaoMesa() {
+    if (!comandaSelecionada) return;
+    const concluiu = await executar(
+      'observacao',
+      () => atualizarObservacaoComandaAdmin(comandaSelecionada.id, observacaoMesa)
+    );
+    if (concluiu) setMensagem(`Observação da mesa ${mesaSelecionada.numero} salva.`);
   }
 
   async function lancarPedido() {
@@ -482,6 +514,33 @@ function MesasAdmin() {
                     : `${pendentes.length} itens ainda não foram lançados para a cozinha.`}
                 </p>
               )}
+
+              {/* Recado que vale para a mesa inteira — alergia, aniversário,
+                  cliente com pressa. Separado da observação de cada item. */}
+              <div className={`${compartilhado.campo} ${styles.observacaoMesa}`}>
+                <label htmlFor="observacao-comanda-admin">
+                  Observação da mesa <span>(opcional)</span>
+                </label>
+                <div className={styles.observacaoLinha}>
+                  <input
+                    id="observacao-comanda-admin"
+                    type="text"
+                    maxLength={500}
+                    value={observacaoMesa}
+                    disabled={!comandaEditavel || Boolean(processando)}
+                    placeholder="Ex: aniversário, alergia, cliente com pressa…"
+                    onChange={(evento) => setObservacaoMesa(evento.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className={compartilhado.botaoSecundario}
+                    disabled={!comandaEditavel || Boolean(processando) || !observacaoAlterada}
+                    onClick={salvarObservacaoMesa}
+                  >
+                    {processando === 'observacao' ? 'Salvando…' : 'Salvar'}
+                  </button>
+                </div>
+              </div>
 
               <div className={styles.barraCardapio}>
                 <div>

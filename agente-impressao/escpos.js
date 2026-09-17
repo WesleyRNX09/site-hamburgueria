@@ -30,29 +30,53 @@ const COLUNAS = 42;
 */
 const SELECIONAR_CP858 = Buffer.from([ESC, 0x74, 0x13]);
 
-const ACENTOS = new Map(Object.entries({
-  á: 'a', à: 'a', ã: 'a', â: 'a', ä: 'a',
-  é: 'e', è: 'e', ê: 'e', ë: 'e',
-  í: 'i', ì: 'i', î: 'i', ï: 'i',
-  ó: 'o', ò: 'o', õ: 'o', ô: 'o', ö: 'o',
-  ú: 'u', ù: 'u', û: 'u', ü: 'u',
-  ç: 'c', ñ: 'n',
-  Á: 'A', À: 'A', Ã: 'A', Â: 'A', Ä: 'A',
-  É: 'E', È: 'E', Ê: 'E', Ë: 'E',
-  Í: 'I', Ì: 'I', Î: 'I', Ï: 'I',
-  Ó: 'O', Ò: 'O', Õ: 'O', Ô: 'O', Ö: 'O',
-  Ú: 'U', Ù: 'U', Û: 'U', Ü: 'U',
-  Ç: 'C', Ñ: 'N'
+/*
+  Pontuação e símbolos que não têm decomposição em ASCII, então precisam de
+  equivalente escrito à mão. Acento nenhum entra aqui: quem resolve acento é a
+  normalização em `semAcento`.
+
+  O que está nesta lista é o que de fato chega do salão: o teclado do celular
+  troca aspas e hífen por versões tipográficas sozinho, e endereço brasileiro
+  vive de "1º andar" e "2ª rua".
+*/
+const SUBSTITUICOES = new Map(Object.entries({
+  // Indicadores ordinais.
+  'ª': 'a', 'º': 'o',
+  // Hífens e travessões tipográficos.
+  '‐': '-', '‑': '-', '‒': '-', '–': '-', '—': '-',
+  '―': '-', '−': '-',
+  // Aspas e apóstrofos curvos.
+  '‘': "'", '’': "'", '‚': "'", '‹': "'", '›': "'",
+  '“': '"', '”': '"', '„': '"', '«': '"', '»': '"',
+  // Reticências e marcadores de lista.
+  '…': '...', '•': '-', '·': '-',
+  // Espaços especiais viram espaço comum; o de largura zero simplesmente sai.
+  ' ': ' ', ' ': ' ', ' ': ' ', ' ': ' ', '​': '',
+  // Sinais de quantidade e temperatura.
+  '×': 'x', '÷': '/', '±': '+/-', '°': 'o',
+  '½': '1/2', '¼': '1/4', '¾': '3/4',
+  // Letras sem decomposição canônica.
+  'ß': 'ss', 'æ': 'ae', 'Æ': 'AE', 'ø': 'o', 'Ø': 'O'
 }));
 
 /* Impressora antiga que ignore a página de código ainda imprime algo legível:
-   o texto perde o acento, não a palavra. Fora da tabela ASCII e sem
-   equivalente conhecido, o caractere vira '?' em vez de virar lixo no papel. */
+   o texto perde o acento, não a palavra.
+
+   A normalização NFD separa a letra do acento ("ç" vira "c" + cedilha), e
+   apagar as marcas combinantes resolve todo acento latino de uma vez — vale
+   para ç, ã, ü e também para o que uma tabela escrita à mão esqueceria. Serve
+   ainda para texto que já chega decomposto, que antes virava "a?".
+
+   Sobrou algo fora do ASCII e fora da lista acima? Vira '?', que é ruim de
+   ler mas não é lixo binário no papel. */
 function semAcento(texto) {
-  return String(texto ?? '')
-    .split('')
+  const semMarcas = String(texto ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+  // Percorre por ponto de código: emoji conta como um caractere, não dois.
+  return [...semMarcas]
     .map((caractere) => (
-      caractere.codePointAt(0) < 128 ? caractere : ACENTOS.get(caractere) ?? '?'
+      caractere.codePointAt(0) < 128 ? caractere : SUBSTITUICOES.get(caractere) ?? '?'
     ))
     .join('');
 }
@@ -89,10 +113,24 @@ function horaLocal(iso) {
   return data.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+/*
+  Título do recibo. A comanda é identificada pela mesa: o número da comanda e
+  o da mesa são o mesmo para quem está na cozinha, então ele sobe para o
+  título em vez de ocupar duas linhas próprias.
+*/
+function tituloDoRecibo(conteudo, cabecalho) {
+  if (conteudo.origem === 'delivery') return 'PEDIDO';
+  return cabecalho.numeroMesa ? `COMANDA ${cabecalho.numeroMesa}` : 'COMANDA';
+}
+
 function cabecalhoComanda(cabecalho) {
   const linhas = [];
-  if (cabecalho.mesa) linhas.push(cabecalho.mesa);
   if (cabecalho.garcom) linhas.push(`Garcom: ${cabecalho.garcom}`);
+  // Recado da mesa inteira, por último no cabeçalho: é o que a cozinha não
+  // pode deixar passar, como alergia.
+  if (cabecalho.observacaoComanda) {
+    linhas.push(...quebrar(`OBS DA MESA: ${cabecalho.observacaoComanda}`, COLUNAS, '  '));
+  }
   return linhas;
 }
 
@@ -103,7 +141,7 @@ function cabecalhoDelivery(cabecalho) {
   if (cabecalho.cliente) linhas.push(`Cliente: ${cabecalho.cliente}`);
   if (cabecalho.telefone) linhas.push(`Fone: ${cabecalho.telefone}`);
   if (cabecalho.endereco) linhas.push(...quebrar(`Endereco: ${cabecalho.endereco}`, COLUNAS, '  '));
-  if (cabecalho.pagamento) linhas.push(`Pagamento: ${cabecalho.pagamento}`);
+  // Sem forma de pagamento: quem monta o prato não cobra.
   return linhas;
 }
 
@@ -116,8 +154,10 @@ export function montarRecibo(trabalho) {
   const cabecalho = conteudo.cabecalho ?? {};
   const partes = [COMANDOS.inicializar, SELECIONAR_CP858];
 
+  /* Único negrito do recibo: o título. Tudo abaixo sai em texto normal —
+     com a folha inteira destacada, nada fica destacado. */
   partes.push(COMANDOS.alinharCentro, COMANDOS.fonteDupla, COMANDOS.negritoLigado);
-  partes.push(linha(conteudo.origem === 'delivery' ? 'PEDIDO' : 'COMANDA'));
+  partes.push(linha(tituloDoRecibo(conteudo, cabecalho)));
   partes.push(COMANDOS.fonteNormal, COMANDOS.negritoDesligado, COMANDOS.alinharEsquerda);
   partes.push(separador());
 
@@ -126,15 +166,14 @@ export function montarRecibo(trabalho) {
     : cabecalhoComanda(cabecalho);
   for (const texto of linhasCabecalho) partes.push(linha(texto));
   partes.push(linha(horaLocal(conteudo.emitidoEm)));
-  if (conteudo.impressora) partes.push(linha(`Setor: ${conteudo.impressora}`));
+  /* Sem "Setor": o papel sai na impressora daquele setor, então quem o pega
+     já sabe de onde ele veio. */
   partes.push(separador());
 
   for (const item of conteudo.itens ?? []) {
-    partes.push(COMANDOS.negritoLigado);
     for (const texto of quebrar(`${item.quantidade}x ${item.nome}`, COLUNAS, '   ')) {
       partes.push(linha(texto));
     }
-    partes.push(COMANDOS.negritoDesligado);
     for (const adicional of item.adicionais ?? []) {
       for (const texto of quebrar(`+ ${adicional}`, COLUNAS - 2, '     ')) {
         partes.push(linha(`  ${texto}`));
@@ -148,8 +187,10 @@ export function montarRecibo(trabalho) {
     partes.push(linha());
   }
 
+  /* Fecha a lista e encerra. O número do trabalho não vai para o papel: quem
+     precisa rastrear um recibo tem o log do agente ("Trabalho N impresso em
+     ..."), e na cozinha ele só ocuparia linha. */
   partes.push(separador());
-  partes.push(linha(`Trabalho #${trabalho.id}`));
   // Avanço antes do corte: sem isso a última linha fica dentro da impressora.
   partes.push(linha(), linha(), linha());
   partes.push(COMANDOS.cortar);

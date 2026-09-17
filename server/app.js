@@ -33,6 +33,8 @@ import {
   arquivarAdministrador,
   atualizarAreaEntrega,
   atualizarImpressora,
+  atualizarObservacaoComanda,
+  atualizarObservacaoComandaAdmin,
   atualizarQuantidadeItemComandaAdmin,
   atualizarStatusImpressora,
   cancelarComandaAdmin,
@@ -1046,6 +1048,23 @@ async function rotaAdmin({
     responderJson(resposta, 201, { sucesso: true });
     return true;
   }
+  const observacaoComandaAdmin = caminho.match(/^\/api\/admin\/comandas\/(\d+)\/observacao$/);
+  if (requisicao.method === 'PUT' && observacaoComandaAdmin) {
+    const dados = await lerJson(requisicao);
+    try {
+      const observacao = await atualizarObservacaoComandaAdmin(
+        banco,
+        idEstabelecimento,
+        observacaoComandaAdmin[1],
+        administradorAutenticado.id,
+        dados.observacao
+      );
+      responderJson(resposta, 200, { sucesso: true, observacao });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
   const lancarComandaAdmin = caminho.match(/^\/api\/admin\/comandas\/(\d+)\/lancar$/);
   if (requisicao.method === 'POST' && lancarComandaAdmin) {
     await enviarComandaAdmin(
@@ -1704,6 +1723,19 @@ async function rotaGarcom({
       await lerJson(requisicao)
     );
     responderJson(resposta, 201, { sucesso: true });
+    return true;
+  }
+  const observacaoComanda = caminho.match(/^\/api\/garcom\/comandas\/(\d+)\/observacao$/);
+  if (requisicao.method === 'PUT' && observacaoComanda) {
+    const dados = await lerJson(requisicao);
+    const observacao = await atualizarObservacaoComanda(
+      banco,
+      idEstabelecimento,
+      observacaoComanda[1],
+      garcom.id,
+      dados.observacao
+    );
+    responderJson(resposta, 200, { sucesso: true, observacao });
     return true;
   }
   const enviar = caminho.match(/^\/api\/garcom\/comandas\/(\d+)\/enviar$/);

@@ -197,6 +197,10 @@ CREATE TABLE IF NOT EXISTS impressoras (
   host VARCHAR(255) NOT NULL,
   porta INT UNSIGNED NOT NULL DEFAULT 9100,
   ativa TINYINT(1) NOT NULL DEFAULT 1,
+  -- A impressora do balcao: no maximo uma por estabelecimento, garantido pela
+  -- aplicacao (o MySQL nao tem indice unico parcial para "unico entre as
+  -- linhas com eh_caixa = 1").
+  eh_caixa TINYINT(1) NOT NULL DEFAULT 0,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_impressoras_estabelecimento_nome (id_estabelecimento, nome),
@@ -329,6 +333,9 @@ CREATE TABLE IF NOT EXISTS comandas (
   aberta_por_admin_id BIGINT UNSIGNED,
   status VARCHAR(40) NOT NULL DEFAULT 'Aberta',
   pagamento VARCHAR(40),
+  -- Recado que vale para a mesa inteira, não para um item: aniversário,
+  -- alergia, cliente com pressa. O limite de 500 caracteres é do servidor.
+  observacao TEXT,
   aberta_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   encerrada_em DATETIME,
   atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
