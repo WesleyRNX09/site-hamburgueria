@@ -18,12 +18,14 @@ const formularioVazio = {
   imagem: '',
   adicionaisIds: [],
   destaque: '',
+  // Vazio = herda a impressora da categoria.
+  impressoraId: '',
   ativo: true
 };
 
 function FormularioProduto() {
   const { id } = useParams();
-  const { produtos, adicionais, categorias, salvarProduto } = useApp();
+  const { produtos, adicionais, categorias, impressoras, salvarProduto } = useApp();
   const navigate = useNavigate();
   const existente = produtos.find((produto) => String(produto.id) === id);
   const [dados, setDados] = useState(() => existente
@@ -72,7 +74,13 @@ function FormularioProduto() {
 
     setSalvando(true);
     try {
-      await salvarProduto({ ...dados, preco: String(dados.preco).replace('.', ',') });
+      await salvarProduto({
+        ...dados,
+        preco: String(dados.preco).replace('.', ','),
+        impressoraId: dados.impressoraId === '' || dados.impressoraId == null
+          ? null
+          : Number(dados.impressoraId)
+      });
       navigate('/admin/cardapio');
     } catch (falha) {
       setErro(falha.message);
@@ -84,6 +92,15 @@ function FormularioProduto() {
   // O placeholder do cardápio não é foto do produto: sem essa distinção o
   // formulário ofereceria "remover" uma imagem que não existe no banco.
   const temFoto = Boolean(dados.imagem) && dados.imagem !== imagemProdutoPadrao;
+
+  /* "Usar da categoria" precisa dizer qual é essa impressora, senão o
+     administrador não sabe o que está herdando. */
+  const impressorasAtivas = impressoras.filter((impressora) => impressora.ativa);
+  const categoriaEscolhida = categorias.find((categoria) => categoria.id === Number(dados.categoriaId));
+  const herdada = impressoras.find((impressora) => impressora.id === categoriaEscolhida?.impressoraId);
+  const impressoraDaCategoria = herdada
+    ? `A categoria ${categoriaEscolhida.nome} imprime em ${herdada.nome}.`
+    : 'A categoria escolhida não imprime. Sem exceção aqui, este produto também não é impresso.';
 
   const acao = <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/cardapio')}><ArrowLeft size={17} /> Voltar</button>;
 
@@ -124,6 +141,14 @@ function FormularioProduto() {
                 {CANAIS_CATALOGO.map((canal) => <option key={canal.valor} value={canal.valor}>{canal.rotulo}</option>)}
               </select>
               <small className={styles.textoSecundario}>{canalCatalogo(dados.canal).ajuda}</small>
+            </div>
+            <div className={styles.campo}>
+              <label htmlFor="impressoraProduto">Impressora <span>(exceção)</span></label>
+              <select id="impressoraProduto" value={dados.impressoraId ?? ''} onChange={(event) => alterar('impressoraId', event.target.value)}>
+                <option value="">Usar da categoria</option>
+                {impressorasAtivas.map((impressora) => <option key={impressora.id} value={impressora.id}>{impressora.nome}</option>)}
+              </select>
+              <small className={styles.textoSecundario}>{impressoraDaCategoria}</small>
             </div>
 
             <div className={`${styles.campo} ${styles.campoCompleto}`}>

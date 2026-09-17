@@ -31,6 +31,16 @@ const ROTAS_ADMIN = [
   ['PATCH', /^\/api\/admin\/areas-entrega\/\d+\/status$/, 'delivery.editar'],
   ['DELETE', /^\/api\/admin\/areas-entrega\/\d+$/, 'delivery.editar'],
 
+  /* Impressão fica junto das configurações operacionais da loja: quem
+     configura pagamento e horário é quem cadastra as impressoras da cozinha.
+     Reaproveitar a permissão existente evita mexer no CHECK da tabela. */
+  ['GET', /^\/api\/admin\/impressoras$/, 'configuracoes.editar'],
+  ['POST', /^\/api\/admin\/impressoras$/, 'configuracoes.editar'],
+  ['PUT', /^\/api\/admin\/impressoras\/\d+$/, 'configuracoes.editar'],
+  ['PATCH', /^\/api\/admin\/impressoras\/\d+\/status$/, 'configuracoes.editar'],
+  ['POST', /^\/api\/admin\/impressao\/dispositivos$/, 'configuracoes.editar'],
+  ['DELETE', /^\/api\/admin\/impressao\/dispositivos\/\d+$/, 'configuracoes.editar'],
+
   ['PATCH', /^\/api\/admin\/pedidos\/[^/]+\/status$/, 'pedidos.alterar_status'],
   ['POST', /^\/api\/admin\/pedidos\/[^/]+\/pagamento\/(?:confirmar|estornar)$/, 'pedidos.gerenciar_pagamento'],
 

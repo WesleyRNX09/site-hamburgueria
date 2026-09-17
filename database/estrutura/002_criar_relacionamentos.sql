@@ -185,3 +185,32 @@ ALTER TABLE configuracoes
   ADD CONSTRAINT fk_configuracoes_estabelecimento_legado
   FOREIGN KEY (id_estabelecimento)
   REFERENCES estabelecimentos(id_estabelecimento) ON DELETE RESTRICT;
+
+ALTER TABLE impressoras
+  ADD CONSTRAINT fk_impressoras_estabelecimento
+  FOREIGN KEY (id_estabelecimento)
+  REFERENCES estabelecimentos(id_estabelecimento) ON DELETE RESTRICT;
+
+ALTER TABLE dispositivos_impressao
+  ADD CONSTRAINT fk_dispositivos_impressao_estabelecimento
+  FOREIGN KEY (id_estabelecimento)
+  REFERENCES estabelecimentos(id_estabelecimento) ON DELETE RESTRICT;
+
+-- A impressora do trabalho é apontada junto com o estabelecimento: um trabalho
+-- nunca consegue referenciar impressora de outra loja.
+ALTER TABLE trabalhos_impressao
+  ADD CONSTRAINT fk_trabalhos_impressao_impressora
+    FOREIGN KEY (id_estabelecimento, impressora_id)
+    REFERENCES impressoras(id_estabelecimento, id) ON DELETE RESTRICT,
+  ADD CONSTRAINT fk_trabalhos_impressao_pedido
+    FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_trabalhos_impressao_comanda
+    FOREIGN KEY (comanda_id) REFERENCES comandas(id) ON DELETE SET NULL;
+
+ALTER TABLE categorias
+  ADD CONSTRAINT fk_categorias_impressora
+  FOREIGN KEY (impressora_id) REFERENCES impressoras(id) ON DELETE SET NULL;
+
+ALTER TABLE produtos
+  ADD CONSTRAINT fk_produtos_impressora
+  FOREIGN KEY (impressora_id) REFERENCES impressoras(id) ON DELETE SET NULL;

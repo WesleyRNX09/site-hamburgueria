@@ -44,3 +44,12 @@ CREATE INDEX idx_pedidos_estabelecimento_criado_em ON pedidos (id_estabeleciment
 CREATE INDEX idx_pedidos_status ON pedidos (status);
 CREATE INDEX idx_pedidos_token_acompanhamento ON pedidos (token_acompanhamento_hash);
 CREATE INDEX idx_pagamentos_status ON pagamentos (status);
+
+-- Impressão: fila por loja/impressora e as colunas de roteamento do catálogo.
+CREATE INDEX idx_impressoras_estabelecimento ON impressoras (id_estabelecimento);
+CREATE INDEX idx_dispositivos_impressao_estabelecimento
+  ON dispositivos_impressao (id_estabelecimento);
+CREATE INDEX idx_trabalhos_impressao_fila
+  ON trabalhos_impressao (id_estabelecimento, impressora_id, status);
+CREATE INDEX idx_categorias_impressora ON categorias (impressora_id);
+CREATE INDEX idx_produtos_impressora ON produtos (impressora_id);

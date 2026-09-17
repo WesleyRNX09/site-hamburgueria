@@ -186,6 +186,24 @@ CREATE TABLE IF NOT EXISTS auditoria_admin (
   INDEX idx_auditoria_admin_administrador (administrador_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Impressoras de rede da loja. O roteamento da comanda usa a impressora da
+-- categoria, ou a do produto quando ele tem exceção; sem nenhuma das duas, o
+-- item simplesmente não é impresso.
+CREATE TABLE IF NOT EXISTS impressoras (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  id_estabelecimento BIGINT UNSIGNED NOT NULL,
+  nome VARCHAR(120) NOT NULL,
+  -- IP ou hostname na rede local da loja, sem protocolo e sem caminho.
+  host VARCHAR(255) NOT NULL,
+  porta INT UNSIGNED NOT NULL DEFAULT 9100,
+  ativa TINYINT(1) NOT NULL DEFAULT 1,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_impressoras_estabelecimento_nome (id_estabelecimento, nome),
+  UNIQUE KEY uk_impressoras_estabelecimento_id (id_estabelecimento, id),
+  CONSTRAINT chk_impressoras_porta CHECK (porta BETWEEN 1 AND 65535)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS categorias (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   id_estabelecimento BIGINT UNSIGNED,
@@ -193,6 +211,8 @@ CREATE TABLE IF NOT EXISTS categorias (
   -- Onde a categoria aparece: 'ambos', 'online' (só o cardápio do site) ou
   -- 'salao' (só o app do garçom e as comandas de mesa).
   canal VARCHAR(10) NOT NULL DEFAULT 'ambos',
+  -- Impressora padrão da categoria; NULL significa "não imprime".
+  impressora_id BIGINT UNSIGNED,
   ordem INT NOT NULL DEFAULT 0,
   ativo TINYINT(1) NOT NULL DEFAULT 1,
   UNIQUE KEY uk_categorias_estabelecimento_nome (id_estabelecimento, nome),
@@ -217,6 +237,8 @@ CREATE TABLE IF NOT EXISTS produtos (
   -- Mesmo vocabulário da categoria. A visibilidade real é a interseção das
   -- duas: produto 'ambos' em categoria 'salao' não aparece no site.
   canal VARCHAR(10) NOT NULL DEFAULT 'ambos',
+  -- Exceção do produto; NULL herda a impressora da categoria.
+  impressora_id BIGINT UNSIGNED,
   nome VARCHAR(160) NOT NULL,
   descricao TEXT NOT NULL,
   preco_centavos INT UNSIGNED NOT NULL,
@@ -326,6 +348,9 @@ CREATE TABLE IF NOT EXISTS comanda_itens (
   observacao TEXT,
   criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   enviado_em DATETIME,
+  -- Quando o item entrou em um trabalho de impressão, para o reenvio da
+  -- comanda não reimprimir o que a cozinha já recebeu.
+  impresso_em DATETIME,
   enviado_por_funcionario_id BIGINT UNSIGNED,
   enviado_por_admin_id BIGINT UNSIGNED,
   INDEX idx_comanda_itens_comanda (comanda_id),
@@ -449,6 +474,40 @@ CREATE TABLE IF NOT EXISTS pagamentos (
   INDEX idx_pagamentos_comanda (comanda_id),
   INDEX idx_pagamentos_confirmado_por (confirmado_por),
   INDEX idx_pagamentos_estornado_por (estornado_por)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Agente local pareado que busca e imprime a fila. Autenticação própria: não é
+-- administrador nem garçom, e o token só existe em texto puro na criação.
+CREATE TABLE IF NOT EXISTS dispositivos_impressao (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  id_estabelecimento BIGINT UNSIGNED NOT NULL,
+  nome VARCHAR(120) NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  ultimo_contato_em DATETIME NULL,
+  revogado_em DATETIME NULL,
+  UNIQUE KEY uk_dispositivos_impressao_token (token_hash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Fila de impressão. conteudo_json é o recibo já montado pelo servidor; o
+-- agente local apenas transmite o que está aqui.
+CREATE TABLE IF NOT EXISTS trabalhos_impressao (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  id_estabelecimento BIGINT UNSIGNED NOT NULL,
+  impressora_id BIGINT UNSIGNED NOT NULL,
+  origem VARCHAR(20) NOT NULL,
+  pedido_id BIGINT UNSIGNED NULL,
+  comanda_id BIGINT UNSIGNED NULL,
+  conteudo_json JSON NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pendente',
+  tentativas INT UNSIGNED NOT NULL DEFAULT 0,
+  criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  impresso_em DATETIME NULL,
+  INDEX idx_trabalhos_impressao_pedido (pedido_id),
+  INDEX idx_trabalhos_impressao_comanda (comanda_id),
+  CONSTRAINT chk_trabalhos_impressao_origem CHECK (origem IN ('comanda', 'delivery')),
+  CONSTRAINT chk_trabalhos_impressao_status
+    CHECK (status IN ('pendente', 'impresso', 'falhou'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS configuracoes (

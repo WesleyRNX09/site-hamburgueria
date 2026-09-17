@@ -24,4 +24,11 @@ export default defineConfig([
       globals: globals.node,
     },
   },
+  // Agente de impressao: pacote Node separado, roda no computador da loja.
+  {
+    files: ['agente-impressao/**/*.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ])

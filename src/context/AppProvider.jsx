@@ -144,6 +144,7 @@ export function AppProvider({ children }) {
   const [pedidos, setPedidos] = useState([]);
   const [comandas, setComandas] = useState([]);
   const [administradores, setAdministradores] = useState([]);
+  const [impressoras, setImpressoras] = useState([]);
   const [auditoria, setAuditoria] = useState([]);
   const [configuracao, setConfiguracaoEstado] = useState(() => normalizarConfiguracaoPublica(configuracaoInicial));
   const [carrinho, setCarrinho] = useState(() => {
@@ -282,6 +283,7 @@ export function AppProvider({ children }) {
     }
     if (dados.comandas) setComandas(dados.comandas);
     if (dados.administradores) setAdministradores(dados.administradores);
+    if (dados.impressoras) setImpressoras(dados.impressoras);
     if (dados.auditoria) setAuditoria(dados.auditoria);
     if (dados.configuracao) setConfiguracaoEstado(normalizarConfiguracaoPublica(dados.configuracao));
   }, [tocarSomNovoPedido]);
@@ -485,6 +487,7 @@ export function AppProvider({ children }) {
     setFuncionarios([]);
     setAcessoGarcom('');
     setAdministradores([]);
+    setImpressoras([]);
     setAuditoria([]);
     setAlertaNovoPedido(null);
     setPedidosNovos([]);
@@ -850,6 +853,8 @@ export function AppProvider({ children }) {
     promocoes,
     funcionarios,
     acessoGarcom,
+    impressoras,
+    setImpressoras,
     rotacionarAcessoGarcom,
     mesas,
     pedidos,

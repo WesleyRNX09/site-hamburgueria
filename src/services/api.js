@@ -409,6 +409,32 @@ export function salvarConfiguracaoApi(dados) {
   return requisicao('/api/admin/configuracao', { metodo: 'PUT', dados, autenticacao: 'admin' });
 }
 
+export function listarImpressorasApi() {
+  return requisicao('/api/admin/impressoras', { autenticacao: 'admin' });
+}
+
+export function criarImpressoraApi(dados) {
+  return requisicao('/api/admin/impressoras', { metodo: 'POST', dados, autenticacao: 'admin' });
+}
+
+export function atualizarImpressoraApi(id, dados) {
+  return requisicao(`/api/admin/impressoras/${id}`, { metodo: 'PUT', dados, autenticacao: 'admin' });
+}
+
+export function alterarStatusImpressoraApi(id, ativa) {
+  return requisicao(`/api/admin/impressoras/${id}/status`, { metodo: 'PATCH', dados: { ativa }, autenticacao: 'admin' });
+}
+
+/* O token do agente vem em texto puro só nesta resposta: o servidor guarda o
+   hash e não consegue mostrá-lo de novo. */
+export function criarDispositivoImpressaoApi(dados) {
+  return requisicao('/api/admin/impressao/dispositivos', { metodo: 'POST', dados, autenticacao: 'admin' });
+}
+
+export function revogarDispositivoImpressaoApi(id) {
+  return requisicao(`/api/admin/impressao/dispositivos/${id}`, { metodo: 'DELETE', autenticacao: 'admin' });
+}
+
 export function listarAreasEntregaApi() {
   return requisicao('/api/admin/areas-entrega', { autenticacao: 'admin' });
 }

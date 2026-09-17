@@ -2137,6 +2137,9 @@ if (!executarIntegracao) {
   let tokenSessaoGarcom;
   let idGarcomDemonstracao;
   let tokenAdmin;
+  let tokenDispositivoImpressao;
+  let idImpressoraCozinha;
+  let idImpressoraBar;
 
   const configuracaoValida = {
     nomeLoja: 'Hambúrguer Teste',
@@ -3898,5 +3901,345 @@ if (!executarIntegracao) {
     const historico = await chamar('/api/admin/dados', { token: tokenAdmin });
     const loginDaContaApagada = historico.corpo.auditoria.find((item) => item.usuario === conta.usuario);
     assert.equal(loginDaContaApagada?.administrador, 'Conta apagada');
+  });
+
+  /*
+    Impressão automática: roteamento por categoria, exceção por produto e fila
+    consumida pelo agente local. O que estes testes protegem, em ordem:
+    isolamento entre lojas, produto sem impressora não bloquear nada, reenvio
+    da comanda não reimprimir, e dispositivo revogado perder o acesso na hora.
+  */
+  async function filaDoDispositivo(token, baseUrl = urlBase) {
+    const resposta = await fetch(`${baseUrl}/api/impressao/trabalhos`, {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }
+    });
+    return { status: resposta.status, corpo: await resposta.json() };
+  }
+
+  test('produto sem impressora configurada não gera trabalho e não impede pedido nem comanda', async () => {
+    // Nenhuma impressora cadastrada ainda: é o estado de quem acabou de instalar.
+    const dispositivo = await chamar('/api/admin/impressao/dispositivos', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { nome: 'PC da cozinha' }
+    });
+    assert.equal(dispositivo.status, 201);
+    assert.match(dispositivo.corpo.token, /^[A-Za-z0-9_-]{32,128}$/);
+    tokenDispositivoImpressao = dispositivo.corpo.token;
+
+    // O token em texto puro sai só na criação; a listagem nunca o devolve.
+    const painel = await chamar('/api/admin/impressoras', { token: tokenAdmin });
+    assert.equal(painel.status, 200);
+    assert.equal(JSON.stringify(painel.corpo).includes(tokenDispositivoImpressao), false);
+
+    const pedido = await chamar('/api/pedidos', { metodo: 'POST', dados: dadosPedido() });
+    assert.equal(pedido.status, 201, JSON.stringify(pedido.corpo));
+
+    const fila = await filaDoDispositivo(tokenDispositivoImpressao);
+    assert.equal(fila.status, 200);
+    assert.deepEqual(fila.corpo.trabalhos, []);
+  });
+
+  test('roteia o pedido para a impressora da categoria e respeita a exceção do produto', async () => {
+    const cozinha = await chamar('/api/admin/impressoras', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { nome: 'Cozinha', host: '192.168.0.50', porta: 9100 }
+    });
+    assert.equal(cozinha.status, 201);
+    assert.equal(cozinha.corpo.impressora.porta, 9100);
+    idImpressoraCozinha = cozinha.corpo.impressora.id;
+
+    const bar = await chamar('/api/admin/impressoras', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { nome: 'Bar', host: 'impressora-bar.local' }
+    });
+    assert.equal(bar.status, 201);
+    // Sem porta informada, vale a padrão das térmicas de rede.
+    assert.equal(bar.corpo.impressora.porta, 9100);
+    idImpressoraBar = bar.corpo.impressora.id;
+
+    // Host com protocolo, caminho ou espaço é recusado antes de gravar.
+    for (const host of ['http://192.168.0.50', '192.168.0.50/fila', 'impressora da cozinha', '192.168.0.50:9100']) {
+      const invalida = await chamar('/api/admin/impressoras', {
+        metodo: 'POST',
+        token: tokenAdmin,
+        dados: { nome: `Inválida ${host}`, host }
+      });
+      assert.equal(invalida.status, 400, host);
+    }
+
+    const dados = await chamar('/api/admin/dados', { token: tokenAdmin });
+    const categoriaHamburgueres = dados.corpo.categorias.find((categoria) => categoria.nome === 'Hambúrgueres');
+    const categoriaBebidas = dados.corpo.categorias.find((categoria) => categoria.nome === 'Bebidas');
+    assert.ok(categoriaHamburgueres && categoriaBebidas);
+
+    const comImpressora = await chamar(`/api/admin/categorias/${categoriaHamburgueres.id}`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { ...categoriaHamburgueres, impressoraId: idImpressoraCozinha }
+    });
+    assert.equal(comImpressora.status, 200);
+    assert.equal(comImpressora.corpo.categoria.impressoraId, idImpressoraCozinha);
+
+    await chamar(`/api/admin/categorias/${categoriaBebidas.id}`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { ...categoriaBebidas, impressoraId: idImpressoraBar }
+    });
+
+    const hamburguer = dados.corpo.produtos.find((produto) => produto.categoriaId === categoriaHamburgueres.id);
+    const bebida = dados.corpo.produtos.find((produto) => produto.categoriaId === categoriaBebidas.id);
+    assert.ok(hamburguer && bebida);
+
+    const pedido = await chamar('/api/pedidos', {
+      metodo: 'POST',
+      dados: dadosPedido({
+        itens: [{ id: hamburguer.id, quantidade: 2 }, { id: bebida.id, quantidade: 1 }]
+      })
+    });
+    assert.equal(pedido.status, 201, JSON.stringify(pedido.corpo));
+
+    const fila = await filaDoDispositivo(tokenDispositivoImpressao);
+    assert.equal(fila.status, 200);
+    // Um trabalho por impressora envolvida, cada um só com os itens dela.
+    assert.equal(fila.corpo.trabalhos.length, 2);
+    const naCozinha = fila.corpo.trabalhos.find((trabalho) => trabalho.impressora.nome === 'Cozinha');
+    const noBar = fila.corpo.trabalhos.find((trabalho) => trabalho.impressora.nome === 'Bar');
+    assert.deepEqual(naCozinha.conteudo.itens.map((item) => item.nome), [hamburguer.nome]);
+    assert.equal(naCozinha.conteudo.itens[0].quantidade, 2);
+    assert.deepEqual(noBar.conteudo.itens.map((item) => item.nome), [bebida.nome]);
+    assert.equal(naCozinha.impressora.host, '192.168.0.50');
+    assert.equal(naCozinha.conteudo.origem, 'delivery');
+    assert.equal(naCozinha.conteudo.cabecalho.cliente, 'Cliente Teste');
+
+    // Exceção por produto: a bebida passa a sair na cozinha, não no bar.
+    const excecao = await chamar(`/api/admin/produtos/${bebida.id}`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { ...bebida, impressoraId: idImpressoraCozinha }
+    });
+    assert.equal(excecao.status, 200);
+    assert.equal(excecao.corpo.produto.impressoraId, idImpressoraCozinha);
+
+    for (const trabalho of fila.corpo.trabalhos) {
+      const confirmado = await chamar(`/api/impressao/trabalhos/${trabalho.id}/confirmar`, {
+        metodo: 'POST',
+        token: tokenDispositivoImpressao
+      });
+      assert.equal(confirmado.status, 200);
+    }
+
+    const pedidoComExcecao = await chamar('/api/pedidos', {
+      metodo: 'POST',
+      dados: dadosPedido({ itens: [{ id: bebida.id, quantidade: 1 }] })
+    });
+    assert.equal(pedidoComExcecao.status, 201);
+    const filaExcecao = await filaDoDispositivo(tokenDispositivoImpressao);
+    assert.equal(filaExcecao.corpo.trabalhos.length, 1);
+    assert.equal(filaExcecao.corpo.trabalhos[0].impressora.nome, 'Cozinha');
+
+    // Falha mantém o trabalho pendente e só conta a tentativa.
+    const falhou = await chamar(`/api/impressao/trabalhos/${filaExcecao.corpo.trabalhos[0].id}/falhar`, {
+      metodo: 'POST',
+      token: tokenDispositivoImpressao
+    });
+    assert.equal(falhou.status, 200);
+    const filaDepoisDaFalha = await filaDoDispositivo(tokenDispositivoImpressao);
+    assert.equal(filaDepoisDaFalha.corpo.trabalhos.length, 1);
+    assert.equal(filaDepoisDaFalha.corpo.trabalhos[0].tentativas, 1);
+
+    await chamar(`/api/impressao/trabalhos/${filaDepoisDaFalha.corpo.trabalhos[0].id}/confirmar`, {
+      metodo: 'POST',
+      token: tokenDispositivoImpressao
+    });
+    assert.deepEqual((await filaDoDispositivo(tokenDispositivoImpressao)).corpo.trabalhos, []);
+  });
+
+  test('reenviar a comanda com item novo imprime só o item novo', async () => {
+    const dados = await chamar('/api/admin/dados', { token: tokenAdmin });
+    const categoriaHamburgueres = dados.corpo.categorias.find((categoria) => categoria.nome === 'Hambúrgueres');
+    const primeiro = dados.corpo.produtos.find((produto) => produto.categoriaId === categoriaHamburgueres.id);
+    const segundo = dados.corpo.produtos.find((produto) => (
+      produto.categoriaId === categoriaHamburgueres.id && produto.id !== primeiro.id
+    ));
+    assert.ok(primeiro && segundo);
+
+    const mesa = await chamar('/api/admin/mesas', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { numero: '77' }
+    });
+    assert.equal(mesa.status, 201);
+    const comanda = await chamar('/api/admin/comandas', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { mesaId: mesa.corpo.mesa.id }
+    });
+    assert.equal(comanda.status, 201);
+    const comandaId = comanda.corpo.comanda.id;
+
+    await chamar(`/api/admin/comandas/${comandaId}/itens`, {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { produtoId: primeiro.id, quantidade: 1, adicionais: [], observacao: 'sem cebola' }
+    });
+    assert.equal((await chamar(`/api/admin/comandas/${comandaId}/lancar`, {
+      metodo: 'POST',
+      token: tokenAdmin
+    })).status, 200);
+
+    const primeiraFila = await filaDoDispositivo(tokenDispositivoImpressao);
+    assert.equal(primeiraFila.corpo.trabalhos.length, 1);
+    const primeiroTrabalho = primeiraFila.corpo.trabalhos[0];
+    assert.equal(primeiroTrabalho.conteudo.origem, 'comanda');
+    assert.equal(primeiroTrabalho.conteudo.cabecalho.mesa, 'Mesa 77');
+    assert.deepEqual(primeiroTrabalho.conteudo.itens.map((item) => item.nome), [primeiro.nome]);
+    assert.equal(primeiroTrabalho.conteudo.itens[0].observacao, 'sem cebola');
+    await chamar(`/api/impressao/trabalhos/${primeiroTrabalho.id}/confirmar`, {
+      metodo: 'POST',
+      token: tokenDispositivoImpressao
+    });
+
+    // Cliente pede mais uma coisa e o garçom manda a comanda de novo.
+    await chamar(`/api/admin/comandas/${comandaId}/itens`, {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { produtoId: segundo.id, quantidade: 3, adicionais: [] }
+    });
+    assert.equal((await chamar(`/api/admin/comandas/${comandaId}/lancar`, {
+      metodo: 'POST',
+      token: tokenAdmin
+    })).status, 200);
+
+    const segundaFila = await filaDoDispositivo(tokenDispositivoImpressao);
+    assert.equal(segundaFila.corpo.trabalhos.length, 1);
+    // A cozinha recebe só o item novo: o primeiro já saiu no envio anterior.
+    assert.deepEqual(segundaFila.corpo.trabalhos[0].conteudo.itens.map((item) => item.nome), [segundo.nome]);
+    assert.equal(segundaFila.corpo.trabalhos[0].conteudo.itens[0].quantidade, 3);
+    await chamar(`/api/impressao/trabalhos/${segundaFila.corpo.trabalhos[0].id}/confirmar`, {
+      metodo: 'POST',
+      token: tokenDispositivoImpressao
+    });
+  });
+
+  test('dois estabelecimentos não enxergam os trabalhos de impressão um do outro', async () => {
+    const [[tenantB]] = await banco.execute(
+      "SELECT id_estabelecimento FROM estabelecimentos WHERE slug = 'loja-b'"
+    );
+    const idTenantB = Number(tenantB.id_estabelecimento);
+    const [impressoraB] = await banco.execute(`
+      INSERT INTO impressoras (id_estabelecimento, nome, host, porta, ativa)
+      VALUES (?, 'Cozinha da Loja B', '10.0.0.9', 9100, 1)
+    `, [idTenantB]);
+    const [categoriasB] = await banco.execute(
+      'SELECT id FROM categorias WHERE id_estabelecimento = ? LIMIT 1',
+      [idTenantB]
+    );
+    await banco.execute(
+      'UPDATE categorias SET impressora_id = ? WHERE id = ? AND id_estabelecimento = ?',
+      [impressoraB.insertId, categoriasB[0].id, idTenantB]
+    );
+
+    const dispositivoB = await chamar('/api/admin/impressao/dispositivos', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { nome: 'Tentativa da loja B' },
+      baseUrl: urlBaseTenantB
+    });
+    // A sessão da loja A não vale no host da loja B.
+    assert.equal(dispositivoB.status, 403);
+
+    // A loja B nasce sem forma de pagamento habilitada no `before`.
+    await banco.execute(
+      'UPDATE configuracoes_estabelecimento SET aceita_cartao = 1 WHERE id_estabelecimento = ?',
+      [idTenantB]
+    );
+    const [produtosB] = await banco.execute(
+      'SELECT id FROM produtos WHERE id_estabelecimento = ? LIMIT 1',
+      [idTenantB]
+    );
+    const pedidoB = await chamar('/api/pedidos', {
+      metodo: 'POST',
+      baseUrl: urlBaseTenantB,
+      dados: dadosPedido({ itens: [{ id: Number(produtosB[0].id), quantidade: 1 }] })
+    });
+    assert.equal(pedidoB.status, 201, JSON.stringify(pedidoB.corpo));
+
+    // O dispositivo da loja A não vê nada da loja B, nem no host dela.
+    const filaNoHostDeA = await filaDoDispositivo(tokenDispositivoImpressao);
+    const filaNoHostDeB = await filaDoDispositivo(tokenDispositivoImpressao, urlBaseTenantB);
+    for (const fila of [filaNoHostDeA, filaNoHostDeB]) {
+      assert.equal(fila.status, 200);
+      // O tenant sai do token, nunca do host: nos dois casos a resposta é a de A.
+      assert.equal(fila.corpo.trabalhos.some((trabalho) => (
+        trabalho.impressora.nome === 'Cozinha da Loja B'
+      )), false);
+    }
+
+    // O trabalho da loja B existe, mas só para quem é da loja B.
+    const [trabalhosB] = await banco.execute(`
+      SELECT id FROM trabalhos_impressao
+      WHERE id_estabelecimento = ? AND status = 'pendente'
+    `, [idTenantB]);
+    assert.ok(trabalhosB.length > 0, 'A loja B precisa ter trabalho pendente para o teste valer.');
+
+    // Confirmar ou falhar um trabalho da loja B com o token de A não funciona.
+    for (const acao of ['confirmar', 'falhar']) {
+      const cruzada = await chamar(`/api/impressao/trabalhos/${trabalhosB[0].id}/${acao}`, {
+        metodo: 'POST',
+        token: tokenDispositivoImpressao
+      });
+      assert.equal(cruzada.status, 404, acao);
+    }
+    const [[intacto]] = await banco.execute(
+      'SELECT status, tentativas FROM trabalhos_impressao WHERE id = ?',
+      [trabalhosB[0].id]
+    );
+    assert.equal(intacto.status, 'pendente');
+    assert.equal(Number(intacto.tentativas), 0);
+
+    // Impressora da loja B não pode ser usada como exceção por um produto de A.
+    const dadosA = await chamar('/api/admin/dados', { token: tokenAdmin });
+    const produtoA = dadosA.corpo.produtos[0];
+    const roubo = await chamar(`/api/admin/produtos/${produtoA.id}`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { ...produtoA, impressoraId: Number(impressoraB.insertId) }
+    });
+    assert.equal(roubo.status, 400);
+  });
+
+  test('dispositivo revogado não busca mais trabalhos', async () => {
+    const dispositivo = await chamar('/api/admin/impressao/dispositivos', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { nome: 'Tablet do balcão' }
+    });
+    assert.equal(dispositivo.status, 201);
+    const tokenTemporario = dispositivo.corpo.token;
+    assert.equal((await filaDoDispositivo(tokenTemporario)).status, 200);
+
+    const revogado = await chamar(`/api/admin/impressao/dispositivos/${dispositivo.corpo.dispositivo.id}`, {
+      metodo: 'DELETE',
+      token: tokenAdmin
+    });
+    assert.equal(revogado.status, 200);
+
+    // O token perde o acesso na hora, sem precisar mexer no computador da loja.
+    assert.equal((await filaDoDispositivo(tokenTemporario)).status, 401);
+    const confirmarRevogado = await chamar('/api/impressao/trabalhos/1/confirmar', {
+      metodo: 'POST',
+      token: tokenTemporario
+    });
+    assert.equal(confirmarRevogado.status, 401);
+
+    // Token inexistente, vazio ou mal formado também não resolvem loja nenhuma.
+    for (const invalido of ['', 'nao-e-um-token', 'x'.repeat(200)]) {
+      assert.equal((await filaDoDispositivo(invalido)).status, 401, invalido.slice(0, 20));
+    }
+    // O dispositivo que continua válido segue funcionando.
+    assert.equal((await filaDoDispositivo(tokenDispositivoImpressao)).status, 200);
   });
 }

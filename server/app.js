@@ -32,23 +32,30 @@ import {
   alterarStatusAreaEntrega,
   arquivarAdministrador,
   atualizarAreaEntrega,
+  atualizarImpressora,
   atualizarQuantidadeItemComandaAdmin,
+  atualizarStatusImpressora,
   cancelarComandaAdmin,
   atualizarStatusPedido,
   buscarConfiguracao,
   buscarConfiguracaoPublica,
   buscarFuncionarioPorSenha,
   buscarIndicadoresDashboard,
+  autenticarDispositivoImpressao,
   buscarPromocao,
   confirmarPagamento,
   criarAdministrador,
+  confirmarTrabalhoImpressao,
   criarAreaEntrega,
   criarMesa,
+  criarDispositivoImpressao,
+  criarImpressora,
   criarPedidoDelivery,
   desarquivarAdministrador,
   enviarComanda,
   enviarComandaAdmin,
   estornarPagamento,
+  falharTrabalhoImpressao,
   excluirAdministrador,
   excluirAreaEntrega,
   excluirFuncionario,
@@ -57,6 +64,9 @@ import {
   listarAdministradores,
   listarAreasEntrega,
   listarAreasEntregaPublicas,
+  listarDispositivosImpressao,
+  listarImpressoras,
+  listarTrabalhosImpressao,
   listarDadosAdmin,
   listarDadosGarcom,
   listarDadosPublicos,
@@ -67,6 +77,7 @@ import {
   removerItemComanda,
   removerItemComandaAdmin,
   rotacionarTokenAcessoGarcom,
+  revogarDispositivoImpressao,
   salvarConfiguracao,
   salvarFuncionario,
   salvarPermissoesAdministrador,
@@ -1400,6 +1411,91 @@ async function rotaAdmin({
     return true;
   }
 
+  if (requisicao.method === 'GET' && caminho === '/api/admin/impressoras') {
+    responderJson(resposta, 200, {
+      impressoras: await listarImpressoras(banco, idEstabelecimento),
+      dispositivos: await listarDispositivosImpressao(banco, idEstabelecimento)
+    });
+    return true;
+  }
+
+  if (requisicao.method === 'POST' && caminho === '/api/admin/impressoras') {
+    const dados = await lerJson(requisicao);
+    try {
+      responderJson(resposta, 201, {
+        impressora: await criarImpressora(banco, idEstabelecimento, dados, administradorAutenticado.id)
+      });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  const impressoraStatus = caminho.match(/^\/api\/admin\/impressoras\/(\d+)\/status$/);
+  if (requisicao.method === 'PATCH' && impressoraStatus) {
+    const dados = await lerJson(requisicao);
+    const impressora = await atualizarStatusImpressora(
+      banco,
+      idEstabelecimento,
+      Number(impressoraStatus[1]),
+      dados?.ativa,
+      administradorAutenticado.id
+    );
+    if (!impressora) throw new ErroHttp(404, 'Impressora não encontrada.');
+    responderJson(resposta, 200, { impressora });
+    return true;
+  }
+
+  const impressoraId = caminho.match(/^\/api\/admin\/impressoras\/(\d+)$/);
+  if (requisicao.method === 'PUT' && impressoraId) {
+    const dados = await lerJson(requisicao);
+    try {
+      const impressora = await atualizarImpressora(
+        banco,
+        idEstabelecimento,
+        Number(impressoraId[1]),
+        dados,
+        administradorAutenticado.id
+      );
+      if (!impressora) throw new ErroHttp(404, 'Impressora não encontrada.');
+      responderJson(resposta, 200, { impressora });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  /* Pareamento do agente local: o token vai em texto puro só nesta resposta,
+     porque o servidor guarda apenas o hash e não consegue mostrá-lo de novo. */
+  if (requisicao.method === 'POST' && caminho === '/api/admin/impressao/dispositivos') {
+    const dados = await lerJson(requisicao);
+    try {
+      const { dispositivo, token } = await criarDispositivoImpressao(
+        banco,
+        idEstabelecimento,
+        dados,
+        administradorAutenticado.id
+      );
+      responderJson(resposta, 201, { dispositivo, token });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  const dispositivoImpressaoId = caminho.match(/^\/api\/admin\/impressao\/dispositivos\/(\d+)$/);
+  if (requisicao.method === 'DELETE' && dispositivoImpressaoId) {
+    const dispositivo = await revogarDispositivoImpressao(
+      banco,
+      idEstabelecimento,
+      Number(dispositivoImpressaoId[1]),
+      administradorAutenticado.id
+    );
+    if (!dispositivo) throw new ErroHttp(404, 'Dispositivo de impressão não encontrado.');
+    responderJson(resposta, 200, { sucesso: true });
+    return true;
+  }
+
   if (requisicao.method === 'GET' && caminho === '/api/admin/areas-entrega') {
     responderJson(resposta, 200, { areasEntrega: await listarAreasEntrega(banco, idEstabelecimento) });
     return true;
@@ -1619,6 +1715,62 @@ async function rotaGarcom({
   return false;
 }
 
+/*
+  Fila de impressão consumida pelo agente local da loja.
+
+  Esquema de autenticação próprio: nem JWT de painel, nem sessão de garçom. O
+  agente manda o token do dispositivo e o servidor resolve o estabelecimento a
+  partir dele — o tenant nunca vem do host nem de nada que o agente informe, e
+  token revogado não resolve loja nenhuma. Por isso estas rotas não passam por
+  `resolverEstabelecimento`: um agente apontado para o domínio principal
+  continua atendendo a loja certa, a do próprio token.
+*/
+async function rotaImpressao({ banco, requisicao, resposta, caminho, limitadorImpressao }) {
+  if (!caminho.startsWith('/api/impressao/')) return false;
+
+  const endereco = requisicao.socket.remoteAddress || 'desconhecido';
+  const chaveLimite = `impressao:ip:${endereco}`;
+  if (!limitadorImpressao.permite(chaveLimite)) {
+    throw new ErroHttp(429, 'Muitas requisições de impressão. Aguarde um minuto e tente novamente.');
+  }
+  limitadorImpressao.registrarFalha(chaveLimite);
+
+  const dispositivo = await autenticarDispositivoImpressao(banco, tokenBearer(requisicao));
+  if (!dispositivo) throw new ErroHttp(401, 'Dispositivo de impressão não autorizado.');
+  const idEstabelecimento = dispositivo.idEstabelecimento;
+
+  if (requisicao.method === 'GET' && caminho === '/api/impressao/trabalhos') {
+    resposta.setHeader('Cache-Control', 'no-store');
+    responderJson(resposta, 200, {
+      dispositivo: { id: dispositivo.id, nome: dispositivo.nome },
+      trabalhos: await listarTrabalhosImpressao(banco, idEstabelecimento)
+    });
+    return true;
+  }
+
+  const trabalhoConfirmado = caminho.match(/^\/api\/impressao\/trabalhos\/(\d+)\/confirmar$/);
+  if (requisicao.method === 'POST' && trabalhoConfirmado) {
+    if (!await confirmarTrabalhoImpressao(banco, idEstabelecimento, Number(trabalhoConfirmado[1]))) {
+      throw new ErroHttp(404, 'Trabalho de impressão não encontrado ou já concluído.');
+    }
+    responderJson(resposta, 200, { sucesso: true });
+    return true;
+  }
+
+  /* Falha mantém o trabalho pendente de propósito: a impressora pode estar sem
+     papel ou fora da rede, e o recibo precisa sair quando ela voltar. */
+  const trabalhoFalhou = caminho.match(/^\/api\/impressao\/trabalhos\/(\d+)\/falhar$/);
+  if (requisicao.method === 'POST' && trabalhoFalhou) {
+    if (!await falharTrabalhoImpressao(banco, idEstabelecimento, Number(trabalhoFalhou[1]))) {
+      throw new ErroHttp(404, 'Trabalho de impressão não encontrado ou já concluído.');
+    }
+    responderJson(resposta, 200, { sucesso: true });
+    return true;
+  }
+
+  return false;
+}
+
 async function rotaApi(parametros) {
   const { banco, requisicao, resposta, dominioPrincipal, tenantDesenvolvimento } = parametros;
   if (requisicao.method === 'OPTIONS') {
@@ -1629,6 +1781,9 @@ async function rotaApi(parametros) {
   }
   if (parametros.caminho.startsWith('/api/superadmin/')) {
     return rotaSuperadmin(parametros);
+  }
+  if (parametros.caminho.startsWith('/api/impressao/')) {
+    return rotaImpressao(parametros);
   }
   if (!(requisicao.method === 'GET' && parametros.caminho === '/api/saude')) {
     requisicao.estabelecimento = await resolverEstabelecimento(banco, requisicao, {
@@ -1884,6 +2039,9 @@ export function criarServidor({
   const limitadorSuperadmin = criarLimitadorTentativas({ limite: 8 });
   const limitadorGarcom = criarLimitadorTentativas({ limite: 5 });
   const limitadorPedidos = criarLimitadorTentativas({ limite: limitePedidosPorMinuto, janelaMs: 60 * 1000 });
+  /* O agente consulta a fila a cada poucos segundos e confirma um trabalho por
+     vez; o teto é generoso para não travar uma loja com várias impressoras. */
+  const limitadorImpressao = criarLimitadorTentativas({ limite: 120, janelaMs: 60 * 1000 });
   const origensPermitidas = [...new Set([
     ...corsOrigins,
     ...(!producao ? ['http://localhost:5173', 'http://127.0.0.1:5173'] : [])
@@ -1913,6 +2071,7 @@ export function criarServidor({
           limitadorSuperadmin,
           limitadorGarcom,
           limitadorPedidos,
+          limitadorImpressao,
           dominioPrincipal,
           tenantDesenvolvimento,
           jwtSecret

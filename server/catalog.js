@@ -49,11 +49,38 @@ export function filtroCanal(canal, { aliasProduto = null, aliasCategoria = 'c' }
   return { sql: condicoes.map((condicao) => `AND ${condicao}`).join(' '), parametros };
 }
 
+/*
+  Impressora do roteamento: a da categoria é o padrão, a do produto é exceção.
+  Vazio ou nulo significa "sem impressora" (o produto simplesmente não imprime,
+  ou, no produto, herda a da categoria). A impressora escolhida precisa ser do
+  mesmo estabelecimento — o id vindo do navegador nunca é aceito sem essa
+  conferência.
+*/
+async function validarImpressoraId(banco, idEstabelecimento, valor) {
+  /* Dado recusado é erro de quem enviou, não do servidor: o 400 explícito
+     evita que uma impressora de outro tenant vire "Erro interno". */
+  const recusar = () => {
+    const erro = new Error('Selecione uma impressora válida.');
+    erro.status = 400;
+    return erro;
+  };
+  if (valor === undefined || valor === null || valor === '') return null;
+  const impressoraId = Number(valor);
+  if (!Number.isInteger(impressoraId) || impressoraId <= 0) throw recusar();
+  const [linhas] = await banco.execute(`
+    SELECT id FROM impressoras
+    WHERE id = ? AND id_estabelecimento = ?
+  `, [impressoraId, idEstabelecimento]);
+  if (!linhas[0]) throw recusar();
+  return impressoraId;
+}
+
 function mapearCategoria(linha) {
   return {
     id: Number(linha.id),
     nome: linha.nome,
     canal: linha.canal,
+    impressoraId: linha.impressora_id == null ? null : Number(linha.impressora_id),
     ordem: Number(linha.ordem),
     ativo: Boolean(linha.ativo)
   };
@@ -61,7 +88,7 @@ function mapearCategoria(linha) {
 
 async function buscarCategoria(banco, idEstabelecimento, id) {
   const [linhas] = await banco.execute(`
-    SELECT id, nome, canal, ordem, ativo
+    SELECT id, nome, canal, impressora_id, ordem, ativo
     FROM categorias
     WHERE id = ? AND id_estabelecimento = ?
   `, [id, idEstabelecimento]);
@@ -87,6 +114,7 @@ function mapearProduto(linha, vinculos) {
     descricao: linha.descricao,
     preco: formatarPreco(linha.preco_centavos),
     imagem: linha.imagem_url,
+    impressoraId: linha.impressora_id == null ? null : Number(linha.impressora_id),
     adicionaisIds: vinculos.get(Number(linha.id)) ?? [],
     destaque: linha.destaque ?? '',
     ativo: Boolean(linha.ativo)
@@ -113,7 +141,8 @@ async function buscarVinculos(banco, idEstabelecimento, produtosIds = []) {
 
 const SELECT_PRODUTOS = `
   SELECT p.id, p.categoria_id, p.nome, p.descricao, p.preco_centavos,
-         p.imagem_url, p.destaque, p.ativo, p.canal, c.nome AS categoria
+         p.imagem_url, p.destaque, p.ativo, p.canal, p.impressora_id,
+         c.nome AS categoria
   FROM produtos p
   INNER JOIN categorias c
     ON c.id = p.categoria_id AND c.id_estabelecimento = p.id_estabelecimento
@@ -133,7 +162,7 @@ export async function listarCatalogo(
   const canalProduto = filtroCanal(canal, { aliasProduto: 'p', aliasCategoria: 'c' });
   const [[categorias], [adicionais], [produtos]] = await Promise.all([
     banco.execute(`
-      SELECT id, nome, canal, ordem, ativo
+      SELECT id, nome, canal, impressora_id, ordem, ativo
       FROM categorias
       WHERE id_estabelecimento = ? ${administrativo ? '' : 'AND ativo = 1'}
         ${canalCategoria.sql}
@@ -159,7 +188,7 @@ export async function listarCatalogo(
   };
 }
 
-function validarCategoria(dados) {
+async function validarCategoria(banco, idEstabelecimento, dados) {
   const nome = String(dados?.nome ?? '').trim().slice(0, 100);
   const ordem = Number(dados?.ordem ?? 0);
   if (!nome) throw new Error('Informe o nome da categoria.');
@@ -170,25 +199,41 @@ function validarCategoria(dados) {
     nome,
     ordem,
     canal: normalizarCanal(dados?.canal),
+    impressoraId: await validarImpressoraId(banco, idEstabelecimento, dados?.impressoraId),
     ativo: dados?.ativo === false ? 0 : 1
   };
 }
 
 export async function criarCategoria(banco, idEstabelecimento, dados) {
-  const categoria = validarCategoria(dados);
+  const categoria = await validarCategoria(banco, idEstabelecimento, dados);
   const [resultado] = await banco.execute(`
-    INSERT INTO categorias (id_estabelecimento, nome, canal, ordem, ativo)
-    VALUES (?, ?, ?, ?, ?)
-  `, [idEstabelecimento, categoria.nome, categoria.canal, categoria.ordem, categoria.ativo]);
+    INSERT INTO categorias (id_estabelecimento, nome, canal, impressora_id, ordem, ativo)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [
+    idEstabelecimento,
+    categoria.nome,
+    categoria.canal,
+    categoria.impressoraId,
+    categoria.ordem,
+    categoria.ativo
+  ]);
   return buscarCategoria(banco, idEstabelecimento, Number(resultado.insertId));
 }
 
 export async function atualizarCategoria(banco, idEstabelecimento, id, dados) {
-  const categoria = validarCategoria(dados);
+  const categoria = await validarCategoria(banco, idEstabelecimento, dados);
   const [resultado] = await banco.execute(`
-    UPDATE categorias SET nome = ?, canal = ?, ordem = ?, ativo = ?
+    UPDATE categorias SET nome = ?, canal = ?, impressora_id = ?, ordem = ?, ativo = ?
     WHERE id = ? AND id_estabelecimento = ?
-  `, [categoria.nome, categoria.canal, categoria.ordem, categoria.ativo, id, idEstabelecimento]);
+  `, [
+    categoria.nome,
+    categoria.canal,
+    categoria.impressoraId,
+    categoria.ordem,
+    categoria.ativo,
+    id,
+    idEstabelecimento
+  ]);
   if (!resultado.affectedRows) return null;
   return buscarCategoria(banco, idEstabelecimento, id);
 }
@@ -264,6 +309,8 @@ async function validarProduto(banco, idEstabelecimento, dados) {
     descricao,
     categoriaId,
     canal: normalizarCanal(dados.canal),
+    // Exceção do produto: vazio herda a impressora da categoria.
+    impressoraId: await validarImpressoraId(banco, idEstabelecimento, dados.impressoraId),
     precoCentavos,
     adicionaisIds,
     destaque: String(dados.destaque ?? '').trim() || null,
@@ -289,13 +336,14 @@ export async function criarProduto(banco, idEstabelecimento, dados, imagemUrl) {
   const id = await executarTransacao(banco, async (conexao) => {
     const [resultado] = await conexao.execute(`
       INSERT INTO produtos
-        (id_estabelecimento, categoria_id, canal, nome, descricao, preco_centavos,
-         imagem_url, destaque, ativo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id_estabelecimento, categoria_id, canal, impressora_id, nome, descricao,
+         preco_centavos, imagem_url, destaque, ativo)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       idEstabelecimento,
       produto.categoriaId,
       produto.canal,
+      produto.impressoraId,
       produto.nome,
       produto.descricao,
       produto.precoCentavos,
@@ -316,12 +364,13 @@ export async function atualizarProduto(banco, idEstabelecimento, id, dados, imag
   await executarTransacao(banco, async (conexao) => {
     await conexao.execute(`
       UPDATE produtos
-      SET categoria_id = ?, canal = ?, nome = ?, descricao = ?, preco_centavos = ?,
-          imagem_url = ?, destaque = ?, ativo = ?
+      SET categoria_id = ?, canal = ?, impressora_id = ?, nome = ?, descricao = ?,
+          preco_centavos = ?, imagem_url = ?, destaque = ?, ativo = ?
       WHERE id = ? AND id_estabelecimento = ?
     `, [
       produto.categoriaId,
       produto.canal,
+      produto.impressoraId,
       produto.nome,
       produto.descricao,
       produto.precoCentavos,

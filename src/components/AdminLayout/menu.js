@@ -3,6 +3,7 @@ import {
   ClipboardList,
   LayoutDashboard,
   Package,
+  Printer,
   Settings,
   ShieldCheck,
   Users,
@@ -21,6 +22,8 @@ export const PERMISSOES_TELAS_ADMIN = Object.freeze({
   funcionarios: ['funcionarios.gerenciar'],
   relatorios: ['relatorios.visualizar'],
   configuracoes: ['personalizacao.editar', 'delivery.editar', 'configuracoes.editar'],
+  // Impressão fica com quem já cuida da operação da loja.
+  impressoras: ['configuracoes.editar'],
   // Aberta a partir da tela de Configurações, sem item próprio no menu.
   areasEntrega: ['delivery.editar']
 });
@@ -36,5 +39,6 @@ export const itensMenuAdmin = [
   // Sem permissão exigida: é ali que cada administrador troca a própria senha.
   { nome: 'Acessos', rota: '/admin/acessos', icone: ShieldCheck, permissoes: null },
   { nome: 'Relatórios', rota: '/admin/relatorios', icone: BarChart3, permissoes: PERMISSOES_TELAS_ADMIN.relatorios },
-  { nome: 'Configurações', rota: '/admin/configuracoes', icone: Settings, permissoes: PERMISSOES_TELAS_ADMIN.configuracoes }
+  { nome: 'Configurações', rota: '/admin/configuracoes', icone: Settings, permissoes: PERMISSOES_TELAS_ADMIN.configuracoes },
+  { nome: 'Impressoras', rota: '/admin/impressoras', icone: Printer, permissoes: PERMISSOES_TELAS_ADMIN.impressoras }
 ];

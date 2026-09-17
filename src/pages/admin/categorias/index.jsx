@@ -7,14 +7,15 @@ import { useApp } from '../../../context/appContext';
 import { CANAIS_CATALOGO, canalCatalogo } from '../../../utils/canalCatalogo';
 import styles from '../shared.module.css';
 
-const vazio = { nome: '', ordem: 0, canal: 'ambos', ativo: true };
+const vazio = { nome: '', ordem: 0, canal: 'ambos', impressoraId: '', ativo: true };
 
 function CategoriasAdmin() {
-  const { categorias, produtos, salvarCategoria, alternarCategoria } = useApp();
+  const { categorias, produtos, impressoras, salvarCategoria, alternarCategoria } = useApp();
   const navigate = useNavigate();
   const [formulario, setFormulario] = useState(null);
   const [erro, setErro] = useState('');
   const [processando, setProcessando] = useState(false);
+  const impressorasAtivas = impressoras.filter((impressora) => impressora.ativa);
 
   async function enviar(evento) {
     evento.preventDefault();
@@ -22,7 +23,12 @@ function CategoriasAdmin() {
     setProcessando(true);
     setErro('');
     try {
-      await salvarCategoria({ ...formulario, ordem: Number(formulario.ordem) });
+      await salvarCategoria({
+        ...formulario,
+        ordem: Number(formulario.ordem),
+        // Vazio = a categoria não imprime.
+        impressoraId: formulario.impressoraId === '' ? null : Number(formulario.impressoraId)
+      });
       setFormulario(null);
     } catch (falha) {
       setErro(falha.message);
@@ -70,6 +76,14 @@ function CategoriasAdmin() {
                 </select>
                 <small className={styles.textoSecundario}>{canalCatalogo(formulario.canal).ajuda}</small>
               </div>
+              <div className={styles.campo}>
+                <label htmlFor="impressoraCategoria">Impressora padrão</label>
+                <select id="impressoraCategoria" value={formulario.impressoraId ?? ''} onChange={(evento) => setFormulario((atual) => ({ ...atual, impressoraId: evento.target.value }))}>
+                  <option value="">Não imprimir</option>
+                  {impressorasAtivas.map((impressora) => <option key={impressora.id} value={impressora.id}>{impressora.nome}</option>)}
+                </select>
+                <small className={styles.textoSecundario}>Os itens desta categoria saem nesta impressora quando a comanda vai para a cozinha. Um produto pode ter a sua própria como exceção.</small>
+              </div>
             </div>
             {erro && <div className={styles.erro} role="alert">{erro}</div>}
             <div className={styles.rodapeFormulario}><button disabled={processando} type="submit" className={styles.botaoPrimario}><Save size={17} /> Salvar categoria</button></div>
@@ -82,7 +96,7 @@ function CategoriasAdmin() {
         <div className={styles.listaAdicionaisAdmin}>
           {categorias.map((categoria) => (
             <div className={styles.adicionalLinha} key={categoria.id}>
-              <div><strong>{categoria.nome}</strong><span>Ordem {categoria.ordem} • {produtos.filter((produto) => produto.categoriaId === categoria.id).length} produtos • {canalCatalogo(categoria.canal).curto}</span></div>
+              <div><strong>{categoria.nome}</strong><span>Ordem {categoria.ordem} • {produtos.filter((produto) => produto.categoriaId === categoria.id).length} produtos • {canalCatalogo(categoria.canal).curto} • {impressoras.find((impressora) => impressora.id === categoria.impressoraId)?.nome ?? 'Sem impressora'}</span></div>
               <span className={`${styles.status} ${categoria.ativo ? styles.statusAtivo : styles.statusInativo}`}>{categoria.ativo ? 'Ativa' : 'Inativa'}</span>
               <div className={styles.acoes}>
                 <button type="button" className={styles.botaoIcone} aria-label={`Editar ${categoria.nome}`} onClick={() => setFormulario({ ...categoria })}><Edit3 size={16} /></button>

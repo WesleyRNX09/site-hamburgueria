@@ -1,0 +1,14 @@
+{
+  "name": "agente-impressao",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Agente local que imprime comandas e pedidos nas impressoras da loja.",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env index.js"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

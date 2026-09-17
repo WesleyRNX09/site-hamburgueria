@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 import { filtroCanal, formatarPreco, listarCatalogo, precoParaCentavos } from './catalog.js';
 import { executarTransacao } from './database.js';
@@ -651,6 +651,467 @@ export async function excluirAreaEntrega(banco, idEstabelecimento, id, administr
     });
     return true;
   });
+}
+
+/*
+  Impressão automática de comandas e pedidos.
+
+  O roteamento é por categoria, com exceção por produto: a impressora efetiva de
+  um item é `produtos.impressora_id`, ou a da categoria quando o produto não tem
+  exceção. As duas podem ser NULL — produto sem impressora configurada é o
+  estado normal de quem está começando, e nesse caso o item só não é impresso.
+
+  Regra que não se negocia: gerar trabalho de impressão nunca pode derrubar a
+  criação do pedido nem o envio da comanda. Por isso aqui não há nenhuma
+  validação que rejeite o pedido; o que não dá para imprimir fica simplesmente
+  de fora da fila.
+*/
+const MAX_IMPRESSORAS = 50;
+const MAX_DISPOSITIVOS_IMPRESSAO = 20;
+const MAX_TRABALHOS_IMPRESSAO_LOTE = 50;
+const ORIGENS_IMPRESSAO = new Set(['comanda', 'delivery']);
+
+function mapearImpressora(linha) {
+  return {
+    id: Number(linha.id),
+    nome: linha.nome,
+    host: linha.host,
+    porta: Number(linha.porta),
+    ativa: Boolean(linha.ativa),
+    criadoEm: dataIso(linha.criado_em),
+    atualizadoEm: dataIso(linha.atualizado_em)
+  };
+}
+
+async function consultarImpressoras(banco, idEstabelecimento, { id = null } = {}) {
+  const parametros = [idEstabelecimento];
+  let filtro = '';
+  if (id !== null) {
+    filtro = 'AND id = ?';
+    parametros.push(id);
+  }
+  const [linhas] = await banco.execute(`
+    SELECT id, nome, host, porta, ativa, criado_em, atualizado_em
+    FROM impressoras
+    WHERE id_estabelecimento = ?
+    ${filtro}
+    ORDER BY nome, id
+    LIMIT ${MAX_IMPRESSORAS}
+  `, parametros);
+  return linhas.map(mapearImpressora);
+}
+
+export function listarImpressoras(banco, idEstabelecimento) {
+  return consultarImpressoras(banco, idEstabelecimento);
+}
+
+function validarAtivaImpressora(ativa) {
+  if (typeof ativa !== 'boolean') throw erroDominio('Informe se a impressora está ativa.');
+  return ativa;
+}
+
+/*
+  `host` é endereço de rede local — IP ou hostname —, nunca URL: aceitar
+  "http://..." ou um caminho abriria espaço para apontar o agente local para
+  outro destino a partir do cadastro.
+*/
+function validarHostImpressora(valor) {
+  const host = typeof valor === 'string' ? valor.trim() : '';
+  if (!host) throw erroDominio('Informe o endereço (IP ou nome de rede) da impressora.');
+  if (host.length > 255) throw erroDominio('O endereço da impressora pode ter no máximo 255 caracteres.');
+  if (!/^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/.test(host)) {
+    throw erroDominio('Informe apenas o IP ou o nome de rede da impressora, sem "http://", porta, barra ou espaços.');
+  }
+  return host;
+}
+
+function inteiroSimples(valor) {
+  if (typeof valor === 'number') return Number.isInteger(valor) ? valor : Number.NaN;
+  if (typeof valor === 'string' && /^\s*\d{1,6}\s*$/.test(valor)) return Number(valor);
+  return Number.NaN;
+}
+
+/* Só estes campos saem do corpo; id_estabelecimento e afins são ignorados. */
+function validarImpressora(dados) {
+  const recebidos = dados && typeof dados === 'object' && !Array.isArray(dados) ? dados : {};
+  const nome = typeof recebidos.nome === 'string' ? recebidos.nome.trim() : '';
+  if (!nome) throw erroDominio('Informe o nome da impressora.');
+  if (nome.length > 120) throw erroDominio('O nome da impressora pode ter no máximo 120 caracteres.');
+  const host = validarHostImpressora(recebidos.host);
+  const porta = recebidos.porta === undefined || recebidos.porta === null || recebidos.porta === ''
+    ? 9100
+    : inteiroSimples(recebidos.porta);
+  if (!Number.isInteger(porta) || porta < 1 || porta > 65535) {
+    throw erroDominio('Informe uma porta entre 1 e 65535. A porta padrão das impressoras de rede é 9100.');
+  }
+  const ativa = recebidos.ativa === undefined ? null : validarAtivaImpressora(recebidos.ativa);
+  return { nome, host, porta, ativa };
+}
+
+function recusarImpressoraRepetida(erro) {
+  if (erro?.code === 'ER_DUP_ENTRY') {
+    throw erroDominio('Já existe uma impressora com esse nome.', 409);
+  }
+  throw erro;
+}
+
+async function travarImpressora(conexao, idEstabelecimento, id) {
+  const [linhas] = await conexao.execute(`
+    SELECT id, nome, host, porta, ativa
+    FROM impressoras
+    WHERE id_estabelecimento = ? AND id = ?
+    FOR UPDATE
+  `, [idEstabelecimento, id]);
+  return linhas[0] ?? null;
+}
+
+export async function criarImpressora(banco, idEstabelecimento, dados, administradorId = null) {
+  const impressora = validarImpressora(dados);
+  let id;
+  try {
+    id = await executarTransacao(banco, async (conexao) => {
+      const [[cadastradas]] = await conexao.execute(
+        'SELECT COUNT(id) AS total FROM impressoras WHERE id_estabelecimento = ?',
+        [idEstabelecimento]
+      );
+      if (Number(cadastradas.total) >= MAX_IMPRESSORAS) {
+        throw erroDominio(`O limite é de ${MAX_IMPRESSORAS} impressoras por loja.`, 409);
+      }
+      const [resultado] = await conexao.execute(`
+        INSERT INTO impressoras (id_estabelecimento, nome, host, porta, ativa)
+        VALUES (?, ?, ?, ?, ?)
+      `, [
+        idEstabelecimento,
+        impressora.nome,
+        impressora.host,
+        impressora.porta,
+        impressora.ativa === false ? 0 : 1
+      ]);
+      await registrarAuditoria(conexao, idEstabelecimento, administradorId, 'impressora.criada', 'impressora', resultado.insertId, {
+        nome: impressora.nome,
+        host: impressora.host,
+        porta: impressora.porta
+      });
+      return Number(resultado.insertId);
+    });
+  } catch (erro) {
+    recusarImpressoraRepetida(erro);
+  }
+  const [criada] = await consultarImpressoras(banco, idEstabelecimento, { id });
+  return criada;
+}
+
+export async function atualizarImpressora(banco, idEstabelecimento, id, dados, administradorId = null) {
+  const impressora = validarImpressora(dados);
+  let encontrada;
+  try {
+    encontrada = await executarTransacao(banco, async (conexao) => {
+      const anterior = await travarImpressora(conexao, idEstabelecimento, id);
+      if (!anterior) return false;
+      await conexao.execute(`
+        UPDATE impressoras SET nome = ?, host = ?, porta = ?, ativa = ?
+        WHERE id_estabelecimento = ? AND id = ?
+      `, [
+        impressora.nome,
+        impressora.host,
+        impressora.porta,
+        impressora.ativa === null ? Number(anterior.ativa) : Number(impressora.ativa),
+        idEstabelecimento,
+        id
+      ]);
+      await registrarAuditoria(conexao, idEstabelecimento, administradorId, 'impressora.atualizada', 'impressora', id, {
+        nomeAnterior: anterior.nome,
+        nome: impressora.nome,
+        hostAnterior: anterior.host,
+        host: impressora.host,
+        porta: impressora.porta
+      });
+      return true;
+    });
+  } catch (erro) {
+    recusarImpressoraRepetida(erro);
+  }
+  if (!encontrada) return null;
+  const [atualizada] = await consultarImpressoras(banco, idEstabelecimento, { id });
+  return atualizada;
+}
+
+export async function atualizarStatusImpressora(banco, idEstabelecimento, id, ativa, administradorId = null) {
+  validarAtivaImpressora(ativa);
+  const encontrada = await executarTransacao(banco, async (conexao) => {
+    const anterior = await travarImpressora(conexao, idEstabelecimento, id);
+    if (!anterior) return false;
+    await conexao.execute(
+      'UPDATE impressoras SET ativa = ? WHERE id_estabelecimento = ? AND id = ?',
+      [ativa ? 1 : 0, idEstabelecimento, id]
+    );
+    await registrarAuditoria(conexao, idEstabelecimento, administradorId, 'impressora.status_alterado', 'impressora', id, {
+      nome: anterior.nome,
+      ativa
+    });
+    return true;
+  });
+  if (!encontrada) return null;
+  const [atualizada] = await consultarImpressoras(banco, idEstabelecimento, { id });
+  return atualizada;
+}
+
+/*
+  Dispositivos de impressão: o agente local pareado. O token é sorteado aqui,
+  devolvido uma única vez e guardado apenas como hash — o servidor não consegue
+  mostrá-lo de novo, exatamente como o token de acesso da equipe.
+*/
+function mapearDispositivoImpressao(linha) {
+  return {
+    id: Number(linha.id),
+    nome: linha.nome,
+    criadoEm: dataIso(linha.criado_em),
+    ultimoContatoEm: dataIso(linha.ultimo_contato_em),
+    revogadoEm: dataIso(linha.revogado_em),
+    ativo: linha.revogado_em == null
+  };
+}
+
+export async function listarDispositivosImpressao(banco, idEstabelecimento) {
+  const [linhas] = await banco.execute(`
+    SELECT id, nome, criado_em, ultimo_contato_em, revogado_em
+    FROM dispositivos_impressao
+    WHERE id_estabelecimento = ?
+    ORDER BY revogado_em IS NOT NULL, nome, id
+    LIMIT ${MAX_DISPOSITIVOS_IMPRESSAO}
+  `, [idEstabelecimento]);
+  return linhas.map(mapearDispositivoImpressao);
+}
+
+export async function criarDispositivoImpressao(banco, idEstabelecimento, dados, administradorId = null) {
+  const recebidos = dados && typeof dados === 'object' && !Array.isArray(dados) ? dados : {};
+  const nome = typeof recebidos.nome === 'string' ? recebidos.nome.trim() : '';
+  if (!nome) throw erroDominio('Informe um nome para identificar o dispositivo de impressão.');
+  if (nome.length > 120) throw erroDominio('O nome do dispositivo pode ter no máximo 120 caracteres.');
+
+  const token = randomBytes(32).toString('base64url');
+  const id = await executarTransacao(banco, async (conexao) => {
+    const [[cadastrados]] = await conexao.execute(`
+      SELECT COUNT(id) AS total FROM dispositivos_impressao
+      WHERE id_estabelecimento = ? AND revogado_em IS NULL
+    `, [idEstabelecimento]);
+    if (Number(cadastrados.total) >= MAX_DISPOSITIVOS_IMPRESSAO) {
+      throw erroDominio(`O limite é de ${MAX_DISPOSITIVOS_IMPRESSAO} dispositivos de impressão ativos por loja.`, 409);
+    }
+    const [resultado] = await conexao.execute(`
+      INSERT INTO dispositivos_impressao (id_estabelecimento, nome, token_hash)
+      VALUES (?, ?, ?)
+    `, [idEstabelecimento, nome, criarHashToken(token)]);
+    await registrarAuditoria(conexao, idEstabelecimento, administradorId, 'dispositivo_impressao.criado', 'dispositivo_impressao', resultado.insertId, { nome });
+    return Number(resultado.insertId);
+  });
+  const [linhas] = await banco.execute(`
+    SELECT id, nome, criado_em, ultimo_contato_em, revogado_em
+    FROM dispositivos_impressao
+    WHERE id_estabelecimento = ? AND id = ?
+  `, [idEstabelecimento, id]);
+  // O token em texto puro só existe neste retorno.
+  return { dispositivo: mapearDispositivoImpressao(linhas[0]), token };
+}
+
+export async function revogarDispositivoImpressao(banco, idEstabelecimento, id, administradorId = null) {
+  return executarTransacao(banco, async (conexao) => {
+    const [linhas] = await conexao.execute(`
+      SELECT id, nome, revogado_em FROM dispositivos_impressao
+      WHERE id_estabelecimento = ? AND id = ?
+      FOR UPDATE
+    `, [idEstabelecimento, id]);
+    const dispositivo = linhas[0];
+    if (!dispositivo) return null;
+    if (dispositivo.revogado_em == null) {
+      await conexao.execute(`
+        UPDATE dispositivos_impressao SET revogado_em = CURRENT_TIMESTAMP
+        WHERE id_estabelecimento = ? AND id = ?
+      `, [idEstabelecimento, id]);
+      await registrarAuditoria(conexao, idEstabelecimento, administradorId, 'dispositivo_impressao.revogado', 'dispositivo_impressao', id, {
+        nome: dispositivo.nome
+      });
+    }
+    return { id: Number(dispositivo.id), nome: dispositivo.nome };
+  });
+}
+
+/*
+  Autenticação do agente local. Não é JWT nem sessão de painel: o tenant sai do
+  próprio token, nunca de nada que o agente informe. Token revogado, de loja
+  desativada ou desconhecido não resolve estabelecimento nenhum.
+*/
+export async function autenticarDispositivoImpressao(banco, token) {
+  const informado = typeof token === 'string' ? token.trim() : '';
+  if (!/^[A-Za-z0-9_-]{32,128}$/.test(informado)) return null;
+  const [linhas] = await banco.execute(`
+    SELECT d.id, d.nome, d.id_estabelecimento
+    FROM dispositivos_impressao d
+    INNER JOIN estabelecimentos e
+      ON e.id_estabelecimento = d.id_estabelecimento
+      AND e.status = 'ativo'
+    WHERE d.token_hash = ? AND d.revogado_em IS NULL
+    LIMIT 1
+  `, [criarHashToken(informado)]);
+  const dispositivo = linhas[0];
+  if (!dispositivo) return null;
+  await banco.execute(`
+    UPDATE dispositivos_impressao SET ultimo_contato_em = CURRENT_TIMESTAMP
+    WHERE id = ? AND id_estabelecimento = ?
+  `, [dispositivo.id, dispositivo.id_estabelecimento]);
+  return {
+    id: Number(dispositivo.id),
+    nome: dispositivo.nome,
+    idEstabelecimento: Number(dispositivo.id_estabelecimento)
+  };
+}
+
+/*
+  Fila do agente: só os trabalhos pendentes da própria loja, mais antigos
+  primeiro e sem corte por idade — o que ficou represado enquanto a impressora
+  estava fora do ar precisa sair quando ela voltar.
+*/
+export async function listarTrabalhosImpressao(banco, idEstabelecimento) {
+  const [linhas] = await banco.execute(`
+    SELECT t.id, t.origem, t.pedido_id, t.comanda_id, t.conteudo_json, t.tentativas, t.criado_em,
+      i.id AS impressora_id, i.nome AS impressora_nome, i.host AS impressora_host,
+      i.porta AS impressora_porta
+    FROM trabalhos_impressao t
+    INNER JOIN impressoras i
+      ON i.id = t.impressora_id
+      AND i.id_estabelecimento = t.id_estabelecimento
+    WHERE t.id_estabelecimento = ? AND t.status = 'pendente' AND i.ativa = 1
+    ORDER BY t.id
+    LIMIT ${MAX_TRABALHOS_IMPRESSAO_LOTE}
+  `, [idEstabelecimento]);
+  return linhas.map((linha) => ({
+    id: Number(linha.id),
+    origem: linha.origem,
+    pedidoId: linha.pedido_id == null ? null : Number(linha.pedido_id),
+    comandaId: linha.comanda_id == null ? null : Number(linha.comanda_id),
+    tentativas: Number(linha.tentativas),
+    criadoEm: dataIso(linha.criado_em),
+    impressora: {
+      id: Number(linha.impressora_id),
+      nome: linha.impressora_nome,
+      host: linha.impressora_host,
+      porta: Number(linha.impressora_porta)
+    },
+    // mysql2 devolve JSON já convertido; texto (MariaDB) é lido aqui.
+    conteudo: typeof linha.conteudo_json === 'string'
+      ? JSON.parse(linha.conteudo_json)
+      : linha.conteudo_json
+  }));
+}
+
+export async function confirmarTrabalhoImpressao(banco, idEstabelecimento, id) {
+  const [resultado] = await banco.execute(`
+    UPDATE trabalhos_impressao
+    SET status = 'impresso', impresso_em = CURRENT_TIMESTAMP
+    WHERE id = ? AND id_estabelecimento = ? AND status = 'pendente'
+  `, [id, idEstabelecimento]);
+  return resultado.affectedRows > 0;
+}
+
+/* Falha não tira o trabalho da fila: só conta a tentativa, para o agente
+   tentar de novo no ciclo seguinte. */
+export async function falharTrabalhoImpressao(banco, idEstabelecimento, id) {
+  const [resultado] = await banco.execute(`
+    UPDATE trabalhos_impressao
+    SET tentativas = tentativas + 1
+    WHERE id = ? AND id_estabelecimento = ? AND status = 'pendente'
+  `, [id, idEstabelecimento]);
+  return resultado.affectedRows > 0;
+}
+
+/*
+  Impressora efetiva de cada item, dentro do estabelecimento. O JOIN prende a
+  impressora ao tenant do produto: mesmo que uma coluna apontasse para outra
+  loja, a linha não voltaria e o item sairia da fila em vez de vazar.
+*/
+async function resolverImpressorasDosItens(conexao, idEstabelecimento, produtosIds) {
+  const ids = [...new Set(produtosIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (ids.length === 0) return new Map();
+  const marcadores = ids.map(() => '?').join(', ');
+  const [linhas] = await conexao.execute(`
+    SELECT p.id AS produto_id, i.id AS impressora_id, i.nome AS impressora_nome
+    FROM produtos p
+    INNER JOIN categorias c
+      ON c.id = p.categoria_id
+      AND c.id_estabelecimento = p.id_estabelecimento
+    INNER JOIN impressoras i
+      ON i.id = COALESCE(p.impressora_id, c.impressora_id)
+      AND i.id_estabelecimento = p.id_estabelecimento
+      AND i.ativa = 1
+    WHERE p.id_estabelecimento = ? AND p.id IN (${marcadores})
+  `, [idEstabelecimento, ...ids]);
+  return new Map(linhas.map((linha) => [Number(linha.produto_id), {
+    id: Number(linha.impressora_id),
+    nome: linha.impressora_nome
+  }]));
+}
+
+/*
+  Monta e enfileira um trabalho por impressora envolvida.
+
+  `itens` traz produtoId, nome, quantidade, observação e adicionais; `contexto`
+  é o cabeçalho do recibo (mesa e garçom, ou cliente e endereço). Item cujo
+  produto não tem impressora configurada — nem no produto, nem na categoria —
+  é ignorado sem erro: é o estado normal de quem ainda não configurou nada.
+*/
+export async function gerarTrabalhosImpressao(
+  conexao,
+  idEstabelecimento,
+  { origem, pedidoId = null, comandaId = null, itens = [], contexto = {} }
+) {
+  if (!ORIGENS_IMPRESSAO.has(origem)) throw new Error(`Origem de impressão inválida: ${origem}`);
+  if (!Array.isArray(itens) || itens.length === 0) return [];
+
+  const impressoras = await resolverImpressorasDosItens(
+    conexao,
+    idEstabelecimento,
+    itens.map((item) => Number(item.produtoId))
+  );
+  if (impressoras.size === 0) return [];
+
+  const porImpressora = new Map();
+  for (const item of itens) {
+    const impressora = impressoras.get(Number(item.produtoId));
+    if (!impressora) continue;
+    if (!porImpressora.has(impressora.id)) porImpressora.set(impressora.id, { impressora, itens: [] });
+    porImpressora.get(impressora.id).itens.push({
+      nome: texto(item.nome, 160),
+      quantidade: Number(item.quantidade),
+      observacao: texto(item.observacao, 1000) || null,
+      adicionais: (item.adicionais ?? []).map((adicional) => texto(adicional?.nome ?? adicional, 120))
+    });
+  }
+
+  const criados = [];
+  const emitidoEm = new Date().toISOString();
+  for (const [impressoraId, grupo] of porImpressora) {
+    const conteudo = {
+      origem,
+      impressora: grupo.impressora.nome,
+      emitidoEm,
+      cabecalho: contexto,
+      itens: grupo.itens
+    };
+    const [resultado] = await conexao.execute(`
+      INSERT INTO trabalhos_impressao
+        (id_estabelecimento, impressora_id, origem, pedido_id, comanda_id, conteudo_json, status)
+      VALUES (?, ?, ?, ?, ?, ?, 'pendente')
+    `, [
+      idEstabelecimento,
+      impressoraId,
+      origem,
+      pedidoId,
+      comandaId,
+      JSON.stringify(conteudo)
+    ]);
+    criados.push(Number(resultado.insertId));
+  }
+  return criados;
 }
 
 export async function salvarConfiguracao(banco, idEstabelecimento, dados, administradorId = null) {
@@ -1897,6 +2358,28 @@ export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
         texto(dados.referencia, 255) || null, taxaEntrega, totalCentavos
       ]);
       await inserirItensPedido(conexao, idEstabelecimento, resultado.insertId, itens);
+      /* Fila de impressão na mesma transação: ou o pedido e as comandas da
+        cozinha gravam juntos, ou nada grava. Produto sem impressora
+        configurada não entra na fila e não atrapalha o pedido. */
+      await gerarTrabalhosImpressao(conexao, idEstabelecimento, {
+        origem: 'delivery',
+        pedidoId: Number(resultado.insertId),
+        itens,
+        contexto: {
+          pedido: codigoPedido(Number(resultado.insertId)),
+          modalidade: retirada ? 'Retirada no balcão' : 'Entrega',
+          cliente: nome,
+          telefone,
+          endereco: retirada
+            ? null
+            : [
+                `${rua}, ${numero}`,
+                texto(dados.complemento, 160) || null,
+                areaEntrega?.nome ?? bairro
+              ].filter(Boolean).join(' - '),
+          pagamento
+        }
+      });
       const pixCopiaCola = pagamento === 'Pix'
         ? gerarPixCopiaCola({
             chave: configuracao.pix_chave,
@@ -2939,6 +3422,49 @@ async function copiarItensComandaParaPedido(conexao, idEstabelecimento, comandaI
   return total;
 }
 
+/* Nome do responsável só para o cabeçalho do recibo: comanda aberta no caixa
+   ainda pode não ter garçom, e nesse caso a comanda sai sem essa linha. */
+async function nomeDoGarcomDaComanda(conexao, idEstabelecimento, comanda) {
+  if (comanda.funcionario_id == null) return null;
+  const [linhas] = await conexao.execute(`
+    SELECT nome FROM funcionarios
+    WHERE id = ? AND id_estabelecimento = ?
+  `, [Number(comanda.funcionario_id), idEstabelecimento]);
+  return linhas[0]?.nome ?? null;
+}
+
+/*
+  Itens da comanda que ainda não entraram em nenhum trabalho de impressão.
+
+  O reenvio da comanda é comum — o cliente pede mais uma coisa e o garçom manda
+  de novo —, e a cozinha não pode receber a comanda inteira de novo a cada vez.
+  Só o que tem `impresso_em IS NULL` é impresso; o resto já está lá.
+*/
+async function itensComandaNaoImpressos(conexao, idEstabelecimento, comandaId) {
+  const [itens] = await conexao.execute(`
+    SELECT id, produto_id, nome_produto, quantidade, observacao
+    FROM comanda_itens
+    WHERE comanda_id = ? AND id_estabelecimento = ? AND impresso_em IS NULL
+    ORDER BY id
+  `, [comandaId, idEstabelecimento]);
+  if (itens.length === 0) return [];
+  const adicionaisPorItem = await listarAdicionaisDeItens(
+    conexao,
+    idEstabelecimento,
+    'comanda_item_adicionais',
+    'comanda_item_id',
+    itens.map((item) => Number(item.id))
+  );
+  return itens.map((item) => ({
+    id: Number(item.id),
+    produtoId: item.produto_id == null ? null : Number(item.produto_id),
+    nome: item.nome_produto,
+    quantidade: Number(item.quantidade),
+    observacao: item.observacao,
+    adicionais: adicionaisPorItem.get(Number(item.id)) ?? []
+  }));
+}
+
 /*
   Lançamento para a cozinha. `autor` guarda quem apertou o botão — garçom ou
   administrador —, item a item, para que a conta impressa mostre quem
@@ -3002,6 +3528,30 @@ async function lancarComandaNaCozinha(
       enviado_por_admin_id = ?
     WHERE comanda_id = ? AND id_estabelecimento = ? AND enviado_em IS NULL
   `, [funcionarioId, administradorId, comandaId, idEstabelecimento]);
+
+  /* Impressão só do que ainda não foi impresso, e a marcação na mesma
+    transação: reenviar a comanda depois de acrescentar um item manda para a
+    cozinha apenas o item novo. Produto sem impressora não gera trabalho e não
+    impede o lançamento. */
+  const naoImpressos = await itensComandaNaoImpressos(conexao, idEstabelecimento, comandaId);
+  if (naoImpressos.length > 0) {
+    await gerarTrabalhosImpressao(conexao, idEstabelecimento, {
+      origem: 'comanda',
+      pedidoId,
+      comandaId: Number(comandaId),
+      itens: naoImpressos,
+      contexto: {
+        mesa: `Mesa ${comanda.mesa_numero}`,
+        garcom: await nomeDoGarcomDaComanda(conexao, idEstabelecimento, comanda)
+      }
+    });
+    const marcadores = naoImpressos.map(() => '?').join(', ');
+    await conexao.execute(`
+      UPDATE comanda_itens SET impresso_em = CURRENT_TIMESTAMP
+      WHERE id_estabelecimento = ? AND comanda_id = ? AND id IN (${marcadores})
+    `, [idEstabelecimento, comandaId, ...naoImpressos.map((item) => item.id)]);
+  }
+
   await conexao.execute(`
     UPDATE comandas SET status = 'Na cozinha'
     WHERE id = ? AND id_estabelecimento = ?
@@ -3383,7 +3933,8 @@ export async function listarDadosAdmin(banco, idEstabelecimento, permissoes = nu
     configuracao,
     administradores,
     auditoria,
-    acessoGarcom
+    acessoGarcom,
+    impressoras
   ] = await Promise.all([
     pode('produtos.editar', 'mesas.operar')
       ? listarCatalogo(banco, idEstabelecimento, { administrativo: true })
@@ -3402,7 +3953,12 @@ export async function listarDadosAdmin(banco, idEstabelecimento, permissoes = nu
     podeGerenciarEquipe
       ? listarAuditoriaAdmin(banco, idEstabelecimento, { acao: ACAO_LOGIN_ADMIN })
       : [],
-    podeGerenciarEquipe ? obterTokenAcessoGarcom(banco, idEstabelecimento) : ''
+    podeGerenciarEquipe ? obterTokenAcessoGarcom(banco, idEstabelecimento) : '',
+    /* A lista alimenta o select de impressora no cardápio e a tela de
+      impressoras; não expõe nada além de nome, endereço e status. */
+    pode('produtos.editar', 'configuracoes.editar')
+      ? listarImpressoras(banco, idEstabelecimento)
+      : []
   ]);
   return {
     ...catalogo,
@@ -3415,7 +3971,8 @@ export async function listarDadosAdmin(banco, idEstabelecimento, permissoes = nu
     administradores,
     auditoria,
     // Token do QR Code único da equipe, exibido na tela de funcionários.
-    acessoGarcom
+    acessoGarcom,
+    impressoras
   };
 }
 
