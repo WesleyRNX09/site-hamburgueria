@@ -536,16 +536,43 @@ async function criarOperacaoInicial(
   });
 }
 
+/*
+  Toda conexão do pool trabalha em UTC.
+
+  `timezone: 'Z'` só diz ao mysql2 como converter Date <-> DATETIME; quem
+  resolve `CURRENT_TIMESTAMP` é o servidor, no fuso da sessão dele. Sem fixar
+  a sessão, o mesmo código grava horários diferentes conforme o relógio da
+  máquina do banco — e foi o que acontecia: a produção (MariaDB com NOW() em
+  UTC) ficava certa e o desenvolvimento (MySQL no horário de Brasília) gravava
+  3 h à frente do que a aplicação depois lia como UTC.
+
+  O SET entra na fila da própria conexão assim que ela nasce, antes de
+  qualquer consulta do aplicativo, porque o mysql2 executa os comandos de uma
+  conexão em ordem. '+00:00' é o deslocamento literal: não depende das tabelas
+  de fuso estarem carregadas no servidor, o que nem sempre é o caso.
+*/
+function fixarFusoUtc(pool) {
+  pool.on('connection', (conexao) => {
+    conexao.query("SET time_zone = '+00:00'", (erro) => {
+      if (!erro) return;
+      /* Conexão que não aceitou o fuso gravaria hora errada em silêncio.
+        Melhor derrubá-la: o pool abre outra, e o erro aparece de uma vez. */
+      conexao.destroy();
+    });
+  });
+  return pool;
+}
+
 async function criarPool(configuracaoMySql) {
   const nomeBanco = validarNomeBanco(configuracaoMySql.database);
   const configuracaoBase = await configuracaoBaseMySql(configuracaoMySql);
-  return mysql.createPool({
+  return fixarFusoUtc(mysql.createPool({
     ...configuracaoBase,
     database: nomeBanco,
     waitForConnections: true,
     connectionLimit: Number(configuracaoMySql.connectionLimit) || 10,
     queueLimit: 0
-  });
+  }));
 }
 
 export async function abrirBanco({ mysql: configuracaoMySql }) {

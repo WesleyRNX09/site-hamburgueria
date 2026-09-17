@@ -953,12 +953,31 @@ test('código do servidor e SQLs mantêm as restrições permanentes de seguran�
     migracoes.map((arquivo) => Number(arquivo.slice(0, 3))),
     Array.from({ length: migracoes.length }, (_, indice) => indice + 1)
   );
+  /*
+    Sintaxe que só existe em um dos dois motores. Produção roda MariaDB e o
+    desenvolvimento roda MySQL, então uma migration escrita no dialeto errado
+    passa limpa aqui e só quebra no deploy — que é o pior lugar para descobrir.
+    Este teste é o que substitui não ter um MariaDB para rodar os testes.
+  */
+  const dialetoProibido = [
+    [/\bDROP\s+CHECK\b/i, 'DROP CHECK é do MySQL 8.0.16+ e não existe no MariaDB; use DROP CONSTRAINT'],
+    [/\bANY_VALUE\s*\(/i, 'ANY_VALUE não existe no MariaDB'],
+    [/\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\b/i, 'CREATE INDEX IF NOT EXISTS é do MariaDB e não existe no MySQL'],
+    [/\bADD\s+(?:COLUMN|INDEX|KEY|CONSTRAINT)\s+IF\s+NOT\s+EXISTS\b/i, 'ADD ... IF NOT EXISTS é do MariaDB e não existe no MySQL'],
+    [/\bDROP\s+(?:COLUMN|INDEX|KEY|CONSTRAINT|FOREIGN\s+KEY)\s+IF\s+EXISTS\b/i, 'DROP ... IF EXISTS é do MariaDB e não existe no MySQL']
+  ];
+
   for (const migration of migracoes) {
     const conteudo = await readFile(resolve(pastaMigracoes, migration), 'utf8');
     assert.equal(/\bDROP\s+TABLE\b/i.test(conteudo), false, `DROP TABLE encontrado em ${migration}`);
     assert.equal(/\bTRUNCATE\b/i.test(conteudo), false, `TRUNCATE encontrado em ${migration}`);
     assert.equal(/\bDELETE\s+FROM\b/i.test(conteudo), false, `DELETE FROM encontrado em ${migration}`);
     assert.equal(/SELECT\s+\*/i.test(conteudo), false, `SELECT * encontrado em ${migration}`);
+    // Comentário explicando o porquê da escolha não conta como uso.
+    const semComentarios = conteudo.replace(/^\s*--.*$/gm, '');
+    for (const [padrao, motivo] of dialetoProibido) {
+      assert.equal(padrao.test(semComentarios), false, `${migration}: ${motivo}.`);
+    }
   }
 
   // Uma instalação nova por CRIAR_db.sql já contém a estrutura final, então
@@ -975,6 +994,31 @@ test('código do servidor e SQLs mantêm as restrições permanentes de seguran�
       checksumMigration(conteudo),
       `database/CRIAR_db.sql precisa registrar ${migration} com o checksum atual em schema_migrations.`
     );
+  }
+
+  /*
+    Arquivo de exemplo documenta o nome da variável, nunca o valor. Já
+    aconteceu de um token de dispositivo real ser colado aqui e ir junto no
+    commit; a heurística abaixo separa um segredo gerado (maiúscula, minúscula
+    e dígito misturados, como o base64url que o painel emite) de um
+    placeholder escrito por gente ("troque-por-uma-senha-local-segura").
+  */
+  const pareceSegredoGerado = (valor) => (
+    valor.length >= 24
+    && /[a-z]/.test(valor)
+    && /[A-Z]/.test(valor)
+    && /\d/.test(valor)
+    && !/\s/.test(valor)
+  );
+  for (const exemplo of ['env.example', 'agente-impressao/env.example']) {
+    const conteudo = await readFile(resolve(pastaProjeto, exemplo), 'utf8');
+    for (const [, chave, valor] of conteudo.matchAll(/^(\w*(?:TOKEN|SECRET|PASSWORD|SENHA)\w*)\s*=\s*(\S+)\s*$/gim)) {
+      assert.equal(
+        pareceSegredoGerado(valor),
+        false,
+        `${exemplo}: ${chave} parece conter um segredo real. O valor vai no .env, não no exemplo versionado.`
+      );
+    }
   }
 
   const testesApi = await readFile(resolve(pastaProjeto, 'server/api.test.js'), 'utf8');

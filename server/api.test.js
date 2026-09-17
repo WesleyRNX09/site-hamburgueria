@@ -3863,6 +3863,49 @@ if (!executarIntegracao) {
 
   const todasAsPermissoes = [...CHAVES_PERMISSOES].sort();
 
+  test('toda conexão do pool trabalha em UTC, qualquer que seja o relógio do servidor', async () => {
+    /*
+      `timezone: 'Z'` só diz ao mysql2 como converter Date <-> DATETIME; quem
+      resolve CURRENT_TIMESTAMP é o servidor. Sem fixar a sessão, o horário
+      gravado seguia o relógio da máquina do banco — em produção (MariaDB em
+      UTC) dava certo e em desenvolvimento (MySQL em Brasília) não.
+    */
+    const [[sessao]] = await banco.query(
+      'SELECT @@session.time_zone AS fuso, NOW() AS agora, UTC_TIMESTAMP() AS utc'
+    );
+    assert.equal(sessao.fuso, '+00:00');
+    assert.equal(new Date(sessao.agora).toISOString(), new Date(sessao.utc).toISOString());
+    // O relógio do banco e o do Node precisam concordar, senão o que for
+    // gravado por CURRENT_TIMESTAMP sai deslocado do que o app calcula.
+    assert.ok(
+      Math.abs(new Date(sessao.agora) - new Date()) < 60_000,
+      `NOW() do banco está longe do relógio do Node: ${sessao.agora}`
+    );
+
+    // Vale para toda conexão, não só para a primeira que o pool abriu.
+    const fusos = await Promise.all(
+      [1, 2, 3].map(() => banco.query('SELECT @@session.time_zone AS fuso'))
+    );
+    assert.deepEqual(fusos.map(([linhas]) => linhas[0].fuso), ['+00:00', '+00:00', '+00:00']);
+
+    // E o que o servidor grava sozinho volta no mesmo relógio do aplicativo.
+    const antes = Date.now();
+    const [gravado] = await banco.execute(`
+      INSERT INTO auditoria_admin (id_estabelecimento, acao, entidade)
+      VALUES (?, 'teste.fuso', 'teste')
+    `, [await idDaLoja('estabelecimento-padrao')]);
+    try {
+      const [[linha]] = await banco.execute(
+        'SELECT criado_em FROM auditoria_admin WHERE id = ?',
+        [gravado.insertId]
+      );
+      const distancia = Math.abs(new Date(linha.criado_em) - antes);
+      assert.ok(distancia < 60_000, `criado_em saiu deslocado do relógio do app: ${linha.criado_em}`);
+    } finally {
+      await banco.execute('DELETE FROM auditoria_admin WHERE id = ?', [gravado.insertId]);
+    }
+  });
+
   test('migration 017: conta criada antes das permissões volta a ter exatamente o acesso completo', async () => {
     const idTenantA = await idDaLoja('estabelecimento-padrao');
     const usuario = `legado-${randomUUID().slice(0, 8)}`;

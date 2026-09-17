@@ -8,7 +8,11 @@
 -- Não cria nem seleciona banco. Execute sobre um schema MySQL vazio.
 
 SET NAMES utf8mb4;
-SET time_zone = '-03:00';
+-- UTC, a mesma convencao do aplicativo (o pool fixa '+00:00' em toda conexao).
+-- Com '-03:00' aqui, a conexao que executasse este arquivo voltava para o pool
+-- com o fuso trocado, e passava a gravar CURRENT_TIMESTAMP 3 h deslocado das
+-- demais -- dois relogios diferentes dentro da mesma tabela.
+SET time_zone = '+00:00';
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
   versao VARCHAR(255) PRIMARY KEY,
