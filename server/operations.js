@@ -917,6 +917,70 @@ export async function atualizarStatusImpressora(banco, idEstabelecimento, id, at
 }
 
 /*
+  Exclusão de impressora. Duas recusas, nas duas direções em que apagar faria
+  estrago silencioso:
+
+  1. Já imprimiu alguma coisa. `trabalhos_impressao` guarda o histórico e a
+     chave estrangeira é RESTRICT, então o banco recusaria de qualquer jeito —
+     melhor um 409 explicando o que fazer do que um erro de integridade.
+  2. Ainda roteia algo do cardápio. As chaves de `categorias` e `produtos` são
+     ON DELETE SET NULL: apagar desfaria o roteamento sem ninguém ver, e os
+     itens simplesmente parariam de sair na cozinha. Quem quiser mesmo apagar
+     troca a impressora dessas linhas antes.
+
+  Sobra o caso que motivou a rota: a impressora cadastrada errado, que nunca
+  imprimiu e não está ligada a nada.
+*/
+export async function excluirImpressora(banco, idEstabelecimento, id, administradorId = null) {
+  return executarTransacao(banco, async (conexao) => {
+    const impressora = await travarImpressora(conexao, idEstabelecimento, id);
+    if (!impressora) return false;
+
+    const [trabalhos] = await conexao.execute(
+      'SELECT id FROM trabalhos_impressao WHERE id_estabelecimento = ? AND impressora_id = ? LIMIT 1',
+      [idEstabelecimento, id]
+    );
+    if (trabalhos[0]) {
+      throw erroDominio(
+        'Esta impressora já tem recibos no histórico e não pode ser excluída. Desative-a para tirá-la de uso.',
+        409
+      );
+    }
+
+    const [[emUso]] = await conexao.execute(`
+      SELECT
+        (SELECT COUNT(id) FROM categorias
+          WHERE id_estabelecimento = ? AND impressora_id = ?) AS categorias,
+        (SELECT COUNT(id) FROM produtos
+          WHERE id_estabelecimento = ? AND impressora_id = ?) AS produtos
+    `, [idEstabelecimento, id, idEstabelecimento, id]);
+    const categorias = Number(emUso.categorias);
+    const produtos = Number(emUso.produtos);
+    if (categorias > 0 || produtos > 0) {
+      const partes = [
+        categorias > 0 ? `${categorias} ${categorias === 1 ? 'categoria' : 'categorias'}` : null,
+        produtos > 0 ? `${produtos} ${produtos === 1 ? 'produto' : 'produtos'}` : null
+      ].filter(Boolean).join(' e ');
+      throw erroDominio(
+        `Esta impressora ainda é usada por ${partes} do cardápio. Troque a impressora desses itens antes de excluí-la.`,
+        409
+      );
+    }
+
+    await conexao.execute(
+      'DELETE FROM impressoras WHERE id_estabelecimento = ? AND id = ?',
+      [idEstabelecimento, id]
+    );
+    await registrarAuditoria(conexao, idEstabelecimento, administradorId, 'impressora.excluida', 'impressora', id, {
+      nome: impressora.nome,
+      host: impressora.host,
+      ehCaixa: Boolean(impressora.eh_caixa)
+    });
+    return true;
+  });
+}
+
+/*
   Dispositivos de impressão: o agente local pareado. O token é sorteado aqui,
   devolvido uma única vez e guardado apenas como hash — o servidor não consegue
   mostrá-lo de novo, exatamente como o token de acesso da equipe.

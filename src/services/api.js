@@ -429,6 +429,10 @@ export function atualizarImpressoraApi(id, dados) {
   return requisicao(`/api/admin/impressoras/${id}`, { metodo: 'PUT', dados, autenticacao: 'admin' });
 }
 
+export function excluirImpressoraApi(id) {
+  return requisicao(`/api/admin/impressoras/${id}`, { metodo: 'DELETE', autenticacao: 'admin' });
+}
+
 export function alterarStatusImpressoraApi(id, ativa) {
   return requisicao(`/api/admin/impressoras/${id}/status`, { metodo: 'PATCH', dados: { ativa }, autenticacao: 'admin' });
 }

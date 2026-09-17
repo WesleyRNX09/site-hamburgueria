@@ -8,6 +8,7 @@ import {
   atualizarImpressoraApi,
   criarDispositivoImpressaoApi,
   criarImpressoraApi,
+  excluirImpressoraApi,
   listarImpressorasApi,
   revogarDispositivoImpressaoApi
 } from '../../../services/api';
@@ -194,6 +195,29 @@ function ImpressorasAdmin() {
     }
   }
 
+  /*
+    O servidor recusa excluir impressora com histórico de recibos ou ainda
+    ligada ao cardápio, e é ele quem explica o porquê — aqui a mensagem dele
+    é só repassada, sem a tela tentar adivinhar a regra.
+  */
+  async function excluir(impressora) {
+    if (!window.confirm(`Excluir a impressora ${impressora.nome}? Essa ação não pode ser desfeita.`)) return;
+    setProcessandoId(impressora.id);
+    setErro('');
+    setSucesso('');
+    try {
+      await excluirImpressoraApi(impressora.id);
+      setImpressoras((atuais) => atuais.filter((item) => item.id !== impressora.id));
+      // Se ela estava aberta no formulário, o formulário volta ao modo de criar.
+      setDados((atuais) => (atuais.id === impressora.id ? vazio : atuais));
+      setSucesso(`Impressora ${impressora.nome} excluída.`);
+    } catch (falha) {
+      setErro(falha.message);
+    } finally {
+      setProcessandoId(null);
+    }
+  }
+
   async function revogar(dispositivo) {
     if (!window.confirm(`Revogar o acesso de ${dispositivo.nome}? O agente instalado nele para de imprimir na hora.`)) return;
     setProcessandoId(`dispositivo-${dispositivo.id}`);
@@ -282,6 +306,13 @@ function ImpressorasAdmin() {
                   </button>
                   <div className={styles.acoes}>
                     <button type="button" className={styles.botaoIcone} aria-label={`Editar ${impressora.nome}`} onClick={() => editar(impressora)}><Edit3 size={16} /></button>
+                    <button
+                      type="button"
+                      className={`${styles.botaoIcone} ${styles.botaoIconePerigo}`}
+                      disabled={processandoId === impressora.id}
+                      aria-label={`Excluir ${impressora.nome}`}
+                      onClick={() => excluir(impressora)}
+                    ><Trash2 size={16} /></button>
                   </div>
                 </article>
               ))}

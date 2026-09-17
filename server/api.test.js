@@ -4581,6 +4581,140 @@ if (!executarIntegracao) {
     assert.equal(invalida.status, 400);
   });
 
+  test('exclui impressora sem uso, mas recusa a que tem histórico ou roteia o cardápio', async () => {
+    const [[lojaA]] = await banco.execute(
+      'SELECT id_estabelecimento FROM estabelecimentos WHERE slug = ?',
+      ['estabelecimento-padrao']
+    );
+    const idLojaA = Number(lojaA.id_estabelecimento);
+    const listar = async () => (await chamar('/api/admin/impressoras', { token: tokenAdmin })).corpo.impressoras;
+
+    // 1. Cadastrada errado: nunca imprimiu, não roteia nada. Some sem drama.
+    const errada = await chamar('/api/admin/impressoras', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { nome: 'Cadastrada errado', host: '192.168.0.99', porta: 9100 }
+    });
+    assert.equal(errada.status, 201);
+    const idErrada = errada.corpo.impressora.id;
+    assert.equal((await listar()).some((i) => i.id === idErrada), true);
+
+    const apagada = await chamar(`/api/admin/impressoras/${idErrada}`, {
+      metodo: 'DELETE',
+      token: tokenAdmin
+    });
+    assert.equal(apagada.status, 200);
+    assert.equal((await listar()).some((i) => i.id === idErrada), false);
+    const [[sumiu]] = await banco.execute(
+      'SELECT COUNT(id) AS total FROM impressoras WHERE id = ? AND id_estabelecimento = ?',
+      [idErrada, idLojaA]
+    );
+    assert.equal(Number(sumiu.total), 0);
+
+    // Apagar duas vezes não inventa sucesso: a segunda é 404.
+    assert.equal((await chamar(`/api/admin/impressoras/${idErrada}`, {
+      metodo: 'DELETE',
+      token: tokenAdmin
+    })).status, 404);
+
+    // 2. Ainda roteia o cardápio: recusa, e a mensagem diz o que trocar antes.
+    const emUso = await chamar('/api/admin/impressoras', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { nome: 'Rotea o cardapio', host: '192.168.0.98', porta: 9100 }
+    });
+    assert.equal(emUso.status, 201);
+    const idEmUso = emUso.corpo.impressora.id;
+    const dadosPainel = await chamar('/api/admin/dados', { token: tokenAdmin });
+    const categoria = dadosPainel.corpo.categorias.find((c) => c.nome === 'Bebidas');
+    assert.ok(categoria);
+    assert.equal((await chamar(`/api/admin/categorias/${categoria.id}`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { ...categoria, impressoraId: idEmUso }
+    })).status, 200);
+
+    const recusadaPeloCardapio = await chamar(`/api/admin/impressoras/${idEmUso}`, {
+      metodo: 'DELETE',
+      token: tokenAdmin
+    });
+    assert.equal(recusadaPeloCardapio.status, 409);
+    assert.match(recusadaPeloCardapio.corpo.erro, /1 categoria do cardapio|1 categoria do cardápio/i);
+    // A chave estrangeira é ON DELETE SET NULL: se tivesse apagado, a categoria
+    // perderia o roteamento em silêncio. Nada disso aconteceu.
+    const [[categoriaIntacta]] = await banco.execute(
+      'SELECT impressora_id FROM categorias WHERE id = ? AND id_estabelecimento = ?',
+      [categoria.id, idLojaA]
+    );
+    assert.equal(Number(categoriaIntacta.impressora_id), idEmUso);
+    assert.equal((await listar()).some((i) => i.id === idEmUso), true);
+
+    // Solto o roteamento e aí some.
+    assert.equal((await chamar(`/api/admin/categorias/${categoria.id}`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { ...categoria, impressoraId: null }
+    })).status, 200);
+    assert.equal((await chamar(`/api/admin/impressoras/${idEmUso}`, {
+      metodo: 'DELETE',
+      token: tokenAdmin
+    })).status, 200);
+
+    // 3. Já imprimiu: o histórico segura, e a saída é desativar.
+    const comHistorico = await chamar(`/api/admin/impressoras/${idImpressoraCozinha}`, {
+      metodo: 'DELETE',
+      token: tokenAdmin
+    });
+    assert.equal(comHistorico.status, 409);
+    assert.match(comHistorico.corpo.erro, /hist[oó]rico/i);
+    assert.equal((await listar()).some((i) => i.id === idImpressoraCozinha), true);
+    // Desativar continua funcionando: é a saída que a mensagem indica.
+    const desativada = await chamar(`/api/admin/impressoras/${idImpressoraCozinha}/status`, {
+      metodo: 'PATCH',
+      token: tokenAdmin,
+      dados: { ativa: false }
+    });
+    assert.equal(desativada.status, 200);
+    assert.equal(desativada.corpo.impressora.ativa, false);
+    await chamar(`/api/admin/impressoras/${idImpressoraCozinha}/status`, {
+      metodo: 'PATCH',
+      token: tokenAdmin,
+      dados: { ativa: true }
+    });
+  });
+
+  test('uma loja não exclui a impressora da outra', async () => {
+    const [[tenantB]] = await banco.execute(
+      'SELECT id_estabelecimento FROM estabelecimentos WHERE slug = ?',
+      ['loja-b']
+    );
+    const idTenantB = Number(tenantB.id_estabelecimento);
+    const [alvo] = await banco.execute(`
+      INSERT INTO impressoras (id_estabelecimento, nome, host, porta, ativa)
+      VALUES (?, 'Descartavel da Loja B', '10.0.0.88', 9100, 1)
+    `, [idTenantB]);
+    const idAlvo = Number(alvo.insertId);
+
+    try {
+      // Sem uso nenhum: só o tenant impede. Se vazasse, apagaria de verdade.
+      const cruzada = await chamar(`/api/admin/impressoras/${idAlvo}`, {
+        metodo: 'DELETE',
+        token: tokenAdmin
+      });
+      assert.equal(cruzada.status, 404);
+      const [[continua]] = await banco.execute(
+        'SELECT nome FROM impressoras WHERE id = ? AND id_estabelecimento = ?',
+        [idAlvo, idTenantB]
+      );
+      assert.equal(continua.nome, 'Descartavel da Loja B');
+    } finally {
+      await banco.execute(
+        'DELETE FROM impressoras WHERE id = ? AND id_estabelecimento = ?',
+        [idAlvo, idTenantB]
+      );
+    }
+  });
+
   test('a impressora de caixa de uma loja não interfere na da outra', async () => {
     const [[tenantB]] = await banco.execute(
       'SELECT id_estabelecimento FROM estabelecimentos WHERE slug = ?',

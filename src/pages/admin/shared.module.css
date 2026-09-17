@@ -23,9 +23,13 @@
 .botaoPerigo { border: 1px solid rgba(255, 91, 91, 0.35); background: rgba(255, 91, 91, 0.08); color: var(--cor-erro-texto); }
 .botaoIcone { width: 38px; min-height: 38px; border: 1px solid var(--cor-borda); background: var(--cor-card-elevado); padding: 0; color: var(--cor-texto-medio); }
 .botaoIcone:hover { border-color: var(--cor-principal); color: var(--cor-principal); }
+/* Lixeira: mesma caixa do .botaoIcone, com o vermelho guardado para a acao
+   que nao da para desfazer. Vai junto com .botaoIcone, nao no lugar dele. */
+.botaoIconePerigo:hover:not(:disabled) { border-color: rgba(255, 91, 91, 0.5); color: var(--cor-erro-texto); }
 .botaoPrimario:disabled,
 .botaoSecundario:disabled,
-.botaoPerigo:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.botaoPerigo:disabled,
+.botaoIcone:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
 .botaoPagamento { width: 100%; margin-top: 16px; }
 

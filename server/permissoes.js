@@ -38,6 +38,7 @@ const ROTAS_ADMIN = [
   ['POST', /^\/api\/admin\/impressoras$/, 'configuracoes.editar'],
   ['PUT', /^\/api\/admin\/impressoras\/\d+$/, 'configuracoes.editar'],
   ['PATCH', /^\/api\/admin\/impressoras\/\d+\/status$/, 'configuracoes.editar'],
+  ['DELETE', /^\/api\/admin\/impressoras\/\d+$/, 'configuracoes.editar'],
   ['POST', /^\/api\/admin\/impressao\/dispositivos$/, 'configuracoes.editar'],
   ['DELETE', /^\/api\/admin\/impressao\/dispositivos\/\d+$/, 'configuracoes.editar'],
 

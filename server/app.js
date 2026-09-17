@@ -37,6 +37,7 @@ import {
   atualizarObservacaoComandaAdmin,
   atualizarQuantidadeItemComandaAdmin,
   atualizarStatusImpressora,
+  excluirImpressora,
   cancelarComandaAdmin,
   atualizarStatusPedido,
   buscarConfiguracao,
@@ -1478,6 +1479,21 @@ async function rotaAdmin({
       );
       if (!impressora) throw new ErroHttp(404, 'Impressora não encontrada.');
       responderJson(resposta, 200, { impressora });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+  if (requisicao.method === 'DELETE' && impressoraId) {
+    try {
+      const excluida = await excluirImpressora(
+        banco,
+        idEstabelecimento,
+        Number(impressoraId[1]),
+        administradorAutenticado.id
+      );
+      if (!excluida) throw new ErroHttp(404, 'Impressora não encontrada.');
+      responderJson(resposta, 200, { sucesso: true });
     } catch (erro) {
       tratarErroDados(erro);
     }
