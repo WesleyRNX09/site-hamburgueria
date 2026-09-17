@@ -4865,6 +4865,229 @@ if (!executarIntegracao) {
     assert.equal(roubo.status, 400);
   });
 
+  /*
+    Recibo de fechamento: o papel do caixa, com a conta inteira da mesa.
+    Ao contrário do ticket de cozinha, leva preço, total e o consumo todo.
+  */
+  async function comandaComConsumo(numeroMesa) {
+    const painel = await chamar('/api/admin/dados', { token: tokenAdmin });
+    const categoria = painel.corpo.categorias.find((c) => c.nome === 'Hambúrgueres');
+    const produto = painel.corpo.produtos.find((p) => p.categoriaId === categoria.id);
+    const outro = painel.corpo.produtos.find((p) => p.categoriaId === categoria.id && p.id !== produto.id);
+    const mesa = await chamar('/api/admin/mesas', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { numero: numeroMesa }
+    });
+    assert.equal(mesa.status, 201, JSON.stringify(mesa.corpo));
+    const comanda = await chamar('/api/admin/comandas', {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { mesaId: mesa.corpo.mesa.id }
+    });
+    assert.equal(comanda.status, 201);
+    return { comandaId: comanda.corpo.comanda.id, mesaId: mesa.corpo.mesa.id, numeroMesa, produto, outro };
+  }
+
+  async function trabalhosDeConta(comandaId) {
+    const [linhas] = await banco.execute(
+      "SELECT id FROM trabalhos_impressao WHERE origem = 'conta' AND comanda_id = ?",
+      [comandaId]
+    );
+    return linhas;
+  }
+
+  test('sem impressora de caixa, fechar a comanda não gera recibo e não trava o fechamento', async () => {
+    // Nenhuma marcada: é o estado de quem ainda não configurou o balcão.
+    await banco.execute('UPDATE impressoras SET eh_caixa = 0 WHERE eh_caixa = 1');
+    await confirmarFila();
+
+    const { comandaId, produto } = await comandaComConsumo('81');
+    await chamar(`/api/admin/comandas/${comandaId}/itens`, {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { produtoId: produto.id, quantidade: 1, adicionais: [] }
+    });
+    assert.equal((await chamar(`/api/admin/comandas/${comandaId}/lancar`, {
+      metodo: 'POST',
+      token: tokenAdmin
+    })).status, 200);
+    await confirmarFila();
+
+    const finalizada = await chamar(`/api/admin/comandas/${comandaId}/finalizar`, {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { pagamento: 'Cartão' }
+    });
+    // O que importa: a falta de impressora não atrapalha o caixa.
+    assert.equal(finalizada.status, 200, JSON.stringify(finalizada.corpo));
+    assert.deepEqual(await trabalhosDeConta(comandaId), []);
+    const fila = await filaDoDispositivo(tokenDispositivoImpressao);
+    assert.equal(fila.corpo.trabalhos.some((t) => t.conteudo.origem === 'conta'), false);
+  });
+
+  test('com impressora de caixa, o fechamento gera o recibo com o consumo inteiro e o total certo', async () => {
+    const caixa = await chamar(`/api/admin/impressoras/${idImpressoraCozinha}`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { nome: 'Cozinha', host: '192.168.0.50', porta: 9100, ehCaixa: true }
+    });
+    assert.equal(caixa.status, 200);
+    assert.equal(caixa.corpo.impressora.ehCaixa, true);
+    await confirmarFila();
+
+    const { comandaId, numeroMesa, produto, outro } = await comandaComConsumo('82');
+    const recado = 'Cliente com pressa';
+    assert.equal((await chamar(`/api/admin/comandas/${comandaId}/observacao`, {
+      metodo: 'PUT',
+      token: tokenAdmin,
+      dados: { observacao: recado }
+    })).status, 200);
+
+    // Item já lançado e impresso na cozinha antes do fechamento...
+    await chamar(`/api/admin/comandas/${comandaId}/itens`, {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { produtoId: produto.id, quantidade: 2, adicionais: [] }
+    });
+    assert.equal((await chamar(`/api/admin/comandas/${comandaId}/lancar`, {
+      metodo: 'POST',
+      token: tokenAdmin
+    })).status, 200);
+    await confirmarFila();
+
+    // ...e outro acrescentado depois. A conta cobra os dois, então o recibo
+    // precisa mostrar os dois.
+    await chamar(`/api/admin/comandas/${comandaId}/itens`, {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { produtoId: outro.id, quantidade: 1, adicionais: [] }
+    });
+
+    const finalizada = await chamar(`/api/admin/comandas/${comandaId}/finalizar`, {
+      metodo: 'POST',
+      token: tokenAdmin,
+      dados: { pagamento: 'Dinheiro', valorRecebido: '500,00' }
+    });
+    assert.equal(finalizada.status, 200, JSON.stringify(finalizada.corpo));
+
+    const fila = await filaDoDispositivo(tokenDispositivoImpressao);
+    const conta = fila.corpo.trabalhos.find((t) => t.conteudo.origem === 'conta');
+    assert.ok(conta, 'Esperava um trabalho de fechamento na fila.');
+    assert.equal(conta.impressora.nome, 'Cozinha');
+    assert.equal(String(conta.comandaId ?? conta.conteudo.comandaId ?? comandaId), String(comandaId));
+
+    const { cabecalho, itens, totalCentavos } = conta.conteudo;
+    assert.equal(cabecalho.numeroMesa, numeroMesa);
+    assert.equal(cabecalho.observacaoComanda, recado);
+
+    // O item já impresso na cozinha continua na conta: o recibo é o histórico
+    // inteiro, não o incremento que a cozinha recebeu.
+    assert.equal(itens.length, 2);
+    const impressoAntes = itens.find((i) => i.nome === produto.nome);
+    const acrescentadoDepois = itens.find((i) => i.nome === outro.nome);
+    assert.ok(impressoAntes && acrescentadoDepois);
+    assert.equal(impressoAntes.quantidade, 2);
+    assert.equal(acrescentadoDepois.quantidade, 1);
+    for (const item of itens) {
+      assert.match(item.hora, /^\d{2}:\d{2}$/);
+      assert.ok(Number.isInteger(item.precoUnitarioCentavos) && item.precoUnitarioCentavos > 0);
+      assert.equal(item.totalCentavos, item.precoUnitarioCentavos * item.quantidade);
+    }
+
+    /* A trava que mais importa: o total impresso é o mesmo que foi cobrado.
+       Se algum dia alguém somar de outro jeito num dos dois lados, quebra. */
+    const somaDosItens = itens.reduce((soma, item) => soma + item.totalCentavos, 0);
+    assert.equal(totalCentavos, somaDosItens);
+    assert.equal(totalCentavos, finalizada.corpo.pagamento.totalCentavos);
+
+    const ticket = ticketDoTrabalho(conta);
+    assert.ok(ticket.includes('FECHAMENTO DE CONTA'), ticket);
+    assert.ok(ticket.includes(`Mesa ${numeroMesa}`), ticket);
+    assert.ok(ticket.includes(`OBS DA MESA: ${recado}`), ticket);
+    // Linha de item: hora, quantidade, nome e valor colado na margem direita.
+    const linhaDoItem = ticket.split('\n').find((l) => l.includes(produto.nome) && l.includes('R$'));
+    assert.ok(linhaDoItem, ticket);
+    assert.match(linhaDoItem, /^\d{2}:\d{2} 2x .*\.+R\$ /);
+    assert.equal(linhaDoItem.length, 42, linhaDoItem);
+    // Total em corpo dobrado e negrito, como o título.
+    const reais = (centavos) => (centavos / 100).toFixed(2).replace('.', ',');
+    assert.ok(ticket.includes(`TOTAL: R$ ${reais(totalCentavos)}`), ticket);
+    assert.ok(ticket.includes(`${NEGRITO_LIGADO}TOTAL: R$`), ticket);
+
+    await confirmarFila();
+  });
+
+  test('recibo de fechamento de uma loja não aparece para o dispositivo da outra', async () => {
+    const [[tenantB]] = await banco.execute(
+      'SELECT id_estabelecimento FROM estabelecimentos WHERE slug = ?',
+      ['loja-b']
+    );
+    const idTenantB = Number(tenantB.id_estabelecimento);
+    const [impressoraB] = await banco.execute(`
+      INSERT INTO impressoras (id_estabelecimento, nome, host, porta, ativa, eh_caixa)
+      VALUES (?, 'Caixa da Loja B', '10.0.0.55', 9100, 1, 1)
+    `, [idTenantB]);
+    const [mesaB] = await banco.execute(
+      'INSERT INTO mesas (id_estabelecimento, numero, ativo) VALUES (?, 902, 1)',
+      [idTenantB]
+    );
+    const [comandaB] = await banco.execute(`
+      INSERT INTO comandas (id_estabelecimento, mesa_id, status)
+      VALUES (?, ?, 'Encerrada')
+    `, [idTenantB, mesaB.insertId]);
+    const [trabalhoB] = await banco.execute(`
+      INSERT INTO trabalhos_impressao
+        (id_estabelecimento, impressora_id, origem, comanda_id, conteudo_json, status)
+      VALUES (?, ?, 'conta', ?, ?, 'pendente')
+    `, [
+      idTenantB,
+      impressoraB.insertId,
+      comandaB.insertId,
+      JSON.stringify({
+        origem: 'conta',
+        cabecalho: { numeroMesa: '902' },
+        itens: [{ nome: 'Segredo da Loja B', quantidade: 1, totalCentavos: 1234, hora: '20:00' }],
+        totalCentavos: 1234
+      })
+    ]);
+
+    try {
+      // O tenant sai do token do dispositivo, nunca do host: nos dois
+      // endereços a resposta é a da loja A.
+      for (const baseUrl of [urlBase, urlBaseTenantB]) {
+        const fila = await filaDoDispositivo(tokenDispositivoImpressao, baseUrl);
+        assert.equal(fila.status, 200);
+        assert.equal(fila.corpo.trabalhos.some((t) => t.id === Number(trabalhoB.insertId)), false);
+        assert.equal(
+          JSON.stringify(fila.corpo.trabalhos).includes('Segredo da Loja B'),
+          false,
+          `conteúdo da loja B vazou em ${baseUrl}`
+        );
+      }
+
+      // E não consegue confirmar nem falhar o trabalho alheio.
+      for (const acao of ['confirmar', 'falhar']) {
+        const cruzada = await chamar(`/api/impressao/trabalhos/${trabalhoB.insertId}/${acao}`, {
+          metodo: 'POST',
+          token: tokenDispositivoImpressao
+        });
+        assert.equal(cruzada.status, 404, acao);
+      }
+      const [[intacto]] = await banco.execute(
+        'SELECT status, tentativas FROM trabalhos_impressao WHERE id = ?',
+        [trabalhoB.insertId]
+      );
+      assert.equal(intacto.status, 'pendente');
+      assert.equal(Number(intacto.tentativas), 0);
+    } finally {
+      await banco.execute('DELETE FROM trabalhos_impressao WHERE id = ?', [trabalhoB.insertId]);
+      await banco.execute('DELETE FROM comandas WHERE id = ?', [comandaB.insertId]);
+      await banco.execute('DELETE FROM mesas WHERE id = ?', [mesaB.insertId]);
+      await banco.execute('DELETE FROM impressoras WHERE id = ?', [impressoraB.insertId]);
+    }
+  });
+
   test('dispositivo revogado não busca mais trabalhos', async () => {
     const dispositivo = await chamar('/api/admin/impressao/dispositivos', {
       metodo: 'POST',

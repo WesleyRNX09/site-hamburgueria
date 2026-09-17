@@ -512,7 +512,7 @@ CREATE TABLE IF NOT EXISTS trabalhos_impressao (
   impresso_em DATETIME NULL,
   INDEX idx_trabalhos_impressao_pedido (pedido_id),
   INDEX idx_trabalhos_impressao_comanda (comanda_id),
-  CONSTRAINT chk_trabalhos_impressao_origem CHECK (origem IN ('comanda', 'delivery')),
+  CONSTRAINT chk_trabalhos_impressao_origem CHECK (origem IN ('comanda', 'delivery', 'conta')),
   CONSTRAINT chk_trabalhos_impressao_status
     CHECK (status IN ('pendente', 'impresso', 'falhou'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

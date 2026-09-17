@@ -118,4 +118,12 @@ A pasta `legado/` preserva o histórico anterior e não é executada pelo runner
   índice único parcial, e um UNIQUE na coluna barraria ter duas impressoras
   comuns na mesma loja. Coluna com DEFAULT: nenhuma linha é reescrita e
   nenhuma loja ganha impressora de caixa sem alguém escolher.
+- `023_recibo_de_fechamento.sql`: abre a constraint
+  `chk_trabalhos_impressao_origem` para o valor `conta`, o recibo de
+  fechamento que sai na impressora de caixa com o consumo inteiro da mesa,
+  preços e total. Usa `DROP CONSTRAINT` em vez de `DROP CHECK`: esta última é
+  sintaxe do MySQL 8.0.16+ e não está documentada no MariaDB, que é o motor de
+  produção. Em duas instruções separadas, para nenhum motor precisar remover e
+  recriar o mesmo nome dentro de um único ALTER. Nenhuma linha é reescrita:
+  `comanda` e `delivery` seguem válidos.
 - `legado/20260824_operacao_comercial.sql`: histórico anterior, fora do runner.

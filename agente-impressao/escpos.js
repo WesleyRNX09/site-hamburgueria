@@ -120,7 +120,43 @@ function horaLocal(iso) {
 */
 function tituloDoRecibo(conteudo, cabecalho) {
   if (conteudo.origem === 'delivery') return 'PEDIDO';
+  if (conteudo.origem === 'conta') return 'FECHAMENTO DE CONTA';
   return cabecalho.numeroMesa ? `COMANDA ${cabecalho.numeroMesa}` : 'COMANDA';
+}
+
+/* Centavos viram "1.234,56". O servidor manda dinheiro sempre em centavos; a
+   formatação é do papel, para não depender do locale de quem gravou. */
+function dinheiro(centavos) {
+  const total = Math.round(Number(centavos ?? 0));
+  const sinal = total < 0 ? '-' : '';
+  const absoluto = Math.abs(total);
+  const reais = String(Math.trunc(absoluto / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${sinal}${reais},${String(absoluto % 100).padStart(2, '0')}`;
+}
+
+/*
+  Linha de conta: descrição à esquerda, valor colado na margem direita e
+  pontinhos ligando os dois, para o olho não se perder no meio do papel.
+
+  Descrição comprida demais não espreme o valor: ela quebra em cima e o valor
+  desce sozinho, alinhado à direita.
+*/
+function linhaDeValor(descricao, valor, preenchimento = '.') {
+  const esquerda = semAcento(descricao);
+  const direita = semAcento(valor);
+  if (esquerda.length + direita.length + 1 > COLUNAS) {
+    return [...quebrar(esquerda, COLUNAS, '  '), direita.padStart(COLUNAS)];
+  }
+  return [`${esquerda}${preenchimento.repeat(COLUNAS - esquerda.length - direita.length)}${direita}`];
+}
+
+function cabecalhoConta(cabecalho) {
+  const linhas = [];
+  if (cabecalho.numeroMesa) linhas.push(`Mesa ${cabecalho.numeroMesa}`);
+  if (cabecalho.observacaoComanda) {
+    linhas.push(...quebrar(`OBS DA MESA: ${cabecalho.observacaoComanda}`, COLUNAS, '  '));
+  }
+  return linhas;
 }
 
 function cabecalhoComanda(cabecalho) {
@@ -163,28 +199,56 @@ export function montarRecibo(trabalho) {
 
   const linhasCabecalho = conteudo.origem === 'delivery'
     ? cabecalhoDelivery(cabecalho)
-    : cabecalhoComanda(cabecalho);
+    : conteudo.origem === 'conta'
+      ? cabecalhoConta(cabecalho)
+      : cabecalhoComanda(cabecalho);
   for (const texto of linhasCabecalho) partes.push(linha(texto));
   partes.push(linha(horaLocal(conteudo.emitidoEm)));
   /* Sem "Setor": o papel sai na impressora daquele setor, então quem o pega
      já sabe de onde ele veio. */
   partes.push(separador());
 
-  for (const item of conteudo.itens ?? []) {
-    for (const texto of quebrar(`${item.quantidade}x ${item.nome}`, COLUNAS, '   ')) {
-      partes.push(linha(texto));
-    }
-    for (const adicional of item.adicionais ?? []) {
-      for (const texto of quebrar(`+ ${adicional}`, COLUNAS - 2, '     ')) {
-        partes.push(linha(`  ${texto}`));
+  if (conteudo.origem === 'conta') {
+    /* Conta do cliente: hora do lançamento, o que foi consumido e quanto
+       custou, uma linha por item. Os adicionais entram logo abaixo porque já
+       estão embutidos no preço — é o que explica o valor cobrado. A
+       observação do item fica de fora: "sem cebola" é recado de cozinha, não
+       item de conta. */
+    for (const item of conteudo.itens ?? []) {
+      const hora = item.hora ? `${item.hora} ` : '';
+      const valor = `R$ ${dinheiro(item.totalCentavos)}`;
+      for (const texto of linhaDeValor(`${hora}${item.quantidade}x ${item.nome}`, valor)) {
+        partes.push(linha(texto));
+      }
+      for (const adicional of item.adicionais ?? []) {
+        for (const texto of quebrar(`+ ${adicional}`, COLUNAS - 2, '     ')) {
+          partes.push(linha(`  ${texto}`));
+        }
       }
     }
-    if (item.observacao) {
-      for (const texto of quebrar(`OBS: ${item.observacao}`, COLUNAS - 2, '       ')) {
-        partes.push(linha(`  ${texto}`));
+    partes.push(separador());
+    // O total é a única coisa que alguém confere de longe: vai em corpo
+    // dobrado e em negrito, como o título.
+    partes.push(COMANDOS.fonteDupla, COMANDOS.negritoLigado);
+    partes.push(linha(`TOTAL: R$ ${dinheiro(conteudo.totalCentavos)}`));
+    partes.push(COMANDOS.fonteNormal, COMANDOS.negritoDesligado);
+  } else {
+    for (const item of conteudo.itens ?? []) {
+      for (const texto of quebrar(`${item.quantidade}x ${item.nome}`, COLUNAS, '   ')) {
+        partes.push(linha(texto));
       }
+      for (const adicional of item.adicionais ?? []) {
+        for (const texto of quebrar(`+ ${adicional}`, COLUNAS - 2, '     ')) {
+          partes.push(linha(`  ${texto}`));
+        }
+      }
+      if (item.observacao) {
+        for (const texto of quebrar(`OBS: ${item.observacao}`, COLUNAS - 2, '       ')) {
+          partes.push(linha(`  ${texto}`));
+        }
+      }
+      partes.push(linha());
     }
-    partes.push(linha());
   }
 
   /* Fecha a lista e encerra. O número do trabalho não vai para o papel: quem

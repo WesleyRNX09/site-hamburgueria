@@ -670,7 +670,7 @@ export async function excluirAreaEntrega(banco, idEstabelecimento, id, administr
 const MAX_IMPRESSORAS = 50;
 const MAX_DISPOSITIVOS_IMPRESSAO = 20;
 const MAX_TRABALHOS_IMPRESSAO_LOTE = 50;
-const ORIGENS_IMPRESSAO = new Set(['comanda', 'delivery']);
+const ORIGENS_IMPRESSAO = new Set(['comanda', 'delivery', 'conta']);
 
 function mapearImpressora(linha) {
   return {
@@ -3585,6 +3585,25 @@ export async function atualizarQuantidadeItemComandaAdmin(
   });
 }
 
+/*
+  Total da comanda, em centavos. Um lugar só, usado pelo que cobra (a cópia
+  para o pedido) e pelo que imprime (o recibo de fechamento) — se o papel
+  somasse por conta própria, um dia divergiria da conta cobrada.
+
+  `preco_unitario_centavos` já embute os adicionais escolhidos no lançamento
+  (ver `buscarItensValidados`), então não há uma segunda parcela a somar.
+*/
+function somarItensComanda(itens) {
+  const total = itens.reduce(
+    (soma, item) => soma + Number(item.preco_unitario_centavos) * Number(item.quantidade),
+    0
+  );
+  if (!Number.isSafeInteger(total) || total < 0 || total > MAX_TOTAL_CENTAVOS) {
+    throw erroDominio('O valor total da comanda excede o limite permitido.');
+  }
+  return total;
+}
+
 async function copiarItensComandaParaPedido(conexao, idEstabelecimento, comandaId, pedidoId) {
   const [itens] = await conexao.execute(`
     SELECT id, produto_id, nome_produto, preco_unitario_centavos, quantidade, observacao
@@ -3624,13 +3643,7 @@ async function copiarItensComandaParaPedido(conexao, idEstabelecimento, comandaI
       `, [idEstabelecimento, resultado.insertId, adicional.adicional_id, adicional.nome_adicional, adicional.preco_centavos]);
     }
   }
-  const total = itens.reduce(
-    (soma, item) => soma + Number(item.preco_unitario_centavos) * Number(item.quantidade),
-    0
-  );
-  if (!Number.isSafeInteger(total) || total < 0 || total > MAX_TOTAL_CENTAVOS) {
-    throw erroDominio('O valor total da comanda excede o limite permitido.');
-  }
+  const total = somarItensComanda(itens);
   return total;
 }
 
@@ -3919,6 +3932,85 @@ export async function fecharComanda(
   `provedor` deixa o caminho pronto para um gateway externo assumir o
   pagamento sem mudar esta função.
 */
+/*
+  Recibo de fechamento: a conta da mesa, no papel do caixa.
+
+  Três diferenças em relação ao ticket de cozinha da parte 2:
+  - vai para a impressora marcada como caixa, e não para a praça que prepara
+    o item, então não passa pelo roteamento por categoria/produto;
+  - leva o consumo inteiro da comanda, e não só o que ainda não foi impresso:
+    é a conta, não um incremento de preparo;
+  - leva preço e total, que o papel da cozinha não mostra.
+
+  Os itens são exatamente os mesmos que `copiarItensComandaParaPedido` cobra
+  (todos, lançados ou não), pela mesma razão de usarmos `somarItensComanda`
+  nos dois: o que está impresso tem que fechar com o que foi cobrado.
+
+  Sem impressora de caixa configurada, devolve null e pronto. Fechar a conta
+  nunca pode falhar por causa de impressão — é a mesma regra que já vale para
+  a comanda e para o delivery.
+*/
+export async function gerarReciboFechamentoCaixa(conexao, idEstabelecimento, comandaId) {
+  const impressora = await buscarImpressoraDeCaixa(conexao, idEstabelecimento);
+  if (!impressora) return null;
+
+  const [comandas] = await conexao.execute(`
+    SELECT c.observacao, m.numero AS mesa_numero
+    FROM comandas c
+    INNER JOIN mesas m
+      ON m.id = c.mesa_id
+      AND m.id_estabelecimento = c.id_estabelecimento
+    WHERE c.id = ? AND c.id_estabelecimento = ?
+  `, [comandaId, idEstabelecimento]);
+  const comanda = comandas[0];
+  if (!comanda) return null;
+
+  const [itens] = await conexao.execute(`
+    SELECT id, nome_produto, preco_unitario_centavos, quantidade, observacao, criado_em
+    FROM comanda_itens
+    WHERE comanda_id = ? AND id_estabelecimento = ?
+    ORDER BY id
+  `, [comandaId, idEstabelecimento]);
+  if (itens.length === 0) return null;
+
+  const adicionais = await listarAdicionaisDeItens(
+    conexao,
+    idEstabelecimento,
+    'comanda_item_adicionais',
+    'comanda_item_id',
+    itens.map((item) => Number(item.id))
+  );
+
+  const conteudo = {
+    origem: 'conta',
+    impressora: impressora.nome,
+    emitidoEm: new Date().toISOString(),
+    cabecalho: {
+      numeroMesa: String(comanda.mesa_numero),
+      mesa: `Mesa ${comanda.mesa_numero}`,
+      observacaoComanda: comanda.observacao ?? null
+    },
+    itens: itens.map((item) => ({
+      nome: texto(item.nome_produto, 160),
+      quantidade: Number(item.quantidade),
+      // Em centavos, como tudo que é dinheiro aqui: quem formata é o papel.
+      precoUnitarioCentavos: Number(item.preco_unitario_centavos),
+      totalCentavos: Number(item.preco_unitario_centavos) * Number(item.quantidade),
+      hora: horaPtBr(item.criado_em),
+      observacao: texto(item.observacao, 1000) || null,
+      adicionais: (adicionais.get(Number(item.id)) ?? []).map((adicional) => adicional.nome)
+    })),
+    totalCentavos: somarItensComanda(itens)
+  };
+
+  const [resultado] = await conexao.execute(`
+    INSERT INTO trabalhos_impressao
+      (id_estabelecimento, impressora_id, origem, comanda_id, conteudo_json, status)
+    VALUES (?, ?, 'conta', ?, ?, 'pendente')
+  `, [idEstabelecimento, impressora.id, comandaId, JSON.stringify(conteudo)]);
+  return Number(resultado.insertId);
+}
+
 export async function finalizarComandaAdmin(
   banco,
   idEstabelecimento,
@@ -3984,6 +4076,10 @@ export async function finalizarComandaAdmin(
       UPDATE comandas SET status = 'Encerrada', pagamento = ?, encerrada_em = CURRENT_TIMESTAMP
       WHERE id = ? AND id_estabelecimento = ?
     `, [pagamento.forma, comandaId, idEstabelecimento]);
+    /* Na mesma transação do fechamento: ou a conta fecha e o recibo entra na
+      fila, ou nenhum dos dois acontece. Sem impressora de caixa, não gera
+      nada e o fechamento segue igual. */
+    await gerarReciboFechamentoCaixa(conexao, idEstabelecimento, comandaId);
     await conexao.execute(`
       INSERT INTO pagamentos
         (id_estabelecimento, pedido_id, comanda_id, forma, status,

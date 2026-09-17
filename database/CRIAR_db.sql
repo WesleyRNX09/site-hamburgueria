@@ -517,7 +517,7 @@ CREATE TABLE IF NOT EXISTS trabalhos_impressao (
   impresso_em DATETIME NULL,
   INDEX idx_trabalhos_impressao_pedido (pedido_id),
   INDEX idx_trabalhos_impressao_comanda (comanda_id),
-  CONSTRAINT chk_trabalhos_impressao_origem CHECK (origem IN ('comanda', 'delivery')),
+  CONSTRAINT chk_trabalhos_impressao_origem CHECK (origem IN ('comanda', 'delivery', 'conta')),
   CONSTRAINT chk_trabalhos_impressao_status
     CHECK (status IN ('pendente', 'impresso', 'falhou'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -851,7 +851,8 @@ INSERT INTO schema_migrations (versao, checksum) VALUES
   ('019_areas_entrega.sql', '74127c736bef982a1c643a8c6186e14bc9cdfde341539201e65bdf43fd703993'),
   ('020_adicionar_impressao.sql', '5f16a543cda46d77e573cb2fdb012c2928a89e4ea6afe0e30235e31db33d8658'),
   ('021_observacao_geral_da_comanda.sql', '6d8d045464806ecf39f4007e322bceb64dc1740b3eb44a70baa02ceb4f683e04'),
-  ('022_impressora_do_caixa.sql', '8d9bc13565eef36400913ae00b4571d5f416e6e35932ef58ded80a302a0f9879')
+  ('022_impressora_do_caixa.sql', '8d9bc13565eef36400913ae00b4571d5f416e6e35932ef58ded80a302a0f9879'),
+  ('023_recibo_de_fechamento.sql', 'b3f6f90862344408022a15928a096d950d64c54d0a27805f7787d9c8e9327c12')
 ON DUPLICATE KEY UPDATE versao = VALUES(versao);
 
 INSERT INTO estabelecimentos
