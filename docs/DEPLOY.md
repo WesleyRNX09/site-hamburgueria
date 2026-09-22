@@ -80,6 +80,23 @@ banco antes de servir. Novos arquivos são sempre gravados na estrutura isolada.
 - Mantenha cópias operacionais do MySQL pela infraestrutura escolhida e teste a restauração em ambiente isolado. `database/CRIAR_db.sql` recria uma instalação limpa, mas não substitui uma cópia dos dados reais de produção.
 - Antes de cada release, confira migrations pendentes e seus checksums. DDL do MySQL pode efetuar commit implícito, portanto planeje a recuperação antes da execução.
 - As migrations `002` a `004` expandem e associam o escopo multiempresa. Execute-as com novas escritas suspensas e valide `database/verificacoes/002_verificar_migracao_estabelecimento.sql` antes de liberar tráfego. As colunas continuam nullable até o backend passar a preencher e validar o estabelecimento em todas as operações.
+- As migrations `021` a `023` acompanham a impressão (observação da comanda,
+  impressora de caixa e recibo de fechamento). Só adicionam coluna opcional e
+  ampliam um CHECK: nenhuma linha é reescrita, e uma loja sem impressora
+  cadastrada continua funcionando igual. As três foram verificadas contra um
+  MariaDB 11.8.9 real, tanto no caminho de upgrade quanto no de instalação nova.
+- A `023` usa `DROP CONSTRAINT`, e não `DROP CHECK`. Esta última é sintaxe do
+  MySQL 8.0.16+ e é **erro de sintaxe no MariaDB**, que é o motor de produção.
+  Os testes locais rodam só em MySQL, então `server/multitenant-security.test.js`
+  recusa automaticamente sintaxe de um motor só nas migrations — trate uma falha
+  desse teste como bloqueio de release, não como implicância.
+- A partir do commit que fixa o fuso, o pool executa `SET time_zone = '+00:00'`
+  em toda conexão, então `CURRENT_TIMESTAMP` grava UTC independentemente do
+  relógio do servidor. Em produção isso **não muda comportamento**, porque o
+  MariaDB da Hostinger já resolve `NOW() = UTC_TIMESTAMP()`; o que a mudança
+  elimina é a dependência dessa coincidência. Confirme com
+  `SELECT @@session.time_zone, NOW(), UTC_TIMESTAMP();` depois do deploy: a
+  sessão deve responder `+00:00` e os dois horários devem coincidir.
 - Faça o primeiro acesso administrativo, troque a senha e cadastre os dados reais da loja antes de abrir pedidos.
 
 ## Recuperação de acesso
