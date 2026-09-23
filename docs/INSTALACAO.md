@@ -111,6 +111,12 @@ Regras importantes:
   `rejectUnauthorized: false`.
 - Use aspas no `.env` se uma senha possuir `#`, espaços ou caracteres que
   possam ser interpretados pelo formato do arquivo.
+- Para sobrescrever variáveis apenas na sua máquina, crie um `.env.local` na
+  raiz. Os scripts de desenvolvimento (`dev`, `dev:api`, `db:*`, `test`,
+  `build`, `seo:generate`) carregam `.env` e depois `.env.local`, então o
+  segundo vence nos campos que repetir e o `.env` continua valendo no resto.
+  O arquivo é opcional, já está no `.gitignore` e nunca deve ser commitado.
+  O script `start`, usado em produção, de propósito **não** lê `.env.local`.
 - `VITE_API_URL` deve ficar vazio quando frontend e API usam a mesma origem.
 - `CORS_ORIGINS` aceita uma lista separada por vírgulas com origens HTTPS
   exatas, mas é só um complemento: qualquer subdomínio de `DOMINIO_PRINCIPAL`

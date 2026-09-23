@@ -4,21 +4,21 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node --env-file-if-exists=.env server/dev.js",
+    "dev": "node --env-file-if-exists=.env --env-file-if-exists=.env.local server/dev.js",
     "dev:web": "vite",
-    "dev:api": "node --watch-path=./server --env-file-if-exists=.env server/index.js",
-    "build": "vite build && node --env-file-if-exists=.env scripts/generate-seo-files.js",
-    "db:check": "node --env-file-if-exists=.env server/db/check.js",
-    "db:migrate": "node --env-file-if-exists=.env server/db/migrate.js",
-    "db:prepare": "node --env-file-if-exists=.env server/db/prepare.js",
-    "criar-admin-inicial": "node --env-file-if-exists=.env server/db/create-initial-admin.js",
-    "criar-superadmin": "node --env-file-if-exists=.env server/db/create-superadmin.js",
-    "seo:generate": "node --env-file-if-exists=.env scripts/generate-seo-files.js",
+    "dev:api": "node --watch-path=./server --env-file-if-exists=.env --env-file-if-exists=.env.local server/index.js",
+    "build": "vite build && node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/generate-seo-files.js",
+    "db:check": "node --env-file-if-exists=.env --env-file-if-exists=.env.local server/db/check.js",
+    "db:migrate": "node --env-file-if-exists=.env --env-file-if-exists=.env.local server/db/migrate.js",
+    "db:prepare": "node --env-file-if-exists=.env --env-file-if-exists=.env.local server/db/prepare.js",
+    "criar-admin-inicial": "node --env-file-if-exists=.env --env-file-if-exists=.env.local server/db/create-initial-admin.js",
+    "criar-superadmin": "node --env-file-if-exists=.env --env-file-if-exists=.env.local server/db/create-superadmin.js",
+    "seo:generate": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/generate-seo-files.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node --env-file-if-exists=.env server/index.js",
-    "test": "node --env-file-if-exists=.env --test server/api.test.js server/multitenant-security.test.js agente-impressao/escpos.test.js src/utils/theme.test.js src/utils/horarios.test.js src/utils/dadosCliente.test.js",
-    "test:security": "node --env-file-if-exists=.env --test server/multitenant-security.test.js"
+    "test": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --test server/api.test.js server/multitenant-security.test.js agente-impressao/escpos.test.js src/utils/theme.test.js src/utils/horarios.test.js src/utils/dadosCliente.test.js",
+    "test:security": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --test server/multitenant-security.test.js"
   },
   "engines": {
     "node": ">=22.13.0"
