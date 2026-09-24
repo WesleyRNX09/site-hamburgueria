@@ -200,7 +200,7 @@ function FormularioEstabelecimento({ inicial, editando, opcoes, processando, onC
         <div>
           <span>{editando ? 'EDIÇÃO DO TENANT' : 'NOVO TENANT'}</span>
           <h2 id="titulo-formulario">{editando ? `Editar ${inicial.nomeFantasia}` : 'Cadastrar estabelecimento'}</h2>
-          <p>Plano e assinatura são controlados manualmente nesta etapa.</p>
+          <p>Plano, assinatura e vencimento são informativos: não tiram a loja do ar. Para bloquear o acesso, use Suspender na lista.</p>
         </div>
         <button type="button" className={styles.fechar} aria-label="Fechar formulário" onClick={onCancelar}><X size={20} /></button>
       </div>

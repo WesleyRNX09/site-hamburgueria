@@ -90,6 +90,15 @@ banco antes de servir. Novos arquivos são sempre gravados na estrutura isolada.
   Os testes locais rodam só em MySQL, então `server/multitenant-security.test.js`
   recusa automaticamente sintaxe de um motor só nas migrations — trate uma falha
   desse teste como bloqueio de release, não como implicância.
+- **Assinatura deixou de bloquear.** A partir desta versão só
+  `estabelecimentos.status` tira a loja do ar (`suspenso` ou `arquivado`);
+  `status_assinatura` e `vencimento_assinatura_em` ficam só informativos. Uma
+  loja que hoje está fora do ar **apenas** por assinatura bloqueada, cancelada,
+  inadimplente, suspensa ou vencida **volta ao ar** com o deploy. Antes de
+  publicar, liste essas lojas e suspenda pelo painel as que devem continuar
+  bloqueadas:
+  `SELECT id_estabelecimento, slug, status_assinatura, vencimento_assinatura_em FROM estabelecimentos WHERE status = 'ativo' AND (status_assinatura IN ('bloqueada', 'cancelada', 'inadimplente', 'suspensa') OR vencimento_assinatura_em < UTC_TIMESTAMP());`
+  Não há migration nesta mudança: é só a regra do backend.
 - A `024` fixa o ciclo de vida do estabelecimento (`ativo`, `suspenso`,
   `arquivado`) com um CHECK e converte `inativo` em `suspenso`, sem apagar
   nada. Ordem: **backup validado** → suspender escritas no painel do

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useApp } from '../../../context/appContext';
 import LogoEstabelecimento from '../../../components/LogoEstabelecimento';
+import { mensagemDeErroDeAcesso } from '../../../services/api';
 import styles from './index.module.css';
 
 function LoginAdmin() {
@@ -39,7 +40,7 @@ function LoginAdmin() {
                 replace: true
             });
         } catch (falha) {
-            setErro(falha.message);
+            setErro(mensagemDeErroDeAcesso(falha));
         } finally {
             setProcessando(false);
         }

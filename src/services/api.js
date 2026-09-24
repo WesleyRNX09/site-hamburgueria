@@ -4,10 +4,24 @@ const CHAVE_SESSAO_SUPERADMIN = 'hamburgueria_superadmin_sessao';
 const URL_API = import.meta.env.VITE_API_URL ?? '';
 
 export class ErroApi extends Error {
-  constructor(message, status) {
+  constructor(message, status, codigo = null) {
     super(message);
     this.status = status;
+    this.codigo = codigo;
   }
+}
+
+/* Loja suspensa ou arquivada: o servidor responde 403 com este código, sem
+   dizer qual dos dois nem o motivo. As telas de login trocam o erro por esta
+   mensagem fixa. */
+export const MENSAGEM_ESTABELECIMENTO_INDISPONIVEL = 'Este estabelecimento está temporariamente indisponível.';
+
+export function estabelecimentoIndisponivel(erro) {
+  return erro instanceof ErroApi && erro.codigo === 'estabelecimento_indisponivel';
+}
+
+export function mensagemDeErroDeAcesso(erro) {
+  return estabelecimentoIndisponivel(erro) ? MENSAGEM_ESTABELECIMENTO_INDISPONIVEL : erro.message;
 }
 
 const CHAVES_SESSAO = {
@@ -78,7 +92,13 @@ async function requisicao(caminho, { metodo = 'GET', dados, autenticacao } = {})
 
   const conteudo = await resposta.json().catch(() => ({}));
   if (resposta.status === 401 && enviouSessao) expirarSessao(autenticacao);
-  if (!resposta.ok) throw new ErroApi(conteudo.erro || 'Não foi possível concluir a operação.', resposta.status);
+  if (!resposta.ok) {
+    throw new ErroApi(
+      conteudo.erro || 'Não foi possível concluir a operação.',
+      resposta.status,
+      typeof conteudo.codigo === 'string' ? conteudo.codigo : null
+    );
+  }
   return conteudo;
 }
 

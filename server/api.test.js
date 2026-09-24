@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { request as requisicaoHttp } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
@@ -2502,6 +2503,108 @@ test('rotas de ciclo de vida respondem 404, 409 e 400 com a mensagem do servidor
     assert.deepEqual((await chamar('GET', '')).corpo.opcoes.statusEstabelecimento, ['ativo', 'suspenso', 'arquivado']);
   } finally {
     await fecharServidor(servidor);
+  }
+});
+
+test('index.html de loja suspensa ou arquivada vira página amigável; inexistente continua 404', async () => {
+  const pastaDist = await mkdtemp(join(tmpdir(), 'hamburgueria-dist-'));
+  await writeFile(join(pastaDist, 'index.html'), '<!doctype html><html><head><title>Modelo</title><meta name="description" content="" /></head><body><div id="root"></div><script type="module" src="/assets/app.js"></script></body></html>');
+  const lojas = new Map([
+    ['loja-ativa', { id_estabelecimento: 1, nome_fantasia: 'Loja Ativa', slug: 'loja-ativa', status: 'ativo' }],
+    ['loja-suspensa', {
+      id_estabelecimento: 2, nome_fantasia: 'Loja Suspensa Secreta', slug: 'loja-suspensa',
+      status: 'suspenso', motivo_suspensao: 'Calote de setembro'
+    }],
+    ['loja-arquivada', { id_estabelecimento: 3, nome_fantasia: 'Loja Arquivada Secreta', slug: 'loja-arquivada', status: 'arquivado' }]
+  ]);
+  const banco = {
+    async execute(sql, parametros = []) {
+      if (sql.includes('FROM estabelecimentos AS e')) {
+        const loja = lojas.get(parametros[0]);
+        return [loja ? [{
+          dominio_personalizado: null, plano: 'basico',
+          // Assinatura em dia não salva loja suspensa, nem vencida derruba a ativa.
+          status_assinatura: loja.status === 'ativo' ? 'bloqueada' : 'ativa',
+          vencimento_assinatura_em: loja.status === 'ativo' ? new Date('2000-01-01T00:00:00Z') : null,
+          ...loja
+        }] : []];
+      }
+      if (sql.includes('INNER JOIN configuracoes_estabelecimento ce')) {
+        return [[{ nome_loja: 'Loja Ativa', slug: 'loja-ativa' }]];
+      }
+      throw new Error(`Consulta inesperada no teste: ${sql}`);
+    }
+  };
+  const servidor = criarServidor({
+    banco,
+    pastaUploads: tmpdir(),
+    pastaDist,
+    dominioPrincipal: 'plataforma.test',
+    tenantDesenvolvimento: '',
+    jwtSecret: JWT_SECRET_TESTE
+  });
+  await aguardarServidor(servidor, 0);
+  // node:http em vez de fetch: o fetch do Node ignora o cabeçalho Host, e é
+  // pelo Host que o servidor descobre a loja.
+  const abrir = (slug, caminho = '/') => new Promise((resolver, rejeitar) => {
+    const pedido = requisicaoHttp({
+      host: '127.0.0.1',
+      port: servidor.address().port,
+      path: caminho,
+      headers: { Host: `${slug}.plataforma.test` }
+    }, (resposta) => {
+      let corpo = '';
+      resposta.setEncoding('utf8');
+      resposta.on('data', (parte) => { corpo += parte; });
+      resposta.on('end', () => resolver({ status: resposta.statusCode, headers: resposta.headers, corpo }));
+    });
+    pedido.on('error', rejeitar);
+    pedido.end();
+  });
+
+  try {
+    const ativa = await abrir('loja-ativa');
+    assert.equal(ativa.status, 200);
+    assert.match(ativa.corpo, /<title>Loja Ativa \| Cardápio e pedidos<\/title>/);
+
+    // Inexistente: o mesmo 404 em JSON de antes.
+    const inexistente = await abrir('loja-que-nao-existe');
+    assert.equal(inexistente.status, 404);
+    assert.match(inexistente.headers['content-type'], /application\/json/);
+
+    const corpos = [];
+    for (const slug of ['loja-suspensa', 'loja-arquivada']) {
+      for (const caminho of ['/', '/admin/login', '/garcom/acesso']) {
+        const resposta = await abrir(slug, caminho);
+        assert.equal(resposta.status, 403, `${slug}${caminho}`);
+        assert.match(resposta.headers['content-type'], /text\/html/);
+        assert.equal(resposta.headers['cache-control'], 'no-store');
+        const { corpo } = resposta;
+        assert.match(corpo, /^<!doctype html>/i);
+        assert.match(corpo, /não está disponível no momento/);
+        // Nada interno: nem motivo, nem nome, nem se é suspensa ou arquivada.
+        for (const proibido of ['Calote', 'Secreta', 'suspens', 'arquivad', '<script', '"erro"']) {
+          assert.equal(corpo.toLowerCase().includes(proibido.toLowerCase()), false, `${slug}${caminho}: ${proibido}`);
+        }
+        // Tema padrão da plataforma, não a identidade visual da loja.
+        assert.match(corpo, /#111111/);
+        assert.match(corpo, /#FFC107/);
+        corpos.push(corpo);
+      }
+    }
+    assert.equal(new Set(corpos).size, 1);
+
+    // API e uploads continuam em JSON 403, agora com o código para o navegador.
+    for (const caminho of ['/api/catalogo', '/uploads/estabelecimentos/2/logo-0a1b2c3d.png']) {
+      const resposta = await abrir('loja-suspensa', caminho);
+      assert.equal(resposta.status, 403, caminho);
+      const corpo = JSON.parse(resposta.corpo);
+      assert.equal(corpo.codigo, 'estabelecimento_indisponivel', caminho);
+      assert.equal(resposta.corpo.includes('Calote'), false, caminho);
+    }
+  } finally {
+    await fecharServidor(servidor);
+    await rm(pastaDist, { recursive: true, force: true });
   }
 });
 

@@ -209,6 +209,8 @@ rede interna ou pelo próprio servidor.
 1. Acesse `https://SEU_DOMINIO/superadmin/login`.
 2. Entre com o superadministrador criado no passo anterior.
 3. Cadastre o estabelecimento, o slug, o plano e a situação da assinatura.
+   Plano, status da assinatura e vencimento são informativos: não tiram a
+   loja do ar.
 4. Preencha a identidade visual e crie o primeiro administrador no mesmo
    formulário.
 5. Entre pelo subdomínio do estabelecimento e conclua cardápio, áreas de
@@ -224,6 +226,16 @@ slug para confirmar; também encerra sessões) e **Desarquivar** (volta como
 suspenso). A edição não altera o status e recusa estabelecimento arquivado.
 Arquivados somem da lista padrão; marque "Incluir arquivados" para vê-los.
 Cada ação fica registrada na auditoria com o status antes e depois.
+
+Só o status decide se a loja atende (`server/tenant.js`,
+`estabelecimentoLiberado`): `ativo` atende; `suspenso` e `arquivado` bloqueiam
+do mesmo jeito o site público, o painel, o garçom, os uploads e o agente de
+impressão. Quem abre o endereço de uma loja bloqueada vê a página genérica
+"Estabelecimento indisponível", com o tema padrão e sem nome nem motivo; a API
+responde `403` em JSON. Endereço de loja que não existe continua em `404`. Em
+`npm run dev` o `index.html` vem do Vite, então essa página só aparece com o
+build servido pelo backend (`npm run build` + `npm start`); no dev, as telas de
+login mostram "Este estabelecimento está temporariamente indisponível.".
 
 Slugs usados pela plataforma (`www`, `api`, `admin`, `superadmin`, `app`,
 `mail`, `static`, `uploads`, entre outros) são recusados na criação e na troca
@@ -309,7 +321,11 @@ Antes de liberar tráfego, confirme:
 - duas lojas exibindo nomes, temas e cardápios diferentes;
 - token de administrador e garçom de uma loja recusado na outra;
 - pedido e imagem de uma loja retornando `403` ou `404` na outra;
-- loja suspensa, arquivada, bloqueada ou vencida sem acesso operacional;
+- loja suspensa ou arquivada sem acesso operacional: a API responde `403`
+  (com `codigo: "estabelecimento_indisponivel"`) e o endereço da loja no
+  navegador mostra a página "Estabelecimento indisponível", sem o motivo;
+- loja ativa com assinatura bloqueada ou vencida continuando no ar — a
+  assinatura é só informativa;
 - `/api/saude` monitorado e sem exposição pública da porta interna;
 - `/uploads/` passando pelo backend e persistindo após novo deploy.
 

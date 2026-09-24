@@ -10,6 +10,7 @@ import { buscarAdicional, buscarProduto, criarProduto } from './catalog.js';
 import {
   acompanharPedido,
   atualizarStatusPedido,
+  autenticarDispositivoImpressao,
   confirmarPagamento,
   listarDadosAdmin,
   listarDadosGarcom
@@ -22,7 +23,11 @@ import {
 } from './permissoes.js';
 import { aguardarServidor, fecharServidor } from './runtime.js';
 import { criarHashSenha, criarHashToken, criarJwt } from './security.js';
-import { resolverEstabelecimento } from './tenant.js';
+import {
+  CODIGO_ESTABELECIMENTO_INDISPONIVEL,
+  estabelecimentoLiberado,
+  resolverEstabelecimento
+} from './tenant.js';
 import { CHAVES_PERMISSOES, PERMISSOES_PADRAO_ADMINISTRADOR } from '../src/utils/permissoes.js';
 
 const pastaProjeto = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -51,53 +56,26 @@ async function erroDa(promessa) {
   assert.fail('A operação deveria ter sido recusada.');
 }
 
-test('recusa domínio desconhecido, loja desativada e assinatura bloqueada ou vencida', async () => {
-  const tenants = new Map([
-    ['ativa', linhaTenant(1, 'ativa')],
-    ['inativa', linhaTenant(2, 'inativa', { status: 'inativo' })],
-    ['bloqueada', linhaTenant(3, 'bloqueada', { status_assinatura: 'bloqueada' })],
-    ['vencida', linhaTenant(4, 'vencida', {
-      vencimento_assinatura_em: new Date('2000-01-01T00:00:00.000Z')
-    })]
-  ]);
-  const banco = {
-    async execute(sql, parametros) {
-      assert.match(sql, /FROM estabelecimentos AS e/i);
-      return [[tenants.get(parametros[0])].filter(Boolean)];
-    }
-  };
-  const opcoes = { dominioPrincipal: 'exemplo.test' };
-  const requisicao = (slug) => ({ headers: { host: `${slug}.exemplo.test` } });
-
-  assert.equal((await resolverEstabelecimento(banco, requisicao('ativa'), opcoes)).id, 1);
-
-  const desconhecida = await erroDa(resolverEstabelecimento(banco, requisicao('ausente'), opcoes));
-  assert.equal(desconhecida.status, 404);
-  const inativa = await erroDa(resolverEstabelecimento(banco, requisicao('inativa'), opcoes));
-  assert.equal(inativa.status, 403);
-  const bloqueada = await erroDa(resolverEstabelecimento(banco, requisicao('bloqueada'), opcoes));
-  assert.equal(bloqueada.status, 403);
-  const vencida = await erroDa(resolverEstabelecimento(banco, requisicao('vencida'), opcoes));
-  assert.equal(vencida.status, 403);
-});
-
-test('todo status de assinatura bloqueado e o vencimento no passado recusam o acesso público', async () => {
+test('só o status libera a loja: assinatura e vencimento não bloqueiam, suspenso e arquivado sim', async () => {
   const umDiaMs = 24 * 60 * 60 * 1000;
   const ontem = new Date(Date.now() - umDiaMs);
   const amanha = new Date(Date.now() + umDiaMs);
   const tenants = new Map([
-    ['liberada', linhaTenant(1, 'liberada')],
-    ['liberada-em-dia', linhaTenant(2, 'liberada-em-dia', { vencimento_assinatura_em: amanha })],
-    ['inadimplente', linhaTenant(3, 'inadimplente', { status_assinatura: 'inadimplente' })],
-    ['suspensa', linhaTenant(4, 'suspensa', { status_assinatura: 'suspensa' })],
-    ['bloqueada', linhaTenant(5, 'bloqueada', { status_assinatura: 'bloqueada' })],
-    ['cancelada', linhaTenant(6, 'cancelada', { status_assinatura: 'cancelada' })],
-    ['maiuscula', linhaTenant(7, 'maiuscula', { status_assinatura: 'BLOQUEADA' })],
-    ['vencida', linhaTenant(8, 'vencida', { vencimento_assinatura_em: ontem })],
-    ['vencida-e-ativa', linhaTenant(9, 'vencida-e-ativa', {
-      status_assinatura: 'ativa',
-      vencimento_assinatura_em: ontem
-    })]
+    ['ativa-em-dia', linhaTenant(1, 'ativa-em-dia', { vencimento_assinatura_em: amanha })],
+    // Loja ativa continua no ar com qualquer situação de assinatura.
+    ['ativa-bloqueada', linhaTenant(2, 'ativa-bloqueada', { status_assinatura: 'bloqueada' })],
+    ['ativa-vencida', linhaTenant(3, 'ativa-vencida', { vencimento_assinatura_em: ontem })],
+    ['ativa-inadimplente', linhaTenant(4, 'ativa-inadimplente', { status_assinatura: 'inadimplente' })],
+    ['ativa-cancelada', linhaTenant(5, 'ativa-cancelada', {
+      status_assinatura: 'CANCELADA', vencimento_assinatura_em: ontem
+    })],
+    // Suspensa ou arquivada fica fora do ar mesmo com assinatura em dia.
+    ['suspensa-em-dia', linhaTenant(6, 'suspensa-em-dia', {
+      status: 'suspenso', vencimento_assinatura_em: amanha, motivo_suspensao: 'Dívida de R$ 900 com o fornecedor'
+    })],
+    ['arquivada-em-dia', linhaTenant(7, 'arquivada-em-dia', { status: 'arquivado', vencimento_assinatura_em: amanha })],
+    // Valor antigo, anterior à migration 024: não é 'ativo', então não libera.
+    ['legado-inativo', linhaTenant(8, 'legado-inativo', { status: 'inativo' })]
   ]);
   const banco = {
     async execute(sql, parametros) {
@@ -108,14 +86,93 @@ test('todo status de assinatura bloqueado e o vencimento no passado recusam o ac
   const opcoes = { dominioPrincipal: 'exemplo.test' };
   const requisicao = (slug) => ({ headers: { host: `${slug}.exemplo.test` } });
 
-  // Assinatura em dia continua atendendo o público normalmente.
-  assert.equal((await resolverEstabelecimento(banco, requisicao('liberada'), opcoes)).id, 1);
-  assert.equal((await resolverEstabelecimento(banco, requisicao('liberada-em-dia'), opcoes)).id, 2);
+  for (const [slug, id] of [['ativa-em-dia', 1], ['ativa-bloqueada', 2], ['ativa-vencida', 3],
+    ['ativa-inadimplente', 4], ['ativa-cancelada', 5]]) {
+    assert.equal((await resolverEstabelecimento(banco, requisicao(slug), opcoes)).id, id, slug);
+  }
 
-  for (const slug of ['inadimplente', 'suspensa', 'bloqueada', 'cancelada', 'maiuscula',
-    'vencida', 'vencida-e-ativa']) {
+  const mensagens = new Set();
+  for (const slug of ['suspensa-em-dia', 'arquivada-em-dia', 'legado-inativo']) {
     const erro = await erroDa(resolverEstabelecimento(banco, requisicao(slug), opcoes));
-    assert.equal(erro.status, 403, `O tenant "${slug}" deveria ter sido recusado com 403.`);
+    assert.equal(erro.status, 403, slug);
+    assert.equal(erro.codigo, CODIGO_ESTABELECIMENTO_INDISPONIVEL, slug);
+    assert.equal(erro.message.includes('R$ 900'), false);
+    mensagens.add(erro.message);
+  }
+  // Suspensa e arquivada recebem exatamente a mesma resposta.
+  assert.equal(mensagens.size, 1);
+
+  // Inexistente continua 404, sem o código de indisponível.
+  const desconhecida = await erroDa(resolverEstabelecimento(banco, requisicao('ausente'), opcoes));
+  assert.equal(desconhecida.status, 404);
+  assert.equal(desconhecida.codigo, undefined);
+
+  // A regra em si: só 'ativo' libera.
+  assert.equal(estabelecimentoLiberado({ status: 'ativo', status_assinatura: 'bloqueada' }), true);
+  for (const status of ['suspenso', 'arquivado', 'inativo', '', null, undefined]) {
+    assert.equal(estabelecimentoLiberado({ status, status_assinatura: 'ativa' }), false, String(status));
+  }
+  assert.equal(estabelecimentoLiberado(null), false);
+});
+
+test('agente de impressão segue a mesma regra: só o status da loja libera a fila', async () => {
+  const umDiaMs = 24 * 60 * 60 * 1000;
+  const ontem = new Date(Date.now() - umDiaMs);
+  const amanha = new Date(Date.now() + umDiaMs);
+  const tokenDe = (n) => `token-dispositivo-${n}-${'x'.repeat(40)}`;
+  const lojas = new Map([
+    [1, { status: 'ativo', status_assinatura: 'bloqueada', vencimento_assinatura_em: ontem }],
+    [2, { status: 'suspenso', status_assinatura: 'ativa', vencimento_assinatura_em: amanha }],
+    [3, { status: 'arquivado', status_assinatura: 'ativa', vencimento_assinatura_em: amanha }]
+  ]);
+  const dispositivos = new Map([1, 2, 3].map((id) => [criarHashToken(tokenDe(id)), {
+    id: id * 10, nome: `Balcão ${id}`, id_estabelecimento: id
+  }]));
+  const contatos = [];
+  const banco = {
+    async execute(sql, parametros = []) {
+      if (sql.includes('FROM dispositivos_impressao d')) {
+        // A regra não está no SQL: a consulta devolve a loja com o status e
+        // quem decide é estabelecimentoLiberado, a mesma função do host.
+        assert.equal(/e\.status\s*=/.test(sql), false);
+        const dispositivo = dispositivos.get(parametros[0]);
+        return [dispositivo ? [{ ...dispositivo, ...lojas.get(dispositivo.id_estabelecimento) }] : []];
+      }
+      if (sql.includes('UPDATE dispositivos_impressao')) {
+        contatos.push(Number(parametros[1]));
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.includes('FROM trabalhos_impressao t')) {
+        assert.equal(parametros[0], 1);
+        return [[]];
+      }
+      throw new Error(`Consulta inesperada no teste: ${sql}`);
+    }
+  };
+
+  assert.equal((await autenticarDispositivoImpressao(banco, tokenDe(1))).idEstabelecimento, 1);
+  assert.equal(await autenticarDispositivoImpressao(banco, tokenDe(2)), null);
+  assert.equal(await autenticarDispositivoImpressao(banco, tokenDe(3)), null);
+
+  const servidor = criarServidor({
+    banco,
+    pastaUploads: resolve(pastaProjeto, 'server/uploads'),
+    tenantDesenvolvimento: '',
+    jwtSecret: segredoJwt
+  });
+  try {
+    await aguardarServidor(servidor, 0);
+    const url = `http://127.0.0.1:${servidor.address().port}`;
+    const fila = (n) => fetch(`${url}/api/impressao/trabalhos`, {
+      headers: { Authorization: `Bearer ${tokenDe(n)}` }
+    });
+    assert.equal((await fila(1)).status, 200);
+    assert.equal((await fila(2)).status, 401);
+    assert.equal((await fila(3)).status, 401);
+    // Loja fora do ar nem registra o contato do agente.
+    assert.deepEqual([...new Set(contatos)], [1]);
+  } finally {
+    await fecharServidor(servidor);
   }
 });
 
@@ -1319,6 +1376,65 @@ test('só o superadministrador suspende, reativa, arquiva ou desarquiva um estab
     assert.equal(suspensao.status, 200);
     assert.equal(lojas.get(22).status, 'suspenso');
     assert.equal(lojas.get(11).status, 'ativo');
+  } finally {
+    await fechar();
+  }
+});
+
+test('ação em andamento é cortada na requisição seguinte à suspensão, só na loja suspensa', async () => {
+  const { banco, tokens, escritas } = bancoCicloDeVida();
+  const { urlA, urlB, tokenSuperadmin, fechar } = await servidoresCicloDeVida(banco);
+  const chamar = (url, caminho, { metodo = 'GET', token, corpo } = {}) => fetch(`${url}${caminho}`, {
+    method: metodo,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: corpo === undefined ? undefined : JSON.stringify(corpo)
+  });
+
+  try {
+    // Garçom e admin da loja A no meio do turno, com sessão válida.
+    assert.equal((await chamar(urlA, '/api/garcom/sessao', { token: tokens.garcomA })).status, 200);
+    assert.equal((await chamar(urlA, '/api/admin/sessao', { token: tokens.adminA })).status, 200);
+
+    const suspensao = await chamar(urlA, '/api/superadmin/estabelecimentos/11/suspender', {
+      metodo: 'POST',
+      token: tokenSuperadmin,
+      corpo: { motivo: 'Motivo interno que não pode vazar' }
+    });
+    assert.equal(suspensao.status, 200);
+
+    // A próxima ação de cada um já cai no bloqueio da loja, antes de qualquer
+    // consulta de comanda, pagamento ou pedido.
+    const pedidos = [
+      ['/api/garcom/comandas/1/itens', { metodo: 'POST', token: tokens.garcomA, corpo: { produtoId: 1, quantidade: 1 } }],
+      ['/api/garcom/comandas/1/enviar', { metodo: 'POST', token: tokens.garcomA, corpo: {} }],
+      ['/api/admin/comandas/1/finalizar', { metodo: 'POST', token: tokens.adminA, corpo: { pagamento: 'Dinheiro' } }],
+      ['/api/pedidos', { metodo: 'POST', corpo: { itens: [] } }],
+      ['/api/catalogo', {}]
+    ];
+    for (const [caminho, opcoes] of pedidos) {
+      const resposta = await chamar(urlA, caminho, opcoes);
+      assert.equal(resposta.status, 403, caminho);
+      const corpo = await resposta.json();
+      assert.equal(corpo.codigo, 'estabelecimento_indisponivel', caminho);
+      assert.equal(JSON.stringify(corpo).includes('Motivo interno'), false, caminho);
+    }
+    assert.equal(escritas.some(({ sql }) => /comanda|pedido|pagamento/i.test(sql)), false);
+
+    // Loja B segue atendendo normalmente, com as mesmas sessões.
+    assert.equal((await chamar(urlB, '/api/garcom/sessao', { token: tokens.garcomB })).status, 200);
+    assert.equal((await chamar(urlB, '/api/admin/sessao', { token: tokens.adminB })).status, 200);
+
+    // Arquivada, a loja A continua bloqueada do mesmo jeito, e a B intacta.
+    assert.equal((await chamar(urlA, '/api/superadmin/estabelecimentos/11/arquivar', {
+      metodo: 'POST', token: tokenSuperadmin, corpo: { confirmacaoSlug: 'loja-a' }
+    })).status, 200);
+    const arquivada = await chamar(urlA, '/api/catalogo');
+    assert.equal(arquivada.status, 403);
+    assert.equal((await arquivada.json()).codigo, 'estabelecimento_indisponivel');
+    assert.equal((await chamar(urlB, '/api/admin/sessao', { token: tokens.adminB })).status, 200);
   } finally {
     await fechar();
   }

@@ -4,7 +4,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { useApp } from '../../context/appContext';
 import LogoEstabelecimento from '../../components/LogoEstabelecimento';
-import { validarAcessoGarcom } from '../../services/api';
+import {
+  estabelecimentoIndisponivel,
+  mensagemDeErroDeAcesso,
+  validarAcessoGarcom
+} from '../../services/api';
 import styles from './garcom.module.css';
 
 /* O QR Code da equipe é o mesmo para todos, então o aparelho pode guardá-lo: o
@@ -53,6 +57,7 @@ function AcessoGarcom() {
   const navigate = useNavigate();
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
+  const [lojaIndisponivel, setLojaIndisponivel] = useState(false);
   const [processando, setProcessando] = useState(false);
   const [acesso, setAcesso] = useState('');
   /* O código guardado é lido uma vez: depois disso quem manda é o resultado da
@@ -73,9 +78,13 @@ function AcessoGarcom() {
       })
       .catch((falha) => {
         if (!ativo) return;
-        esquecerAcesso();
+        /* Loja fora do ar não invalida o QR Code: o código guardado fica no
+           aparelho e volta a valer quando a loja for reativada. */
+        const indisponivel = estabelecimentoIndisponivel(falha);
+        if (!indisponivel) esquecerAcesso();
+        setLojaIndisponivel(indisponivel);
         setAcesso('');
-        setErro(falha.message);
+        setErro(mensagemDeErroDeAcesso(falha));
       })
       .finally(() => {
         if (ativo) setValidando(false);
@@ -95,7 +104,7 @@ function AcessoGarcom() {
       }
       navigate('/garcom/mesas');
     } catch (falha) {
-      setErro(falha.message);
+      setErro(mensagemDeErroDeAcesso(falha));
     } finally {
       setProcessando(false);
     }
@@ -126,9 +135,11 @@ function AcessoGarcom() {
         {!validando && !acesso && (
           <>
             {erro && <div className={styles.erro} role="alert">{erro}</div>}
-            <p className={styles.ajudaAcesso}>
-              O mesmo QR Code serve para toda a equipe. Se ele foi trocado, peça o código atual ao gerente.
-            </p>
+            {!lojaIndisponivel && (
+              <p className={styles.ajudaAcesso}>
+                O mesmo QR Code serve para toda a equipe. Se ele foi trocado, peça o código atual ao gerente.
+              </p>
+            )}
           </>
         )}
 

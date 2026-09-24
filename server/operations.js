@@ -21,6 +21,7 @@ import {
   criarIndiceSenhaGarcom,
   verificarSenha
 } from './security.js';
+import { estabelecimentoLiberado } from './tenant.js';
 
 const PAGAMENTOS = new Set(['Pix', 'Cartão na entrega', 'Cartão na retirada', 'Cartão', 'Dinheiro', 'A definir']);
 const PAGAMENTOS_DELIVERY = new Set(['Pix', 'Cartão na entrega', 'Dinheiro']);
@@ -1069,16 +1070,17 @@ export async function autenticarDispositivoImpressao(banco, token) {
   const informado = typeof token === 'string' ? token.trim() : '';
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(informado)) return null;
   const [linhas] = await banco.execute(`
-    SELECT d.id, d.nome, d.id_estabelecimento
+    SELECT d.id, d.nome, d.id_estabelecimento, e.status
     FROM dispositivos_impressao d
     INNER JOIN estabelecimentos e
       ON e.id_estabelecimento = d.id_estabelecimento
-      AND e.status = 'ativo'
     WHERE d.token_hash = ? AND d.revogado_em IS NULL
     LIMIT 1
   `, [criarHashToken(informado)]);
   const dispositivo = linhas[0];
-  if (!dispositivo) return null;
+  // Mesma regra do host (server/tenant.js): loja fora do ar não libera a fila,
+  // e o agente recebe o mesmo 401 de token inválido, sem saber o motivo.
+  if (!dispositivo || !estabelecimentoLiberado(dispositivo)) return null;
   await banco.execute(`
     UPDATE dispositivos_impressao SET ultimo_contato_em = CURRENT_TIMESTAMP
     WHERE id = ? AND id_estabelecimento = ?

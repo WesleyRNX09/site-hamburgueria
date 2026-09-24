@@ -1,14 +1,27 @@
 const HOSTS_LOCAIS = new Set(['localhost', '127.0.0.1', '::1']);
-const STATUS_ASSINATURA_BLOQUEADOS = new Set([
-  'bloqueada',
-  'cancelada',
-  'inadimplente',
-  'suspensa'
-]);
 
-function erroTenant(mensagem, status) {
+/*
+  Código devolvido junto do 403 de loja fora do ar. O navegador usa para
+  mostrar a mensagem amigável, e o servidor para trocar o index.html pela
+  página de "indisponível". Não diz se a loja está suspensa ou arquivada.
+*/
+export const CODIGO_ESTABELECIMENTO_INDISPONIVEL = 'estabelecimento_indisponivel';
+const MENSAGEM_ESTABELECIMENTO_INDISPONIVEL = 'Este estabelecimento está temporariamente indisponível.';
+
+/*
+  Regra ÚNICA de liberação da loja, usada pelo host (resolverEstabelecimento)
+  e pelo agente de impressão. Só o status decide: 'ativo' atende; 'suspenso' e
+  'arquivado' ficam fora do ar do mesmo jeito. Plano, status da assinatura e
+  vencimento são informativos no cadastro do superadmin e não bloqueiam nada.
+*/
+export function estabelecimentoLiberado(estabelecimento) {
+  return String(estabelecimento?.status ?? '').trim().toLowerCase() === 'ativo';
+}
+
+function erroTenant(mensagem, status, codigo) {
   const erro = new Error(mensagem);
   erro.status = status;
+  if (codigo) erro.codigo = codigo;
   return erro;
 }
 
@@ -72,19 +85,10 @@ export async function resolverEstabelecimento(banco, requisicao, opcoes = {}) {
   `, [identificador.valor]);
   const estabelecimento = linhas[0];
   if (!estabelecimento) throw erroTenant('Estabelecimento não encontrado para este domínio.', 404);
-  if (String(estabelecimento.status).toLowerCase() !== 'ativo') {
-    throw erroTenant('Este estabelecimento está desativado.', 403);
-  }
-
-  const statusAssinatura = String(estabelecimento.status_assinatura ?? '').toLowerCase();
-  if (STATUS_ASSINATURA_BLOQUEADOS.has(statusAssinatura)) {
-    throw erroTenant('O acesso deste estabelecimento está temporariamente bloqueado.', 403);
-  }
-  const vencimento = estabelecimento.vencimento_assinatura_em
-    ? new Date(estabelecimento.vencimento_assinatura_em)
-    : null;
-  if (vencimento && !Number.isNaN(vencimento.getTime()) && vencimento < new Date()) {
-    throw erroTenant('A assinatura deste estabelecimento está vencida.', 403);
+  // Mensagem genérica de propósito: nem o motivo da suspensão nem a diferença
+  // entre suspenso e arquivado saem daqui.
+  if (!estabelecimentoLiberado(estabelecimento)) {
+    throw erroTenant(MENSAGEM_ESTABELECIMENTO_INDISPONIVEL, 403, CODIGO_ESTABELECIMENTO_INDISPONIVEL);
   }
 
   return {

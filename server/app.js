@@ -119,7 +119,7 @@ import {
   redefinirSenhaAdministrador,
   suspenderEstabelecimento
 } from './superadmin.js';
-import { resolverEstabelecimento } from './tenant.js';
+import { CODIGO_ESTABELECIMENTO_INDISPONIVEL, resolverEstabelecimento } from './tenant.js';
 
 const LIMITE_CORPO = 2 * 1024 * 1024;
 const DURACAO_SESSAO_ADMIN_MS = 12 * 60 * 60 * 1000;
@@ -1997,6 +1997,51 @@ async function servirUploadIsolado({
   );
 }
 
+/*
+  Página de loja fora do ar (suspensa ou arquivada, sem distinguir). Texto fixo
+  e sem nenhum dado do estabelecimento — nem nome, nem identidade visual, nem
+  motivo —, com o tema padrão da plataforma. Só CSS inline (a CSP permite
+  estilo inline e bloqueia script) e sem cache, para a loja voltar a aparecer
+  assim que for reativada.
+*/
+const PAGINA_ESTABELECIMENTO_INDISPONIVEL = `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Estabelecimento indisponível</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { display: grid; min-height: 100vh; margin: 0; place-items: center; background: #111111; padding: 16px; color: #FFFFFF; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  main { width: min(440px, 100%); border: 1px solid #2A2A2A; border-top: 4px solid #FFC107; border-radius: 16px; background: #181818; padding: 32px 24px; text-align: center; }
+  .icone { display: grid; width: 56px; height: 56px; margin: 0 auto 18px; place-items: center; border: 1px solid rgba(255, 193, 7, .4); border-radius: 50%; background: #141414; color: #FFC107; font-size: 26px; font-weight: 800; }
+  h1 { margin: 0 0 10px; font-size: 22px; line-height: 1.25; }
+  p { margin: 0; color: #C8C8C8; font-size: 15px; line-height: 1.55; }
+</style>
+</head>
+<body>
+<main>
+  <div class="icone" aria-hidden="true">!</div>
+  <h1>Estabelecimento indisponível</h1>
+  <p>Este estabelecimento não está disponível no momento. Tente novamente mais tarde.</p>
+</main>
+</body>
+</html>
+`;
+
+function enviarPaginaIndisponivel(resposta) {
+  const corpo = Buffer.from(PAGINA_ESTABELECIMENTO_INDISPONIVEL);
+  cabecalhosSeguranca(resposta);
+  resposta.writeHead(403, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Length': corpo.length,
+    'Cache-Control': 'no-store'
+  });
+  resposta.end(corpo);
+}
+
 function escaparHtml(valor) {
   return String(valor ?? '')
     .replaceAll('&', '&amp;')
@@ -2034,10 +2079,21 @@ async function enviarIndexDinamico(
   tenantDesenvolvimento
 ) {
   try {
-    const estabelecimento = requisicao.estabelecimento || await resolverEstabelecimento(banco, requisicao, {
-      dominioPrincipal,
-      tenantDesenvolvimento
-    });
+    let estabelecimento = requisicao.estabelecimento;
+    if (!estabelecimento) {
+      try {
+        estabelecimento = await resolverEstabelecimento(banco, requisicao, {
+          dominioPrincipal,
+          tenantDesenvolvimento
+        });
+      } catch (erro) {
+        // Loja existente mas fora do ar: quem abre o endereço no navegador vê
+        // uma página, não o JSON do 403. Loja inexistente segue no 404 de sempre.
+        if (erro.codigo !== CODIGO_ESTABELECIMENTO_INDISPONIVEL) throw erro;
+        enviarPaginaIndisponivel(resposta);
+        return true;
+      }
+    }
     requisicao.estabelecimento = estabelecimento;
     const [modelo, configuracao] = await Promise.all([
       readFile(caminhoArquivo, 'utf8'),
@@ -2195,7 +2251,12 @@ export function criarServidor({
         : erroRelacionamento
           ? 'Este cadastro está vinculado a outro registro.'
           : erro.message;
-      responderJson(resposta, status, { erro: status >= 500 ? 'Erro interno do servidor.' : mensagem });
+      // `codigo` só acompanha erros que o navegador trata de forma própria
+      // (hoje, a loja fora do ar); o formato { erro } continua o mesmo.
+      responderJson(resposta, status, {
+        erro: status >= 500 ? 'Erro interno do servidor.' : mensagem,
+        ...(status < 500 && erro.codigo === CODIGO_ESTABELECIMENTO_INDISPONIVEL ? { codigo: erro.codigo } : {})
+      });
     }
   });
 }
