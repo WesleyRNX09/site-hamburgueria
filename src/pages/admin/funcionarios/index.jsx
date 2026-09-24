@@ -2,6 +2,7 @@ import { Copy, Edit3, ExternalLink, QrCode, RefreshCw, Save, Trash2, UserRoundPl
 import { useState } from 'react';
 
 import AdminLayout from '../../../components/AdminLayout';
+import SeletorOpcoes from '../../../components/SeletorOpcoes';
 import { useApp } from '../../../context/appContext';
 import { QRCodeSVG } from '../../../vendor/qrcode';
 import styles from '../shared.module.css';
@@ -141,7 +142,7 @@ function FuncionariosAdmin() {
           <form className={styles.formulario} onSubmit={enviar}>
             <div className={styles.gridFormulario}>
               <div className={styles.campo}><label htmlFor="nomeFuncionario">Nome completo</label><input id="nomeFuncionario" value={formulario.nome} onChange={(event) => alterar('nome', event.target.value)} placeholder="Carlos Silva" /></div>
-              <div className={styles.campo}><label htmlFor="cargoFuncionario">Cargo</label><select id="cargoFuncionario" value={formulario.cargo} onChange={(event) => alterar('cargo', event.target.value)}><option>Garçom</option><option>Garçonete</option><option>Atendente</option></select></div>
+              <div className={styles.campo}><label htmlFor="cargoFuncionario">Cargo</label><SeletorOpcoes id="cargoFuncionario" rotulo="Cargo" larguraTotal valor={formulario.cargo} onChange={(valor) => alterar('cargo', valor)} opcoes={['Garçom', 'Garçonete', 'Atendente']} /></div>
               <div className={styles.campo}>
                 <label htmlFor="senhaFuncionario">{formulario.id ? 'Nova senha (opcional)' : 'Senha'}</label>
                 <input

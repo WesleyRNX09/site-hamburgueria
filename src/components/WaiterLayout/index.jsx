@@ -1,4 +1,4 @@
-import { LogOut, ReceiptText, Store, UtensilsCrossed } from 'lucide-react';
+import { LogOut, ReceiptText, Store, Utensils } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
 import { useApp } from '../../context/appContext';
@@ -18,15 +18,17 @@ function WaiterLayout({ titulo, subtitulo, children }) {
     <div className={styles.pagina}>
       <header className={styles.header}>
         <button type="button" className={styles.logo} onClick={() => navigate('/garcom/mesas')}>
-          <span><LogoEstabelecimento configuracao={configuracao} alternativa={<UtensilsCrossed size={22} />} /></span>
+          <span><LogoEstabelecimento configuracao={configuracao} alternativa={<Utensils size={22} strokeWidth={1.8} aria-hidden="true" />} /></span>
           <div><strong>{configuracao.nomeLoja || 'Atendimento'}</strong><small>GARÇOM</small></div>
         </button>
-        <nav aria-label="Navegação do atendimento">
-          <NavLink to="/garcom/mesas"><Store size={17} /> Mesas</NavLink>
-          <span><ReceiptText size={17} /> Comandas</span>
+        <nav className={styles.navegacao} aria-label="Navegação do atendimento">
+          <NavLink to="/garcom/mesas" className={({ isActive }) => (isActive ? styles.linkAtivo : '')}><Store size={17} aria-hidden="true" /> Mesas</NavLink>
+          {/* Ainda não há tela de comandas para o garçom: o item só sinaliza a
+              seção, sem virar link. */}
+          <span aria-disabled="true"><ReceiptText size={17} aria-hidden="true" /> Comandas</span>
         </nav>
         <div className={styles.perfil}>
-          <span>{garcomSessao?.nome?.charAt(0)}</span>
+          <span aria-hidden="true">{garcomSessao?.nome?.charAt(0)}</span>
           <div><strong>{garcomSessao?.nome}</strong><small>{garcomSessao?.cargo}</small></div>
           <button type="button" aria-label="Sair" onClick={sair}><LogOut size={19} /></button>
         </div>

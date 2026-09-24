@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import GradeMesas from '../../components/GradeMesas';
+import GradeMesas, { LegendaMesas } from '../../components/GradeMesas';
 import WaiterLayout from '../../components/WaiterLayout';
 import { useApp } from '../../context/appContext';
 import { statusDaMesa } from '../../utils/statusMesa';
@@ -44,8 +44,9 @@ function MesasGarcom() {
         </div>
       ) : (
         <section className={`${styles.painel} ${styles.painelSalao}`}>
-          {/* Só a grade: no salão o garçom precisa do número da mesa, não de
-              resumo nem de legenda ocupando a tela do celular. */}
+          {/* Legenda curta com os mesmos rótulos do painel: a cor sozinha não
+              diz ao garçom se a mesa espera lançamento ou a conta. */}
+          <LegendaMesas estados={['livre', 'aberta', 'pendente', 'cozinha', 'conta', 'outro']} />
           <GradeMesas
             mesas={mesas}
             statusPorMesa={(mesa) => statusDaMesa(mesa, comandaDaMesa(mesa))}

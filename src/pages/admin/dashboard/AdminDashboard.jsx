@@ -93,7 +93,7 @@ function AdminDashboard() {
   ).length;
 
   return (
-    <AdminLayout titulo="Dashboard ADM" subtitulo="Visão operacional dos registros mais recentes carregados pelo sistema.">
+    <AdminLayout titulo="Dashboard ADM">
       {!podeVerFinanceiro && !podeVerPedidos && !podeVerSalao && (
         <section className={styles.card}>
           <div className={styles.vazio} role="status">
@@ -106,8 +106,7 @@ function AdminDashboard() {
 
       {podeVerFinanceiro && (
         <div className={estilos.seletorPeriodo}>
-          <span id="rotulo-periodo-indicadores">Período do ticket médio e dos mais vendidos</span>
-          <div className={`${styles.abas} ${estilos.opcoesPeriodo}`} role="group" aria-labelledby="rotulo-periodo-indicadores">
+          <div className={`${styles.abas} ${estilos.opcoesPeriodo}`} role="group" aria-label="Período do ticket médio e dos mais vendidos">
             {PERIODOS.map((item) => (
               <button
                 type="button"

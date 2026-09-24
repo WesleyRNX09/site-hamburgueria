@@ -1,141 +1,167 @@
-.acessoPagina { width: 100%; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at 50% 20%, color-mix(in srgb, var(--cor-principal) 20%, var(--cor-fundo)) 0, color-mix(in srgb, var(--cor-secundaria) 85%, black) 32%, color-mix(in srgb, var(--cor-secundaria) 85%, black) 72%); padding: 24px; color: var(--cor-texto); }
-.acessoCard { width: min(100%, 500px); border: 1px solid rgb(from var(--cor-principal) r g b / 0.32); border-radius: 20px; background: rgba(20, 20, 20, 0.97); padding: 30px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5); }
-.marcaAcesso { display: grid; min-height: 46px; margin-bottom: 22px; place-items: center; color: var(--cor-principal); font-size: 20px; font-weight: 900; text-align: center; }
+/*
+  Atendimento do garçom no tema claro do painel: fundo #F5F4F7, cards brancos
+  com borda suave, amarelo só como preenchimento e acentos de texto em
+  dourado escuro (#8A6508), que tem contraste sobre o branco.
+*/
+
+/* =========================
+   ACESSO
+========================= */
+.acessoPagina { width: 100%; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 0, color-mix(in srgb, var(--cor-principal) 14%, transparent) 0, transparent 55%), var(--admin-fundo-pagina); padding: 24px; color: #111111; }
+.acessoCard { width: min(100%, 460px); border: 1px solid var(--admin-borda-card); border-radius: var(--raio-card); background: #FFFFFF; padding: 30px; box-shadow: 0 2px 8px rgba(20, 20, 30, 0.06); }
+.marcaAcesso { display: grid; min-height: 40px; margin-bottom: 20px; place-items: center; color: #111111; font-size: 18px; font-weight: 700; text-align: center; }
 .marcaAcesso img { width: auto; max-width: 16rem; height: 4.6rem; object-fit: contain; }
-.iconeAcesso { display: grid; width: 62px; height: 62px; margin: 0 auto 18px; place-items: center; border: 1px solid var(--cor-principal); border-radius: 17px; color: var(--cor-principal); }
-.acessoCard h1 { margin: 0; font-size: 28px; text-align: center; }
-.acessoCard > p { margin: 9px 0 25px; color: #858585; font-size: 13px; line-height: 1.6; text-align: center; }
-.identificado { display: flex; align-items: center; gap: 13px; border: 1px solid #343434; border-radius: 12px; background: #111; margin-bottom: 18px; padding: 14px; }
-.identificado > span { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 50%; background: var(--cor-principal); color: var(--cor-sobre-principal); font-weight: 900; }
+.iconeAcesso { display: grid; width: 56px; height: 56px; margin: 0 auto 16px; place-items: center; border: 1px solid color-mix(in srgb, var(--cor-principal) 45%, white); border-radius: var(--raio-controle); background: #FFF3CF; color: #8A6508; }
+.acessoCard h1 { margin: 0; color: #111111; font-size: 26px; text-align: center; }
+.acessoCard > p { margin: 8px 0 24px; color: #555555; font-size: 13px; line-height: 1.6; text-align: center; }
+.identificado { display: flex; align-items: center; gap: 13px; border: 1px solid var(--admin-borda-card); border-radius: var(--raio-card); background: #FFFFFF; margin-bottom: 18px; padding: 14px; }
+.identificado > span { display: grid; width: 44px; height: 44px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--cor-principal); color: var(--cor-sobre-principal); font-weight: 700; }
 .identificado strong,
 .identificado small { display: block; }
-.identificado small { margin-top: 4px; color: #929292; }
+.identificado strong { color: #111111; }
+.identificado small { margin-top: 4px; color: #6B6B6B; }
+
+/* =========================
+   CAMPOS E BOTÕES
+========================= */
 .campo { display: grid; gap: 8px; margin-top: 17px; }
-.campo label { color: #ddd; font-size: 12px; font-weight: 800; }
+.campo label { color: #111111; font-size: 12px; font-weight: 700; }
+.campo label span { color: #6B6B6B; font-weight: 500; }
 .campo input,
 .campo select,
-.campo textarea { width: 100%; border: 1px solid #363636; border-radius: 10px; outline: none; background: color-mix(in srgb, var(--cor-secundaria) 85%, black); padding: 0 13px; color: var(--cor-texto); font: inherit; }
+.campo textarea,
+.observacaoLinha input { width: 100%; border: 1px solid var(--admin-borda-controle); border-radius: var(--raio-controle); outline: none; background: #FFFFFF; padding: 0 13px; color: #111111; font: inherit; }
 .campo input,
 .campo select { height: 46px; }
 .campo textarea { min-height: 85px; padding-top: 12px; resize: vertical; }
+.campo input::placeholder,
+.campo textarea::placeholder,
+.observacaoLinha input::placeholder { color: #8A8A8A; }
 .campo input:focus,
 .campo select:focus,
-.campo textarea:focus { border-color: var(--cor-principal); }
+.campo textarea:focus,
+.observacaoLinha input:focus { border-color: var(--cor-principal); box-shadow: 0 0 0 3px rgb(from var(--cor-principal) r g b / 0.25); }
+
 .botaoPrincipal,
 .botaoSecundario,
-.botaoPerigo { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 8px; border-radius: 10px; padding: 0 16px; font: inherit; font-size: 13px; font-weight: 900; cursor: pointer; }
+.botaoPerigo { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 8px; border-radius: var(--raio-controle); padding: 0 16px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .botaoPrincipal { border: 1px solid var(--cor-principal); background: var(--cor-principal); color: var(--cor-sobre-principal); }
-.botaoSecundario { border: 1px solid #383838; background: var(--cor-card); color: #ddd; }
-.botaoPerigo { border: 1px solid rgba(255, 100, 100, 0.4); background: rgba(255, 100, 100, 0.08); color: #ff8585; }
-.botaoPrincipal:hover { background: var(--cor-principal-clara); }
-.botaoSecundario:hover { border-color: var(--cor-principal); color: var(--cor-principal); }
+.botaoSecundario { border: 1px solid var(--admin-borda-controle); background: #FFFFFF; color: #111111; }
+.botaoPerigo { border: 1px solid #F5C2C2; background: #FDE6E6; color: #B91C1C; }
+.botaoPrincipal:hover:not(:disabled) { background: var(--cor-principal-clara); }
+.botaoSecundario:hover:not(:disabled) { border-color: var(--admin-borda-controle-hover); background: var(--admin-hover); }
+/* Desabilitado com cor própria, não só transparência: continua legível. */
 .botaoPrincipal:disabled,
 .botaoSecundario:disabled,
-.botaoPerigo:disabled { opacity: 0.45; cursor: not-allowed; }
+.botaoPerigo:disabled { border-color: #F0EEF4; background: #F0EEF4; color: #8A8A8A; cursor: not-allowed; }
+
 .formAcesso { display: grid; gap: 14px; }
 .formAcesso .botaoPrincipal { width: 100%; margin-top: 6px; }
-.erro { border: 1px solid rgba(255, 100, 100, 0.35); border-radius: 9px; background: rgba(255, 100, 100, 0.07); padding: 10px 12px; color: #ff8585; font-size: 12px; }
-.ajudaAcesso { margin: 2px 0 0; color: #929292; font-size: 12px; line-height: 1.6; text-align: center; }
-.linksDemo { display: grid; gap: 9px; }
-.linkDemo { display: flex; align-items: center; justify-content: space-between; border: 1px solid #303030; border-radius: 11px; background: #111; padding: 13px; color: var(--cor-texto); text-decoration: none; }
-.linkDemo:hover { border-color: color-mix(in srgb, var(--cor-principal) 65%, black); }
-.linkDemo small { display: block; margin-top: 4px; color: #929292; }
+.erro { border: 1px solid #F5C2C2; border-radius: var(--raio-controle); background: #FDE6E6; padding: 10px 12px; color: #B91C1C; font-size: 12px; }
+.ajudaAcesso { margin: 2px 0 0; color: #6B6B6B; font-size: 12px; line-height: 1.6; text-align: center; }
 
-/* Sem borda: no celular o contorno só competia com o conteúdo. O fundo do
-   painel já separa o bloco do resto da tela. */
-.painel { min-width: 0; border-radius: 15px; background: var(--cor-card-profundo); padding: 20px; }
-.topoPainel { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
-.topoPainel h2 { margin: 0; font-size: 18px; }
-.topoPainel p { margin: 5px 0 0; color: #929292; font-size: 12px; }
-.vazio { padding: 32px 10px; color: #929292; font-size: 12px; line-height: 1.6; text-align: center; }
+/* =========================
+   PAINÉIS
+========================= */
+.painel { min-width: 0; border: 1px solid var(--admin-borda-card); border-radius: var(--raio-card); background: #FFFFFF; padding: 20px; box-shadow: 0 2px 8px rgba(20, 20, 30, 0.06); }
+.topoPainel { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 16px; }
+.topoPainel h2 { margin: 0; color: #111111; font-size: 18px; }
+.topoPainel p { margin: 4px 0 0; color: #6B6B6B; font-size: 12px; }
+.vazio { padding: 28px 10px; color: #6B6B6B; font-size: 12px; line-height: 1.6; text-align: center; }
 
-/* Resumo do salão acima da grade: os três números que o garçom precisa
-   antes de escolher a mesa. */
+/* Grade do salão com a legenda de cores logo acima. */
 .painelSalao { display: grid; gap: 16px; }
 
 /* =========================
    COMANDA DO GARÇOM
 
-   Fluxo vertical, pensado para o celular: ações rápidas, cardápio com
-   foto, consumo lançado e, colada no rodapé, a barra com o total.
+   Fluxo vertical, pensado para o celular: cardápio por categoria, consumo
+   lançado e, colada no rodapé, a barra com o total.
 ========================= */
-
-/* Coluna que ocupa a altura da tela: com pouco conteúdo, o consumo da mesa
-   desce para a parte de baixo em vez de ficar colado no cardápio. */
-.comandaFluxo { display: flex; flex: 1; flex-direction: column; gap: 22px; }
-.painelConsumo { margin-top: auto; }
+.comandaFluxo { display: flex; flex-direction: column; gap: 16px; }
 .acoesTopo { display: flex; flex-wrap: wrap; gap: 9px; }
-/* Primeiro passo: só os nomes das categorias, em retângulos pequenos, para o
-   garçom achar a seção de relance sem rolar a tela. */
-.gradeCategorias { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
-.botaoCategoria { display: flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid rgb(from var(--cor-principal) r g b / 0.35); border-radius: 10px; background: var(--cor-card); padding: 8px 10px; color: var(--cor-texto); font: inherit; font-size: 12px; font-weight: 700; line-height: 1.25; text-align: center; cursor: pointer; transition: 0.2s ease; }
-.botaoCategoria:hover { border-color: var(--cor-principal); background: color-mix(in srgb, var(--cor-principal) 22%, var(--cor-card)); }
 
-/* Segundo passo: a foto é o alvo do toque e o nome fica logo abaixo. Sem
-   moldura nem preço na grade — o preço aparece ao abrir o item. */
-.gradeCatalogo { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 10px; }
-.itemCatalogo { display: grid; gap: 5px; min-width: 0; border: 0; background: none; padding: 0; color: var(--cor-texto); font: inherit; text-align: center; cursor: pointer; }
-.itemCatalogo img { width: 100%; aspect-ratio: 1; border-radius: 9px; background: #1a1a1a; object-fit: cover; transition: 0.2s ease; }
-.itemCatalogo span { display: -webkit-box; overflow: hidden; font-size: 10px; font-weight: 700; line-height: 1.3; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+/* Categorias em chips: o texto define a largura, com folga lateral, e a
+   linha quebra quando não cabe. */
+.gradeCategorias { display: flex; flex-wrap: wrap; gap: 8px; }
+.botaoCategoria { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border: 1px solid var(--admin-borda-controle); border-radius: var(--raio-controle); background: #FFFFFF; padding: 0 16px; color: #111111; font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: border-color 0.15s ease, background-color 0.15s ease; }
+.botaoCategoria:hover { border-color: var(--admin-borda-controle-hover); background: var(--admin-hover); }
+.botaoCategoria[aria-pressed="true"] { border-color: var(--cor-principal); background: var(--cor-principal); color: #111111; }
+/* Enquanto nenhuma categoria está aberta: uma linha discreta no lugar dos
+   produtos, em vez de um vão em branco. */
+.dicaCategorias { margin-top: 14px; border: 1px dashed var(--admin-borda-controle); border-radius: var(--raio-controle); padding: 18px 12px; color: #6B6B6B; font-size: 12px; text-align: center; }
+
+/* Produtos: a foto é o alvo do toque e o nome fica logo abaixo. */
+.gradeCatalogo { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 12px; }
+.itemCatalogo { display: grid; gap: 6px; min-width: 0; border: 0; border-radius: var(--raio-controle); background: none; padding: 0; color: #111111; font: inherit; text-align: center; cursor: pointer; }
+.itemCatalogo img { width: 100%; aspect-ratio: 1; border: 1px solid var(--admin-borda-card); border-radius: var(--raio-controle); background: var(--admin-fundo-pagina); object-fit: cover; transition: 0.2s ease; }
+.itemCatalogo span { display: -webkit-box; overflow: hidden; font-size: 11px; font-weight: 600; line-height: 1.3; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .itemCatalogo:hover:not(:disabled) img { outline: 2px solid var(--cor-principal); outline-offset: 1px; }
 .itemCatalogo:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Recado da mesa inteira: uma linha só, com o salvar ao lado. No celular o
    botão desce para baixo do campo em vez de espremê-lo. */
 .observacaoMesa { display: grid; gap: 8px; margin-bottom: 16px; }
-.observacaoMesa label { color: #ddd; font-size: 12px; font-weight: 800; }
-.observacaoMesa label span { color: #7f7f7f; font-weight: 700; }
+.observacaoMesa label { color: #111111; font-size: 12px; font-weight: 700; }
+.observacaoMesa label span { color: #6B6B6B; font-weight: 500; }
 .observacaoLinha { display: flex; flex-wrap: wrap; gap: 8px; }
-.observacaoLinha input { flex: 1 1 200px; min-width: 0; height: 44px; border: 1px solid #363636; border-radius: 10px; outline: none; background: color-mix(in srgb, var(--cor-secundaria) 85%, black); padding: 0 13px; color: var(--cor-texto); font: inherit; font-size: 13px; }
-.observacaoLinha input:focus { border-color: var(--cor-principal); }
-.observacaoLinha input:disabled { opacity: 0.55; cursor: not-allowed; }
+.observacaoLinha input { flex: 1 1 200px; min-width: 0; height: 44px; font-size: 13px; }
+.observacaoLinha input:disabled { background: #F0EEF4; color: #8A8A8A; cursor: not-allowed; }
 
 .listaItens { display: grid; }
 .itemCabecalho,
-.itemComanda { display: grid; grid-template-columns: 46px minmax(0, 1fr) 34px 76px 38px; align-items: center; gap: 9px; }
-.itemCabecalho { border-bottom: 1px solid #2b2b2b; padding: 0 6px 8px; color: #7f7f7f; font-size: 10px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; }
+.itemComanda { display: grid; grid-template-columns: 46px minmax(0, 1fr) 34px 84px 44px; align-items: center; gap: 9px; }
+.itemCabecalho { border-bottom: 1px solid var(--admin-borda-card); padding: 0 6px 8px; color: #6B6B6B; font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; }
 .itemCabecalho span:nth-child(3) { text-align: center; }
 .itemCabecalho span:nth-child(4) { text-align: right; }
-.itemComanda { border-bottom: 1px solid #232323; border-radius: 8px; padding: 11px 6px; }
-/* Último lançamento em destaque: confirma o que acabou de ser pedido. */
+.itemComanda { border-bottom: 1px solid var(--admin-borda-card); padding: 11px 6px; }
+.itemComanda:last-child { border-bottom: 0; }
 /* Item ainda não lançado para a cozinha: fundo destacado até a confirmação. */
-.itemPendente { background: rgb(from var(--cor-principal) r g b / 0.12); box-shadow: inset 3px 0 0 var(--cor-principal); }
-.marcaPendente { color: var(--cor-principal); font-weight: 700; }
-.marcaLancado { color: #7d7d7d; }
-.itemBloqueado { color: #4d4d4d; text-align: center; }
+.itemPendente { border-radius: var(--raio-controle); background: #FFF3CF; box-shadow: inset 3px 0 0 var(--cor-principal); }
+.marcaPendente { color: #8A6508; font-weight: 700; }
+.marcaLancado { color: #6B6B6B; }
+.itemBloqueado { color: #8A8A8A; text-align: center; }
 .listaConfirmacao { display: grid; gap: 8px; margin-top: 16px; }
-.itemConfirmacao { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #2d2d2d; border-radius: 10px; background: rgb(from var(--cor-principal) r g b / 0.08); padding: 10px 12px; }
+.itemConfirmacao { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--admin-borda-card); border-radius: var(--raio-controle); background: #FFF3CF; padding: 10px 12px; color: #111111; }
 .itemConfirmacao strong { font-size: 13px; }
-.itemConfirmacao small { display: block; margin-top: 3px; color: #929292; font-size: 11px; }
-.itemHora { color: #8d8d8d; font-size: 12px; font-variant-numeric: tabular-nums; }
+.itemConfirmacao small { display: block; margin-top: 3px; color: #555555; font-size: 11px; }
+.itemHora { color: #6B6B6B; font-size: 12px; font-variant-numeric: tabular-nums; }
 .itemDescricao { display: grid; min-width: 0; gap: 3px; }
-.itemDescricao strong { font-size: 13px; font-weight: 700; }
-.itemDescricao small { color: #929292; font-size: 11px; line-height: 1.4; }
-.itemQuantidade { color: var(--cor-texto); font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: center; }
-.itemValor { color: var(--cor-principal); font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
-.itemRemover { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid #333; border-radius: 9px; background: var(--cor-card); color: #929292; cursor: pointer; }
-.itemRemover:hover:not(:disabled) { border-color: rgba(255, 100, 100, 0.5); color: #ff8585; }
+.itemDescricao strong { color: #111111; font-size: 13px; font-weight: 700; }
+.itemDescricao small { color: #6B6B6B; font-size: 11px; line-height: 1.4; }
+.itemQuantidade { color: #111111; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
+.itemValor { color: #111111; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.itemRemover { display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid var(--admin-borda-controle); border-radius: var(--raio-controle); background: #FFFFFF; color: #B91C1C; cursor: pointer; }
+.itemRemover:hover:not(:disabled) { border-color: #F5C2C2; background: #FDE6E6; }
 .itemRemover:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Barra do total colada no rodapé: o valor acumulado e a próxima ação
    ficam sempre visíveis, sem rolar a lista. */
-.barraTotal { position: sticky; bottom: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 16px; border: 1px solid rgb(from var(--cor-principal) r g b / 0.35); border-radius: 14px; background: rgba(12, 12, 12, 0.97); padding: 13px 16px; backdrop-filter: blur(12px); box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.45); }
-.barraValores span { display: block; color: #929292; font-size: 11px; font-weight: 700; }
-.barraValores strong { display: block; margin-top: 2px; color: var(--cor-principal); font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.barraTotal { position: sticky; bottom: 12px; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 16px; border: 1px solid var(--admin-borda-card); border-radius: var(--raio-card); background: #FFFFFF; padding: 13px 16px; box-shadow: 0 2px 8px rgba(20, 20, 30, 0.06); }
+.barraValores span { display: block; color: #6B6B6B; font-size: 12px; font-weight: 600; }
+.barraValores strong { display: block; margin-top: 2px; color: #111111; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .barraTotal button { min-height: 48px; }
 
-.modalFundo { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(0, 0, 0, 0.78); padding: 18px; }
-.modal { width: min(100%, 520px); max-height: min(92vh, calc(100dvh - 36px)); overflow-y: auto; overscroll-behavior: contain; border: 1px solid rgb(from var(--cor-principal) r g b / 0.35); border-radius: 18px; background: var(--cor-card); padding: 22px; }
+/* =========================
+   MODAIS
+========================= */
+.modalFundo { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(17, 17, 17, 0.4); padding: 18px; }
+.modal { width: min(100%, 520px); max-height: min(92vh, calc(100dvh - 36px)); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--admin-borda-card); border-radius: var(--raio-card); background: #FFFFFF; padding: 22px; color: #111111; box-shadow: 0 8px 24px rgba(20, 20, 30, 0.12); }
 .modalTopo { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
-.modalTopo h2 { margin: 0; }
-.modalTopo p { margin: 6px 0 0; color: #929292; font-size: 12px; }
-.modalTopo button { border: 0; background: transparent; color: #999; cursor: pointer; }
+.modalTopo h2 { margin: 0; color: #111111; }
+.modalTopo p { margin: 6px 0 0; color: #555555; font-size: 12px; }
+.modalTopo button { display: grid; min-width: 44px; min-height: 44px; place-items: center; border: 0; border-radius: var(--raio-controle); background: transparent; color: #555555; cursor: pointer; }
+.modalTopo button:hover { background: var(--admin-hover); color: #111111; }
 .adicionais { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 17px; }
-.adicional { display: flex; align-items: center; justify-content: space-between; gap: 9px; border: 1px solid #303030; border-radius: 10px; background: #111; padding: 11px; color: #ccc; font-size: 11px; cursor: pointer; }
-.adicionalAtivo { border-color: var(--cor-principal); background: rgb(from var(--cor-principal) r g b / 0.08); color: var(--cor-principal); }
-.modalRodape { display: flex; align-items: center; justify-content: space-between; gap: 15px; border-top: 1px solid #303030; margin-top: 18px; padding-top: 17px; }
-.quantidade { display: flex; align-items: center; gap: 12px; }
-.quantidade button { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid #3a3a3a; border-radius: 8px; background: #111; color: var(--cor-texto); cursor: pointer; }
+.adicional { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 9px; border: 1px solid var(--admin-borda-controle); border-radius: var(--raio-controle); background: #FFFFFF; padding: 10px 11px; color: #111111; font: inherit; font-size: 12px; cursor: pointer; }
+.adicional:hover { border-color: var(--admin-borda-controle-hover); }
+.adicionalAtivo,
+.adicionalAtivo:hover { border-color: var(--cor-principal); background: #FFF3CF; color: #8A6508; }
+.modalRodape { display: flex; align-items: center; justify-content: space-between; gap: 15px; border-top: 1px solid var(--admin-borda-card); margin-top: 18px; padding-top: 17px; color: #555555; }
+.quantidade { display: flex; align-items: center; gap: 12px; color: #111111; }
+.quantidade button { display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid var(--admin-borda-controle); border-radius: var(--raio-controle); background: #FFFFFF; color: #111111; cursor: pointer; }
+.quantidade button:hover:not(:disabled) { background: var(--admin-hover); }
+.quantidade button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 @media (max-width: 650px) {
   .painel { padding: 16px; }
@@ -143,12 +169,13 @@
 
   .campo input,
   .campo select,
-  .campo textarea { min-height: 44px; font-size: 16px; }
+  .campo textarea,
+  .observacaoLinha input { min-height: 44px; font-size: 16px; }
 
   /* Sem espaço para a coluna de horário: ela desce para a linha de baixo,
      junto da descrição. */
   .itemCabecalho { display: none; }
-  .itemComanda { grid-template-columns: minmax(0, 1fr) 34px 76px 44px; row-gap: 6px; }
+  .itemComanda { grid-template-columns: minmax(0, 1fr) 30px 78px 44px; row-gap: 6px; }
   .itemHora { grid-column: 1 / -1; }
 
   .acessoCard > p,
@@ -158,23 +185,23 @@
   .botaoSecundario,
   .botaoPerigo,
   .topoPainel p,
-  .categoria,
   .itemDescricao small,
   .vazio,
+  .dicaCategorias,
   .modalTopo p,
   .adicional { font-size: 14px; }
 
-  .categoria,
-  .itemRemover,
-  .modalTopo button,
-  .quantidade button { min-width: 44px; min-height: 44px; }
+  /* Chips em uma linha que rola na horizontal, sem cortar o texto. */
+  .gradeCategorias { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 0 16px 4px; scrollbar-width: none; }
+  .gradeCategorias::-webkit-scrollbar { display: none; }
+  .botaoCategoria { flex: 0 0 auto; font-size: 14px; }
 
-  .barraTotal { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .barraTotal { flex-wrap: wrap; gap: 10px; }
   .barraTotal button { width: 100%; }
 }
 
 @media (max-width: 420px) {
-  .acessoCard { padding: 23px 18px; }
+  .acessoCard { padding: 24px 18px; }
   .adicionais { grid-template-columns: 1fr; }
   .modalRodape { align-items: stretch; flex-direction: column; }
 }

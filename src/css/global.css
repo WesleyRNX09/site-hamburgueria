@@ -37,13 +37,14 @@
   text-rendering: optimizeLegibility;
 }
 
-/* O cardápio e o painel do estabelecimento são claros sempre, em qualquer
-   aparelho. Garçom e superadmin seguem com os valores escuros de :root.
+/* O cardápio, o painel do estabelecimento e o garçom são claros sempre, em
+   qualquer aparelho. O superadmin segue com os valores escuros de :root.
    As cores do estabelecimento também são recalculadas pelo theme.js, que as
    aplica inline no <html>; os valores repetidos aqui valem para o primeiro
    quadro, antes do React montar, e evitam o pisca escuro. */
 :root[data-area="publica"],
-:root[data-area="admin"] {
+:root[data-area="admin"],
+:root[data-area="garcom"] {
   /* A página usa um branco levemente acinzentado e os cartões ficam no
      branco puro, que é o que dá relevo a eles. */
   --cor-secundaria: #F4F5F7;
@@ -73,6 +74,24 @@
   --sombra-cartao-forte: rgba(0, 0, 0, 0.09);
   --sombra-flutuante: rgba(0, 0, 0, 0.14);
   color-scheme: light;
+}
+
+/* Painel do estabelecimento e garçom: raios e neutros da moldura, dos cards e
+   dos controles. Avatar, bolinhas de cor e emblemas pequenos seguem
+   circulares. */
+:root[data-area="admin"],
+:root[data-area="garcom"] {
+  --raio-controle: 8px;
+  --raio-selo: 8px;
+  --raio-card: 12px;
+  --admin-fundo-pagina: #F5F4F7;
+  --admin-barra-borda: #ECEAF0;
+  --admin-borda-card: #ECE9DF;
+  --admin-borda-controle: #DDDAE3;
+  --admin-borda-controle-hover: #C9C5D1;
+  --admin-hover: #F5F4F7;
+  --admin-foco: #B8860B;
+  --admin-sombra-card: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 /* O iOS dá zoom sozinho ao focar um campo com fonte menor que 16px, e a tela

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
+import SeletorOpcoes from '../../../components/SeletorOpcoes';
 import { useApp } from '../../../context/appContext';
 import { CANAIS_CATALOGO, canalCatalogo } from '../../../utils/canalCatalogo';
 import { otimizarImagemProduto } from '../../../utils/imageUpload';
@@ -131,23 +132,25 @@ function FormularioProduto() {
 
           <div className={styles.gridFormulario}>
             <div className={styles.campo}><label htmlFor="nome">Nome do produto</label><input id="nome" value={dados.nome} onChange={(event) => alterar('nome', event.target.value)} placeholder="Ex: X-Bacon Especial" /></div>
-            <div className={styles.campo}><label htmlFor="categoria">Categoria</label><select id="categoria" required value={dados.categoriaId ?? ''} onChange={(event) => alterar('categoriaId', Number(event.target.value))}><option value="">Selecione</option>{categorias.filter((categoria) => categoria.ativo || categoria.id === dados.categoriaId).map((categoria) => <option key={categoria.id} value={categoria.id}>{categoria.nome}{categoria.ativo ? '' : ' (inativa)'}</option>)}</select></div>
+            <div className={styles.campo}><label htmlFor="categoria">Categoria</label><SeletorOpcoes id="categoria" rotulo="Categoria" larguraTotal required valor={dados.categoriaId ?? ''} onChange={(valor) => alterar('categoriaId', Number(valor))} opcoes={[{ valor: '', rotulo: 'Selecione' }, ...categorias.filter((categoria) => categoria.ativo || categoria.id === dados.categoriaId).map((categoria) => ({ valor: categoria.id, rotulo: `${categoria.nome}${categoria.ativo ? '' : ' (inativa)'}` }))]} /></div>
             <div className={`${styles.campo} ${styles.campoCompleto}`}><label htmlFor="descricao">Descrição</label><textarea id="descricao" value={dados.descricao} onChange={(event) => alterar('descricao', event.target.value)} placeholder="Descreva ingredientes e características..." /></div>
             <div className={styles.campo}><label htmlFor="preco">Preço</label><input id="preco" inputMode="decimal" value={dados.preco} onChange={(event) => alterar('preco', event.target.value)} placeholder="34,90" /></div>
             <div className={styles.campo}><label htmlFor="destaque">Destaque <span>(opcional)</span></label><input id="destaque" value={dados.destaque ?? ''} onChange={(event) => alterar('destaque', event.target.value)} placeholder="Ex: Mais vendido" /></div>
             <div className={styles.campo}>
               <label htmlFor="canalProduto">Onde aparece</label>
-              <select id="canalProduto" value={dados.canal ?? 'ambos'} onChange={(event) => alterar('canal', event.target.value)}>
-                {CANAIS_CATALOGO.map((canal) => <option key={canal.valor} value={canal.valor}>{canal.rotulo}</option>)}
-              </select>
+              <SeletorOpcoes id="canalProduto" rotulo="Onde aparece" larguraTotal valor={dados.canal ?? 'ambos'} onChange={(valor) => alterar('canal', valor)} opcoes={CANAIS_CATALOGO} />
               <small className={styles.textoSecundario}>{canalCatalogo(dados.canal).ajuda}</small>
             </div>
             <div className={styles.campo}>
               <label htmlFor="impressoraProduto">Impressora <span>(exceção)</span></label>
-              <select id="impressoraProduto" value={dados.impressoraId ?? ''} onChange={(event) => alterar('impressoraId', event.target.value)}>
-                <option value="">Usar da categoria</option>
-                {impressorasAtivas.map((impressora) => <option key={impressora.id} value={impressora.id}>{impressora.nome}</option>)}
-              </select>
+              <SeletorOpcoes
+                id="impressoraProduto"
+                rotulo="Impressora"
+                larguraTotal
+                valor={dados.impressoraId ?? ''}
+                onChange={(valor) => alterar('impressoraId', valor)}
+                opcoes={[{ valor: '', rotulo: 'Usar da categoria' }, ...impressorasAtivas.map((impressora) => ({ valor: impressora.id, rotulo: impressora.nome }))]}
+              />
               <small className={styles.textoSecundario}>{impressoraDaCategoria}</small>
             </div>
 

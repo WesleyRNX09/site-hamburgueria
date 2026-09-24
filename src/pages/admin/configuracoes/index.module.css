@@ -35,8 +35,8 @@
   grid-template-columns: minmax(0, 1fr) 130px 130px;
   align-items: end;
   gap: 12px;
-  border: 1px solid var(--cor-borda);
-  border-radius: 12px;
+  border: 1px solid var(--admin-borda-card);
+  border-radius: var(--raio-card);
   background: var(--cor-campo);
   padding: 12px 16px;
 }
@@ -90,8 +90,8 @@
 
 .previaSite {
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--cor-principal) 35%, var(--cor-borda-forte));
-  border-radius: 14px;
+  border: 1px solid var(--admin-borda-card);
+  border-radius: var(--raio-card);
   background: var(--cor-fundo);
   color: var(--cor-texto);
   font-family: var(--fonte-principal);
@@ -129,13 +129,13 @@
   z-index: 15;
   right: 24px;
   bottom: 18px;
-  left: calc(248px + 24px);
+  left: calc(var(--largura-faixa, 76px) + 24px);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border: 1px solid var(--cor-borda);
-  border-radius: 14px;
+  border: 1px solid var(--admin-borda-card);
+  border-radius: var(--raio-card);
   background: color-mix(in srgb, var(--cor-card) 92%, transparent);
   box-shadow: 0 14px 40px var(--sombra-cartao-forte);
   padding: 12px 14px;

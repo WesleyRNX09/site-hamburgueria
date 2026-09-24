@@ -1,34 +1,51 @@
-.pagina { display: flex; width: 100%; min-height: 100vh; flex-direction: column; background: var(--cor-secundaria); color: var(--cor-texto); }
-.header { position: sticky; top: 0; z-index: 20; display: flex; min-height: 76px; align-items: center; justify-content: space-between; gap: 22px; border-bottom: 1px solid rgb(from var(--cor-principal) r g b / 0.2); background: rgba(8, 8, 8, 0.96); padding: 0 max(18px, calc((100vw - 1180px) / 2)); backdrop-filter: blur(12px); }
-.logo { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; color: var(--cor-texto); text-align: left; cursor: pointer; }
-.logo > span { display: grid; width: 42px; height: 42px; place-items: center; border: 1.5px solid var(--cor-principal); border-radius: 12px; color: var(--cor-principal); }
-.logo > span img { width: 100%; height: 100%; border-radius: 10px; object-fit: contain; }
+/* Moldura do atendimento do garçom, no tema claro do painel. Amarelo só como
+   preenchimento; acento em texto usa o dourado escuro. */
+.pagina { display: flex; width: 100%; min-height: 100vh; flex-direction: column; background: var(--admin-fundo-pagina); color: var(--cor-texto); }
+.header { position: sticky; top: 0; z-index: 20; display: flex; min-height: 72px; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--admin-barra-borda); background: #FFFFFF; padding: 0 max(18px, calc((100vw - 1180px) / 2)); }
+
+.logo { display: flex; min-width: 0; align-items: center; gap: 10px; border: 0; border-radius: var(--raio-controle); background: transparent; padding: 0; color: #111111; text-align: left; cursor: pointer; }
+.logo > span { display: grid; width: 42px; height: 42px; flex: 0 0 auto; overflow: hidden; place-items: center; border: 1px solid color-mix(in srgb, var(--cor-principal) 45%, white); border-radius: var(--raio-controle); background: #FFF3CF; color: #8A6508; }
+.logo > span img { width: 100%; height: 100%; object-fit: contain; }
+.logo > div { min-width: 0; }
 .logo strong,
 .logo small { display: block; }
-.logo strong { font-size: 19px; }
-.logo small { margin-top: 3px; color: var(--cor-principal); font-size: 8px; font-weight: 900; letter-spacing: 3px; }
-.header nav { display: flex; align-items: center; gap: 10px; }
-.header nav a,
-.header nav > span { display: flex; align-items: center; gap: 7px; border-radius: 9px; padding: 10px 13px; color: #a2a2a2; font-size: 13px; font-weight: 700; text-decoration: none; }
-.header nav a:hover { background: var(--cor-card); color: var(--cor-principal); }
+.logo strong { overflow: hidden; font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.logo small { margin-top: 2px; color: #8A6508; font-size: 9px; font-weight: 800; letter-spacing: 2.5px; }
+
+.navegacao { display: flex; align-items: center; gap: 8px; }
+.navegacao a,
+.navegacao > span { display: flex; min-height: 44px; align-items: center; gap: 7px; border-radius: var(--raio-controle); padding: 0 14px; color: #555555; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.navegacao a:hover { background: var(--admin-hover); color: #111111; }
+.navegacao .linkAtivo,
+.navegacao .linkAtivo:hover { background: #FFF3CF; color: #8A6508; font-weight: 700; }
+.navegacao > span { cursor: default; }
+
 .perfil { display: flex; align-items: center; gap: 10px; }
-.perfil > span { display: grid; width: 39px; height: 39px; place-items: center; border-radius: 50%; background: var(--cor-principal); color: var(--cor-sobre-principal); font-weight: 900; }
+.perfil > span { display: grid; width: 40px; height: 40px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--cor-principal); color: var(--cor-sobre-principal); font-weight: 700; }
 .perfil strong,
 .perfil small { display: block; }
-.perfil strong { font-size: 12px; }
-.perfil small { margin-top: 3px; color: #929292; font-size: 11px; }
-.perfil button { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid #303030; border-radius: 10px; background: var(--cor-card-profundo); color: #999; cursor: pointer; }
-.perfil button:hover { border-color: var(--cor-principal); color: var(--cor-principal); }
-.main { display: flex; width: 100%; max-width: 1180px; flex: 1; flex-direction: column; margin: 0 auto; padding: 34px 18px 54px; }
-.titulo { margin-bottom: 24px; }
-.titulo h1 { margin: 0; font-size: clamp(27px, 4vw, 38px); }
-.titulo p { margin: 7px 0 0; color: #858585; font-size: 14px; }
+.perfil strong { color: #111111; font-size: 13px; }
+.perfil small { margin-top: 1px; color: #6B6B6B; font-size: 12px; }
+.perfil button { display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid var(--admin-borda-controle); border-radius: var(--raio-controle); background: #FFFFFF; color: #555555; cursor: pointer; }
+.perfil button:hover { border-color: var(--admin-borda-controle-hover); background: var(--admin-hover); color: #111111; }
+
+.main { display: flex; width: 100%; max-width: 1180px; flex: 1; flex-direction: column; margin: 0 auto; padding: 32px 18px 48px; }
+.titulo { margin-bottom: 20px; }
+.titulo h1 { margin: 0; color: #111111; font-size: clamp(26px, 4vw, 34px); }
+.titulo p { margin: 6px 0 0; color: #555555; font-size: 14px; }
+
+/* Tablet: sem o nome do garçom, que é o que menos ajuda nessa largura. */
+@media (max-width: 860px) {
+  .perfil div { display: none; }
+}
+
+/* Celular: Mesas e Comandas descem para uma segunda linha, de ponta a ponta,
+   em vez de sumirem. */
 @media (max-width: 680px) {
-  .header { min-height: 66px; padding: 0 14px; }
-  .header nav,
-  .perfil div,
-  .logo div { display: none; }
-  .logo,
-  .perfil button { min-width: 44px; min-height: 44px; }
-  .main { padding-top: 24px; }
+  .header { flex-wrap: wrap; row-gap: 0; min-height: 0; padding: 10px 14px 0; }
+  .logo strong { font-size: 15px; }
+  .navegacao { order: 3; width: calc(100% + 28px); margin: 10px -14px 0; border-top: 1px solid var(--admin-barra-borda); padding: 6px 14px; }
+  .navegacao a,
+  .navegacao > span { flex: 1 1 0; justify-content: center; }
+  .main { padding-top: 22px; }
 }

@@ -1,17 +1,9 @@
-/* Seletor de período dos indicadores novos (ticket médio e mais vendidos). */
+/* Período do ticket médio e dos mais vendidos, alinhado à direita no topo. O
+   nome do grupo fica só no aria-label, sem rótulo visível ocupando a linha. */
 .seletorPeriodo {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 14px;
-  margin-bottom: 14px;
-}
-
-.seletorPeriodo > span {
-  color: var(--cor-texto-fraco);
-  font-size: 12px;
-  font-weight: 700;
+  justify-content: flex-end;
+  margin-bottom: 16px;
 }
 
 /* Carregando, vazio e erro ocupam o lugar do valor sem parecer um R$ 0,00. */
@@ -39,7 +31,7 @@
 }
 
 @media (max-width: 560px) {
-  .seletorPeriodo { align-items: stretch; flex-direction: column; }
+  .seletorPeriodo { justify-content: stretch; }
   .opcoesPeriodo { width: 100%; }
   .opcoesPeriodo > button { flex: 1 1 0; padding: 0 8px; }
   .erroIndicadores > button { width: 100%; }

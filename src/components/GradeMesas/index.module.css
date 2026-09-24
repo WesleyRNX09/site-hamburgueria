@@ -16,7 +16,7 @@
   place-items: center;
 
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: var(--raio-controle, 12px);
 
   font: inherit;
   font-size: 17px;
@@ -104,6 +104,27 @@
   border: 1px solid transparent;
   border-radius: 4px;
 }
+
+/*
+  Atendimento do garçom (tema claro): mesmas situações e mesmos rótulos,
+  com cores claras de fundo e texto escuro do mesmo tom. Vale só nessa área;
+  o painel admin mantém as cores acima.
+*/
+:global(:root[data-area="garcom"]) .mesa { min-height: 56px; border-radius: var(--raio-controle); font-weight: 700; }
+:global(:root[data-area="garcom"]) .mesa:focus-visible { outline: 3px solid var(--cor-principal); outline-offset: 2px; }
+:global(:root[data-area="garcom"]) .livre { border-color: var(--admin-borda-controle); background: #FFFFFF; color: #111111; }
+:global(:root[data-area="garcom"]) .livre:hover:not(:disabled) { border-color: var(--admin-borda-controle-hover); }
+:global(:root[data-area="garcom"]) .aberta { border-color: var(--cor-principal); background: var(--cor-principal); color: #111111; }
+:global(:root[data-area="garcom"]) .pendente { border-color: #A78BFA; background: #EDE7FF; color: #5B21B6; }
+:global(:root[data-area="garcom"]) .cozinha { border-color: #60A5FA; background: #E3EEFF; color: #1D4ED8; }
+:global(:root[data-area="garcom"]) .conta { border-color: #F87171; background: #FDE6E6; color: #B91C1C; }
+:global(:root[data-area="garcom"]) .outro {
+  border-color: var(--admin-borda-controle);
+  background: repeating-linear-gradient(-45deg, #FFFFFF 0 6px, #F0EEF4 6px 12px);
+  color: #555555;
+}
+:global(:root[data-area="garcom"]) .selecionada { box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px #111111; }
+:global(:root[data-area="garcom"]) .legenda li { color: #555555; font-weight: 600; }
 
 @media (max-width: 680px) {
   .grade {

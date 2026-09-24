@@ -87,10 +87,21 @@ export function ehAreaPublica(caminho = '') {
   return !/^\/(admin|superadmin|garcom)(\/|$)/.test(caminho);
 }
 
-/* O tema claro vale para a área pública e para o painel do estabelecimento,
-   que usa a mesma paleta do cardápio. Garçom e superadmin seguem escuros. */
+/* O tema claro vale para a área pública, para o painel do estabelecimento e
+   para o atendimento do garçom, que usam a mesma paleta do cardápio. Só o
+   superadmin segue escuro. */
 export function usaTemaClaro(caminho = '') {
-  return !/^\/(superadmin|garcom)(\/|$)/.test(caminho);
+  return !/^\/superadmin(\/|$)/.test(caminho);
+}
+
+/* Valor do atributo `data-area` do <html>, que diz ao CSS qual paleta e quais
+   tokens valem. O garçom tem área própria para as cores que só ele usa, mas
+   herda a paleta clara e os tokens do painel. O index.html repete a regra
+   para o primeiro quadro. */
+export function areaDoTema(caminho = '') {
+  if (ehAreaPublica(caminho)) return 'publica';
+  if (/^\/garcom(\/|$)/.test(caminho)) return 'garcom';
+  return usaTemaClaro(caminho) ? 'admin' : 'painel';
 }
 
 export function normalizarConfiguracaoPublica(recebida = {}) {

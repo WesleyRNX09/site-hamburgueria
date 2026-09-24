@@ -3,22 +3,32 @@ import test from 'node:test';
 
 import {
   aplicarTema,
+  areaDoTema,
   criarVariaveisTema,
   ehAreaPublica,
   usaTemaClaro,
   normalizarConfiguracaoPublica
 } from './theme.js';
 
-test('usa o tema claro no cardápio e no painel, e o escuro no garçom e no superadmin', () => {
+test('usa o tema claro no cardápio, no painel e no garçom, e o escuro no superadmin', () => {
   assert.equal(usaTemaClaro('/'), true);
   assert.equal(usaTemaClaro('/finalizar-pedido'), true);
   assert.equal(usaTemaClaro('/admin/dashboard'), true);
   assert.equal(usaTemaClaro('/admin/login'), true);
-  assert.equal(usaTemaClaro('/garcom/mesas'), false);
+  assert.equal(usaTemaClaro('/garcom/mesas'), true);
   assert.equal(usaTemaClaro('/superadmin/estabelecimentos'), false);
   assert.equal(usaTemaClaro('/administrativo'), true);
   assert.equal(ehAreaPublica('/admin/dashboard'), false);
   assert.equal(ehAreaPublica('/'), true);
+});
+
+test('marca a área de cada rota para o CSS', () => {
+  assert.equal(areaDoTema('/'), 'publica');
+  assert.equal(areaDoTema('/garcomzinho'), 'publica');
+  assert.equal(areaDoTema('/admin/pedidos'), 'admin');
+  assert.equal(areaDoTema('/garcom/acesso'), 'garcom');
+  assert.equal(areaDoTema('/garcom/comanda/5'), 'garcom');
+  assert.equal(areaDoTema('/superadmin/login'), 'painel');
 });
 
 test('normaliza o tema público e rejeita valores configuráveis inseguros', () => {

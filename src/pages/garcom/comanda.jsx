@@ -281,12 +281,13 @@ function ComandaGarcom() {
                 ))}
               </div>
 
+              {categoriasDoSalao.length > 0 && <p className={styles.dicaCategorias}>Escolha uma categoria para ver os produtos</p>}
               {categoriasDoSalao.length === 0 && <div className={styles.vazio} role="status">Nenhum produto liberado para o salão. Cadastre no painel, em Cardápio, marcando "Onde aparece" como salão.</div>}
             </>
           )}
         </section>
 
-        <section className={`${styles.painel} ${styles.painelConsumo}`}>
+        <section className={styles.painel}>
           <div className={styles.topoPainel}>
             <div>
               <h2>Consumo da mesa</h2>

@@ -24,8 +24,8 @@
   min-width: 0;
   gap: 8px;
   margin: 0;
-  border: 1px solid var(--cor-borda);
-  border-radius: 12px;
+  border: 1px solid var(--admin-borda-card);
+  border-radius: var(--raio-card);
   padding: 14px;
 }
 
@@ -40,9 +40,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid var(--cor-borda-forte);
-  border-radius: 10px;
-  background: var(--cor-campo);
+  border: 1px solid var(--admin-borda-controle);
+  border-radius: var(--raio-controle);
+  background: var(--cor-card);
   padding: 10px 12px;
   cursor: pointer;
 }

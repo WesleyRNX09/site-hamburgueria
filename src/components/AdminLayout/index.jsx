@@ -3,7 +3,6 @@ import {
   BellRing,
   LogOut,
   Menu,
-  UtensilsCrossed,
   X
 } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
@@ -12,6 +11,10 @@ import { useApp } from '../../context/appContext';
 import LogoEstabelecimento from '../LogoEstabelecimento';
 import styles from './index.module.css';
 import { itensMenuAdmin } from './menu';
+
+function inicial(texto, alternativa) {
+  return texto?.trim().charAt(0).toUpperCase() || alternativa;
+}
 
 function AdminLayout({ titulo, subtitulo, acao, children }) {
   const [menuAberto, setMenuAberto] = useState(false);
@@ -22,6 +25,8 @@ function AdminLayout({ titulo, subtitulo, acao, children }) {
   // O menu mostra só as telas que as permissões recebidas do servidor abrem.
   const itensMenu = itensMenuAdmin.filter((item) => !item.permissoes || temPermissao(...item.permissoes));
   const navigate = useNavigate();
+  // Sem o dado de funcionamento, o selo fica de fora em vez de chutar.
+  const situacaoLoja = typeof configuracao.lojaAberta === 'boolean' ? configuracao.lojaAberta : null;
 
   async function sair() {
     await sairAdmin();
@@ -58,18 +63,6 @@ function AdminLayout({ titulo, subtitulo, acao, children }) {
 
   return (
     <div className={styles.pagina}>
-      <button
-        type="button"
-        className={styles.botaoMenu}
-        aria-label="Abrir menu"
-        aria-expanded={menuAberto}
-        aria-controls="navegacao-administrativa"
-        ref={botaoMenuRef}
-        onClick={() => setMenuAberto(true)}
-      >
-        <Menu size={22} />
-      </button>
-
       {menuAberto && (
         <button
           type="button"
@@ -79,6 +72,9 @@ function AdminLayout({ titulo, subtitulo, acao, children }) {
         />
       )}
 
+      {/* Faixa só de ícones: o nome de cada tela fica no aria-label e na dica
+          que aparece no hover e no foco. No celular a faixa vira gaveta e os
+          nomes aparecem ao lado dos ícones. */}
       <aside
         id="navegacao-administrativa"
         aria-label="Navegação administrativa"
@@ -86,13 +82,9 @@ function AdminLayout({ titulo, subtitulo, acao, children }) {
         inert={layoutCompacto && !menuAberto ? true : undefined}
         className={`${styles.sidebar} ${menuAberto ? styles.sidebarAberta : ''}`}
       >
-        <div className={styles.logoArea}>
-          <div className={styles.marcaIcone}>
-            <LogoEstabelecimento configuracao={configuracao} alternativa={<UtensilsCrossed size={24} />} />
-          </div>
-          <div>
-            <strong>{configuracao.nomeLoja || 'Administração'}</strong>
-            <span>ADMIN</span>
+        <div className={styles.topoFaixa}>
+          <div className={styles.marca} title={configuracao.nomeLoja || undefined}>
+            <LogoEstabelecimento configuracao={configuracao} alternativa={<span aria-hidden="true">{inicial(configuracao.nomeLoja, 'A')}</span>} />
           </div>
           <button type="button" className={styles.fecharMenu} ref={fecharMenuRef} aria-label="Fechar menu" onClick={() => setMenuAberto(false)}>
             <X size={22} />
@@ -106,19 +98,20 @@ function AdminLayout({ titulo, subtitulo, acao, children }) {
               <NavLink
                 key={item.rota}
                 to={item.rota}
+                aria-label={item.nome}
                 onClick={() => setMenuAberto(false)}
                 className={({ isActive }) => `${styles.linkMenu} ${isActive ? styles.linkAtivo : ''}`}
               >
-                <Icone size={20} />
-                <span>{item.nome}</span>
+                <Icone size={22} strokeWidth={1.8} aria-hidden="true" />
+                <span className={styles.rotulo} aria-hidden="true">{item.nome}</span>
               </NavLink>
             );
           })}
         </nav>
 
-        <button type="button" className={styles.sair} onClick={sair}>
-          <LogOut size={20} />
-          Sair
+        <button type="button" className={`${styles.linkMenu} ${styles.sair}`} aria-label="Sair" onClick={sair}>
+          <LogOut size={22} strokeWidth={1.8} aria-hidden="true" />
+          <span className={styles.rotulo} aria-hidden="true">Sair</span>
         </button>
       </aside>
 
@@ -131,24 +124,42 @@ function AdminLayout({ titulo, subtitulo, acao, children }) {
           </div>
         )}
         <header className={styles.cabecalho}>
-          <div>
-            <h1>{titulo}</h1>
-            <p>{subtitulo}</p>
-          </div>
+          <button
+            type="button"
+            className={styles.botaoMenu}
+            aria-label="Abrir menu"
+            aria-expanded={menuAberto}
+            aria-controls="navegacao-administrativa"
+            ref={botaoMenuRef}
+            onClick={() => setMenuAberto(true)}
+          >
+            <Menu size={22} />
+          </button>
+
+          <h1>{titulo}</h1>
 
           <div className={styles.cabecalhoDireita}>
-            {acao}
+            {situacaoLoja !== null && (
+              <span className={`${styles.seloLoja} ${situacaoLoja ? '' : styles.seloLojaFechada}`}>
+                {situacaoLoja ? 'Aberta' : 'Fechada'}
+              </span>
+            )}
             <div className={styles.perfil}>
-              <span>{adminSessao?.nome?.charAt(0) ?? 'A'}</span>
-              <div>
-                <strong>{adminSessao?.nome ?? 'Admin'}</strong>
-                <small>{adminSessao?.perfil ?? 'Administrador'}</small>
-              </div>
+              <span aria-hidden="true">{inicial(adminSessao?.nome, 'A')}</span>
+              <strong>{adminSessao?.nome ?? 'Admin'}</strong>
             </div>
           </div>
         </header>
 
-        <div className={styles.conteudo}>{children}</div>
+        <div className={styles.conteudo}>
+          {(subtitulo || acao) && (
+            <div className={styles.barraPagina}>
+              {subtitulo && <p>{subtitulo}</p>}
+              {acao && <div className={styles.acoesPagina}>{acao}</div>}
+            </div>
+          )}
+          {children}
+        </div>
       </main>
     </div>
   );

@@ -7,7 +7,7 @@ import {
   Settings,
   ShieldCheck,
   Users,
-  UtensilsCrossed
+  Utensils
 } from 'lucide-react';
 
 /*
@@ -34,7 +34,7 @@ export const itensMenuAdmin = [
   // Categorias, adicionais e promoções moram dentro da tela de cardápio,
   // para encurtar o menu.
   { nome: 'Cardápio', rota: '/admin/cardapio', icone: Package, permissoes: PERMISSOES_TELAS_ADMIN.cardapio },
-  { nome: 'Mesas / Comandas', rota: '/admin/mesas', icone: UtensilsCrossed, permissoes: PERMISSOES_TELAS_ADMIN.mesas },
+  { nome: 'Mesas / Comandas', rota: '/admin/mesas', icone: Utensils, permissoes: PERMISSOES_TELAS_ADMIN.mesas },
   { nome: 'Funcionários', rota: '/admin/funcionarios', icone: Users, permissoes: PERMISSOES_TELAS_ADMIN.funcionarios },
   // Sem permissão exigida: é ali que cada administrador troca a própria senha.
   { nome: 'Acessos', rota: '/admin/acessos', icone: ShieldCheck, permissoes: null },

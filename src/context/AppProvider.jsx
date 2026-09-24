@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { configuracaoInicial } from '../data/initialData';
 import { estaAbertoNoHorario } from '../utils/horarios';
 import { possuiPermissao } from '../utils/permissoes';
-import { aplicarTema, ehAreaPublica, normalizarConfiguracaoPublica, usaTemaClaro } from '../utils/theme';
+import { aplicarTema, areaDoTema, normalizarConfiguracaoPublica, usaTemaClaro } from '../utils/theme';
 import {
   acompanharPedidoApi,
   adicionarItemComandaApi,
@@ -184,12 +184,11 @@ export function AppProvider({ children }) {
     }), 60000);
     return () => clearInterval(timer);
   }, [configuracao.funcionamentoAutomatico]);
-  /* Cardápio e painel do estabelecimento são claros; garçom e superadmin
-     seguem escuros. O atributo diz ao CSS qual paleta vale. */
+  /* Cardápio, painel do estabelecimento e garçom são claros; o superadmin
+     segue escuro. O atributo diz ao CSS qual paleta vale. */
   useLayoutEffect(() => {
-    const publica = ehAreaPublica(caminhoAtual);
     const claro = usaTemaClaro(caminhoAtual);
-    document.documentElement.dataset.area = publica ? 'publica' : claro ? 'admin' : 'painel';
+    document.documentElement.dataset.area = areaDoTema(caminhoAtual);
     aplicarTema(document.documentElement, configuracao, claro);
     // A barra do navegador no celular acompanha a paleta da área.
     document

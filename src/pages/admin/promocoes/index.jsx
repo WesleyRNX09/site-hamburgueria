@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
+import SeletorOpcoes from '../../../components/SeletorOpcoes';
 import { useApp } from '../../../context/appContext';
 import { otimizarImagemProduto } from '../../../utils/imageUpload';
 import { usarPlaceholderProduto } from '../../../utils/productImage';
@@ -121,7 +122,7 @@ function PromocoesAdmin() {
 
             <div className={styles.gridFormulario}>
               <div className={styles.campo}><label htmlFor="nomePromocao">Nome</label><input id="nomePromocao" value={formulario.nome} onChange={(event) => alterar('nome', event.target.value)} /></div>
-              <div className={styles.campo}><label htmlFor="produtoPromocao">Produto vinculado</label><select id="produtoPromocao" value={formulario.produtoId ?? ''} onChange={(event) => alterar('produtoId', Number(event.target.value))}><option value="">Selecione</option>{produtos.filter((produto) => produto.ativo).map((produto) => <option key={produto.id} value={produto.id}>{produto.nome}</option>)}</select></div>
+              <div className={styles.campo}><label htmlFor="produtoPromocao">Produto vinculado</label><SeletorOpcoes id="produtoPromocao" rotulo="Produto vinculado" larguraTotal valor={formulario.produtoId ?? ''} onChange={(valor) => alterar('produtoId', Number(valor))} opcoes={[{ valor: '', rotulo: 'Selecione' }, ...produtos.filter((produto) => produto.ativo).map((produto) => ({ valor: produto.id, rotulo: produto.nome }))]} /></div>
               <div className={styles.campo}><label htmlFor="tipoPromocao">Selo da oferta</label><input id="tipoPromocao" value={formulario.tipo} onChange={(event) => alterar('tipo', event.target.value)} /></div>
               <div className={`${styles.campo} ${styles.campoCompleto}`}><label htmlFor="descricaoPromocao">Descrição</label><textarea id="descricaoPromocao" value={formulario.descricao} onChange={(event) => alterar('descricao', event.target.value)} /></div>
               <div className={styles.campo}><label htmlFor="precoAntigo">Preço anterior</label><input id="precoAntigo" value={formulario.precoAntigo} onChange={(event) => alterar('precoAntigo', event.target.value)} placeholder="49,90" /></div>

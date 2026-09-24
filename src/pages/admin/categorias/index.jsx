@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
+import SeletorOpcoes from '../../../components/SeletorOpcoes';
 import { useApp } from '../../../context/appContext';
 import { CANAIS_CATALOGO, canalCatalogo } from '../../../utils/canalCatalogo';
 import styles from '../shared.module.css';
@@ -71,17 +72,19 @@ function CategoriasAdmin() {
               <div className={styles.campo}><label htmlFor="ordemCategoria">Ordem</label><input id="ordemCategoria" required type="number" min="0" max="9999" value={formulario.ordem} onChange={(evento) => setFormulario((atual) => ({ ...atual, ordem: evento.target.value }))} /></div>
               <div className={styles.campo}>
                 <label htmlFor="canalCategoria">Onde aparece</label>
-                <select id="canalCategoria" value={formulario.canal ?? 'ambos'} onChange={(evento) => setFormulario((atual) => ({ ...atual, canal: evento.target.value }))}>
-                  {CANAIS_CATALOGO.map((canal) => <option key={canal.valor} value={canal.valor}>{canal.rotulo}</option>)}
-                </select>
+                <SeletorOpcoes id="canalCategoria" rotulo="Onde aparece" larguraTotal valor={formulario.canal ?? 'ambos'} onChange={(valor) => setFormulario((atual) => ({ ...atual, canal: valor }))} opcoes={CANAIS_CATALOGO} />
                 <small className={styles.textoSecundario}>{canalCatalogo(formulario.canal).ajuda}</small>
               </div>
               <div className={styles.campo}>
                 <label htmlFor="impressoraCategoria">Impressora padrão</label>
-                <select id="impressoraCategoria" value={formulario.impressoraId ?? ''} onChange={(evento) => setFormulario((atual) => ({ ...atual, impressoraId: evento.target.value }))}>
-                  <option value="">Não imprimir</option>
-                  {impressorasAtivas.map((impressora) => <option key={impressora.id} value={impressora.id}>{impressora.nome}</option>)}
-                </select>
+                <SeletorOpcoes
+                  id="impressoraCategoria"
+                  rotulo="Impressora padrão"
+                  larguraTotal
+                  valor={formulario.impressoraId ?? ''}
+                  onChange={(valor) => setFormulario((atual) => ({ ...atual, impressoraId: valor }))}
+                  opcoes={[{ valor: '', rotulo: 'Não imprimir' }, ...impressorasAtivas.map((impressora) => ({ valor: impressora.id, rotulo: impressora.nome }))]}
+                />
                 <small className={styles.textoSecundario}>Os itens desta categoria saem nesta impressora quando a comanda vai para a cozinha. Um produto pode ter a sua própria como exceção.</small>
               </div>
             </div>

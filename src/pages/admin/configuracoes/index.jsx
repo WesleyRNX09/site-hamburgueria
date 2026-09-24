@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
+import SeletorOpcoes from '../../../components/SeletorOpcoes';
 import { useApp } from '../../../context/appContext';
 import {
   DIAS_SEMANA,
@@ -183,12 +184,19 @@ function ConfiguracoesAdmin() {
               <div className={styles.campo}><label htmlFor="bannerBotaoTexto">Texto do botão do banner <span>(opcional)</span></label><input id="bannerBotaoTexto" maxLength="60" value={dados.bannerBotaoTexto ?? ''} onChange={(event) => alterar('bannerBotaoTexto', event.target.value)} placeholder="Ex.: Peça agora" /></div>
               <div className={styles.campo}>
                 <label htmlFor="bannerBotaoDestino">Destino do botão</label>
-                <select id="bannerBotaoDestino" value={dados.bannerBotaoDestino ?? ''} onChange={(event) => alterar('bannerBotaoDestino', event.target.value)}>
-                  <option value="">Selecione um destino</option>
-                  <option value="cardapio">Cardápio</option>
-                  <option value="promocoes">Promoções</option>
-                  <option value="sobre">Sobre</option>
-                </select>
+                <SeletorOpcoes
+                  id="bannerBotaoDestino"
+                  rotulo="Destino do botão"
+                  larguraTotal
+                  valor={dados.bannerBotaoDestino ?? ''}
+                  onChange={(valor) => alterar('bannerBotaoDestino', valor)}
+                  opcoes={[
+                    { valor: '', rotulo: 'Selecione um destino' },
+                    { valor: 'cardapio', rotulo: 'Cardápio' },
+                    { valor: 'promocoes', rotulo: 'Promoções' },
+                    { valor: 'sobre', rotulo: 'Sobre' }
+                  ]}
+                />
               </div>
               <div className={styles.campo}><label htmlFor="tituloCardapio">Título do cardápio <span>(opcional)</span></label><input id="tituloCardapio" maxLength="160" value={dados.tituloCardapio ?? ''} onChange={(event) => alterar('tituloCardapio', event.target.value)} placeholder="Ex.: Nosso cardápio" /></div>
               <div className={styles.campo}><label htmlFor="textoApresentacao">Apresentação do cardápio <span>(opcional)</span></label><input id="textoApresentacao" maxLength="280" value={dados.textoApresentacao ?? ''} onChange={(event) => alterar('textoApresentacao', event.target.value)} placeholder="Ex.: Escolha o seu hambúrguer favorito." /></div>
@@ -219,10 +227,10 @@ function ConfiguracoesAdmin() {
           <section className={styles.card}>
             <div className={styles.topoCard}><div><h2>Operação e atendimento</h2><p>Disponibilidade dos canais e regras usadas pelo servidor.</p></div></div>
             <div className={styles.gridFormulario}>
-              <div className={styles.campo}><label htmlFor="modoFuncionamento">Funcionamento atual</label><select id="modoFuncionamento" value={modoFuncionamento(dados)} onChange={(event) => alterarModo(event.target.value)}><option value="automatico">Automático pelo horário</option><option value="aberta">Loja aberta (manual)</option><option value="fechada">Loja fechada (manual)</option></select></div>
-              <div className={styles.campo}><label htmlFor="entregaAtiva">Delivery</label><select id="entregaAtiva" value={dados.entregaAtiva ? 'ativo' : 'inativo'} onChange={(event) => alterar('entregaAtiva', event.target.value === 'ativo')}><option value="ativo">Entrega ativa</option><option value="inativo">Entrega indisponível</option></select></div>
-              <div className={styles.campo}><label htmlFor="retiradaAtiva">Retirada no balcão</label><select id="retiradaAtiva" value={dados.retiradaAtiva ? 'ativo' : 'inativo'} onChange={(event) => alterar('retiradaAtiva', event.target.value === 'ativo')}><option value="ativo">Retirada ativa</option><option value="inativo">Retirada indisponível</option></select></div>
-              <div className={styles.campo}><label htmlFor="atendimentoGarcomAtivo">Atendimento por garçom</label><select id="atendimentoGarcomAtivo" value={dados.atendimentoGarcomAtivo ? 'ativo' : 'inativo'} onChange={(event) => alterar('atendimentoGarcomAtivo', event.target.value === 'ativo')}><option value="ativo">Salão ativo</option><option value="inativo">Salão indisponível</option></select></div>
+              <div className={styles.campo}><label htmlFor="modoFuncionamento">Funcionamento atual</label><SeletorOpcoes id="modoFuncionamento" rotulo="Funcionamento atual" larguraTotal valor={modoFuncionamento(dados)} onChange={alterarModo} opcoes={[{ valor: 'automatico', rotulo: 'Automático pelo horário' }, { valor: 'aberta', rotulo: 'Loja aberta (manual)' }, { valor: 'fechada', rotulo: 'Loja fechada (manual)' }]} /></div>
+              <div className={styles.campo}><label htmlFor="entregaAtiva">Delivery</label><SeletorOpcoes id="entregaAtiva" rotulo="Delivery" larguraTotal valor={dados.entregaAtiva ? 'ativo' : 'inativo'} onChange={(valor) => alterar('entregaAtiva', valor === 'ativo')} opcoes={[{ valor: 'ativo', rotulo: 'Entrega ativa' }, { valor: 'inativo', rotulo: 'Entrega indisponível' }]} /></div>
+              <div className={styles.campo}><label htmlFor="retiradaAtiva">Retirada no balcão</label><SeletorOpcoes id="retiradaAtiva" rotulo="Retirada no balcão" larguraTotal valor={dados.retiradaAtiva ? 'ativo' : 'inativo'} onChange={(valor) => alterar('retiradaAtiva', valor === 'ativo')} opcoes={[{ valor: 'ativo', rotulo: 'Retirada ativa' }, { valor: 'inativo', rotulo: 'Retirada indisponível' }]} /></div>
+              <div className={styles.campo}><label htmlFor="atendimentoGarcomAtivo">Atendimento por garçom</label><SeletorOpcoes id="atendimentoGarcomAtivo" rotulo="Atendimento por garçom" larguraTotal valor={dados.atendimentoGarcomAtivo ? 'ativo' : 'inativo'} onChange={(valor) => alterar('atendimentoGarcomAtivo', valor === 'ativo')} opcoes={[{ valor: 'ativo', rotulo: 'Salão ativo' }, { valor: 'inativo', rotulo: 'Salão indisponível' }]} /></div>
               <div className={styles.campo}><label htmlFor="taxaEntrega">Taxa única de entrega <span>(sem áreas cadastradas)</span></label><input id="taxaEntrega" min="0" required type="number" step="0.01" value={dados.taxaEntrega ?? 0} onChange={(event) => alterar('taxaEntrega', event.target.value)} /></div>
               <div className={styles.campo}><label htmlFor="tempoEntrega">Tempo estimado</label><input id="tempoEntrega" required maxLength="60" value={dados.tempoEntrega ?? ''} onChange={(event) => alterar('tempoEntrega', event.target.value)} placeholder="30–45 min" /></div>            </div>
 
@@ -266,8 +274,8 @@ function ConfiguracoesAdmin() {
           <section className={styles.card}>
             <div className={styles.topoCard}><div><h2>Formas de pagamento</h2><p>O Pix é habilitado quando chave, beneficiário e cidade estão preenchidos.</p></div></div>
             <div className={styles.gridFormulario}>
-              <div className={styles.campo}><label htmlFor="aceitaCartao">Cartão</label><select id="aceitaCartao" value={dados.aceitaCartao ? 'sim' : 'nao'} onChange={(event) => alterar('aceitaCartao', event.target.value === 'sim')}><option value="sim">Aceitar</option><option value="nao">Não aceitar</option></select></div>
-              <div className={styles.campo}><label htmlFor="aceitaDinheiro">Dinheiro</label><select id="aceitaDinheiro" value={dados.aceitaDinheiro ? 'sim' : 'nao'} onChange={(event) => alterar('aceitaDinheiro', event.target.value === 'sim')}><option value="sim">Aceitar</option><option value="nao">Não aceitar</option></select></div>
+              <div className={styles.campo}><label htmlFor="aceitaCartao">Cartão</label><SeletorOpcoes id="aceitaCartao" rotulo="Cartão" larguraTotal valor={dados.aceitaCartao ? 'sim' : 'nao'} onChange={(valor) => alterar('aceitaCartao', valor === 'sim')} opcoes={[{ valor: 'sim', rotulo: 'Aceitar' }, { valor: 'nao', rotulo: 'Não aceitar' }]} /></div>
+              <div className={styles.campo}><label htmlFor="aceitaDinheiro">Dinheiro</label><SeletorOpcoes id="aceitaDinheiro" rotulo="Dinheiro" larguraTotal valor={dados.aceitaDinheiro ? 'sim' : 'nao'} onChange={(valor) => alterar('aceitaDinheiro', valor === 'sim')} opcoes={[{ valor: 'sim', rotulo: 'Aceitar' }, { valor: 'nao', rotulo: 'Não aceitar' }]} /></div>
               <div className={styles.campo}><label htmlFor="pixChave">Chave Pix <span>(opcional)</span></label><input id="pixChave" maxLength="180" value={dados.pixChave ?? ''} onChange={(event) => alterar('pixChave', event.target.value)} /></div>
               <div className={styles.campo}><label htmlFor="pixBeneficiario">Beneficiário do Pix</label><input id="pixBeneficiario" maxLength="160" value={dados.pixBeneficiario ?? ''} onChange={(event) => alterar('pixBeneficiario', event.target.value)} disabled={!dados.pixChave} /></div>
               <div className={styles.campo}><label htmlFor="pixCidade">Cidade do beneficiário</label><input id="pixCidade" maxLength="60" value={dados.pixCidade ?? ''} onChange={(event) => alterar('pixCidade', event.target.value)} disabled={!dados.pixChave} placeholder="Ex.: São Paulo" /></div>
