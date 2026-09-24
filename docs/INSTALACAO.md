@@ -217,6 +217,18 @@ rede interna ou pelo próprio servidor.
 O cadastro pelo painel cria tenant, configuração e primeiro administrador na
 mesma transação. Não execute `CRIAR_db.sql` para cada cliente.
 
+O estabelecimento nasce `ativo`. Depois disso o status só muda pelas ações da
+lista: **Suspender** (pede motivo e encerra as sessões de administradores e
+garçons), **Reativar**, **Arquivar** (só a partir de suspenso, digitando o
+slug para confirmar; também encerra sessões) e **Desarquivar** (volta como
+suspenso). A edição não altera o status e recusa estabelecimento arquivado.
+Arquivados somem da lista padrão; marque "Incluir arquivados" para vê-los.
+Cada ação fica registrada na auditoria com o status antes e depois.
+
+Slugs usados pela plataforma (`www`, `api`, `admin`, `superadmin`, `app`,
+`mail`, `static`, `uploads`, entre outros) são recusados na criação e na troca
+de slug. A lista completa é `SLUGS_RESERVADOS`, em `server/superadmin.js`.
+
 ## 10. Configure subdomínios
 
 Para `DOMINIO_PRINCIPAL=pedidos.exemplo.com.br`, um slug `loja-a` é acessado
@@ -263,6 +275,30 @@ efetuar commit implícito; não tente desfazer uma migration parcialmente
 aplicada com comandos improvisados. Interrompa o deploy, preserve evidências e
 decida entre correção incremental ou restauração do backup validado.
 
+### Migration 024 — ciclo de vida do estabelecimento
+
+A `024_ciclo_de_vida_estabelecimento.sql` fixa `estabelecimentos.status` em
+`ativo`, `suspenso` ou `arquivado` (CHECK `chk_estabelecimentos_status`),
+acrescenta `suspenso_em`, `motivo_suspensao`, `arquivado_em` e
+`arquivado_por`, e converte qualquer outro status (na prática, `inativo`) em
+`suspenso`, com a data da conversão. Nada é apagado.
+
+Ordem de aplicação:
+
+1. gere o backup do banco e confirme que ele restaura;
+2. suspenda novas escritas no painel do superadministrador;
+3. execute `npm run db:migrate` (aplica a `024` junto com qualquer pendente);
+4. publique e reinicie o backend desta versão logo em seguida;
+5. rode `database/verificacoes/001_verificar_instalacao.sql`: as contagens de
+   status inválido, suspensos sem data e arquivados sem data devem ser zero;
+6. confira no painel quais lojas ficaram `suspenso` pela conversão e reative
+   as que deveriam estar no ar.
+
+A migration e o backend andam juntos. O backend desta versão lê as colunas
+novas, então sem a `024` a listagem do superadministrador falha. O backend
+anterior ainda grava `inativo` ao desativar uma loja, e o CHECK recusa esse
+valor, então não use o botão antigo entre a migration e o novo deploy.
+
 ## 13. Verifique a instalação
 
 Antes de liberar tráfego, confirme:
@@ -273,7 +309,7 @@ Antes de liberar tráfego, confirme:
 - duas lojas exibindo nomes, temas e cardápios diferentes;
 - token de administrador e garçom de uma loja recusado na outra;
 - pedido e imagem de uma loja retornando `403` ou `404` na outra;
-- loja inativa, bloqueada ou vencida sem acesso operacional;
+- loja suspensa, arquivada, bloqueada ou vencida sem acesso operacional;
 - `/api/saude` monitorado e sem exposição pública da porta interna;
 - `/uploads/` passando pelo backend e persistindo após novo deploy.
 

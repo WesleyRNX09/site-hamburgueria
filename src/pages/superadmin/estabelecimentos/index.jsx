@@ -1,17 +1,20 @@
 import {
+  Archive,
+  ArchiveRestore,
   Building2,
   CalendarClock,
   CheckCircle2,
   CircleDollarSign,
+  CirclePause,
+  CirclePlay,
   Edit3,
   KeyRound,
   Plus,
-  Power,
   Search,
   ShieldAlert,
   X
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import SuperadminLayout from '../../../components/SuperadminLayout';
 import { useSuperadmin } from '../../../context/superadminContext';
@@ -30,7 +33,6 @@ function formularioVazio() {
     nomeFantasia: '',
     slug: '',
     dominioPersonalizado: '',
-    status: 'ativo',
     plano: 'basico',
     statusAssinatura: 'ativa',
     vencimentoAssinatura: '',
@@ -53,6 +55,105 @@ function dataCurta(valor) {
 
 function textoStatus(valor) {
   return String(valor ?? '').replace(/^./, (letra) => letra.toUpperCase());
+}
+
+const TAMANHO_MAXIMO_MOTIVO = 280;
+const CLASSE_STATUS = {
+  ativo: styles.ativo,
+  suspenso: styles.suspenso,
+  arquivado: styles.arquivado
+};
+
+/*
+  Confirmação das duas ações que tiram a loja do ar: suspender pede o motivo
+  (vai para a auditoria e aparece na lista) e arquivar pede o slug digitado,
+  para não arquivar a loja errada com um clique. A mensagem de erro é a do
+  servidor, que é quem decide se a transição vale.
+*/
+function ModalCicloDeVida({ acao, estabelecimento, processando, onCancelar, onConfirmar }) {
+  const [valor, setValor] = useState('');
+  const [erro, setErro] = useState('');
+  const suspender = acao === 'suspender';
+  const tamanhoMotivo = Array.from(valor.trim()).length;
+  const podeConfirmar = suspender
+    ? tamanhoMotivo > 0 && tamanhoMotivo <= TAMANHO_MAXIMO_MOTIVO
+    : valor.trim() === estabelecimento.slug;
+
+  useEffect(() => {
+    function aoTeclar(evento) {
+      if (evento.key === 'Escape' && !processando) onCancelar();
+    }
+    document.addEventListener('keydown', aoTeclar);
+    return () => document.removeEventListener('keydown', aoTeclar);
+  }, [onCancelar, processando]);
+
+  async function enviar(evento) {
+    evento.preventDefault();
+    setErro('');
+    try {
+      await onConfirmar(valor.trim());
+    } catch (falha) {
+      setErro(falha.message || 'Não foi possível concluir a ação.');
+    }
+  }
+
+  return (
+    <div className={styles.modalFundo} role="presentation" onClick={(evento) => { if (evento.target === evento.currentTarget && !processando) onCancelar(); }}>
+      <section className={`${styles.formularioCard} ${styles.modal}`} role="dialog" aria-modal="true" aria-labelledby="titulo-ciclo-vida">
+        <div className={styles.formularioTopo}>
+          <div>
+            <span>{suspender ? 'SUSPENDER ACESSO' : 'ARQUIVAR TENANT'}</span>
+            <h2 id="titulo-ciclo-vida">{suspender ? 'Suspender' : 'Arquivar'} {estabelecimento.nomeFantasia}</h2>
+            <p>
+              {suspender
+                ? 'A loja sai do ar e as sessões abertas de administradores e garçons são encerradas. Dá para reativar depois.'
+                : 'O tenant sai da lista padrão e continua fora do ar. Nenhum dado é apagado; dá para desarquivar depois.'}
+            </p>
+          </div>
+          <button type="button" className={styles.fechar} aria-label="Fechar" disabled={processando} onClick={onCancelar}><X size={20} /></button>
+        </div>
+        <form className={styles.formulario} onSubmit={enviar}>
+          {suspender ? (
+            <label className={styles.campo}>
+              <span>Motivo da suspensão</span>
+              <textarea
+                required
+                autoFocus
+                rows={3}
+                maxLength={TAMANHO_MAXIMO_MOTIVO}
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+                placeholder="Ex.: pagamento de setembro em aberto"
+              />
+              <small>{tamanhoMotivo}/{TAMANHO_MAXIMO_MOTIVO} caracteres. Fica registrado na auditoria.</small>
+            </label>
+          ) : (
+            <label className={styles.campo}>
+              <span>Digite <strong>{estabelecimento.slug}</strong> para confirmar</span>
+              <input
+                required
+                autoFocus
+                autoComplete="off"
+                spellCheck="false"
+                maxLength="100"
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+                placeholder={estabelecimento.slug}
+              />
+            </label>
+          )}
+          {erro && <div className={styles.erro} role="alert">{erro}</div>}
+          <div className={styles.acoesFormulario}>
+            <button type="button" className={styles.botaoSecundario} disabled={processando} onClick={onCancelar}>Cancelar</button>
+            <button type="submit" className={styles.botaoPerigo} disabled={processando || !podeConfirmar}>
+              {suspender ? <CirclePause size={17} /> : <Archive size={17} />}
+              {processando ? 'Aplicando...' : suspender ? 'Suspender acesso' : 'Arquivar tenant'}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
 }
 
 function FormularioEstabelecimento({ inicial, editando, opcoes, processando, onCancelar, onSalvar }) {
@@ -111,8 +212,8 @@ function FormularioEstabelecimento({ inicial, editando, opcoes, processando, onC
             <label className={styles.campo}><span>Nome do estabelecimento</span><input required maxLength="160" value={dados.nomeFantasia} onChange={(e) => alterar('nomeFantasia', e.target.value)} /></label>
             <label className={styles.campo}><span>Slug</span><input required maxLength="100" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="minha-hamburgueria" value={dados.slug} onChange={(e) => alterar('slug', e.target.value.toLowerCase())} /></label>
             <label className={styles.campo}><span>Domínio personalizado <small>(opcional)</small></span><input maxLength="253" placeholder="pedidos.exemplo.com.br" value={dados.dominioPersonalizado} onChange={(e) => alterar('dominioPersonalizado', e.target.value)} /></label>
-            <label className={styles.campo}><span>Status operacional</span><select value={dados.status} onChange={(e) => alterar('status', e.target.value)}>{opcoes.statusEstabelecimento.map((item) => <option value={item} key={item}>{textoStatus(item)}</option>)}</select></label>
           </div>
+          <p className={styles.ajuda}>{editando ? 'Suspender, reativar e arquivar ficam nas ações da lista.' : 'O estabelecimento nasce ativo. Suspender e arquivar ficam nas ações da lista.'}</p>
         </fieldset>
 
         <fieldset>
@@ -315,11 +416,16 @@ function EstabelecimentosSuperadmin() {
     dadosCarregando,
     carregarEstabelecimentos,
     criarEstabelecimento,
-    atualizarEstabelecimento
+    atualizarEstabelecimento,
+    suspenderEstabelecimento,
+    reativarEstabelecimento,
+    arquivarEstabelecimento,
+    desarquivarEstabelecimento
   } = useSuperadmin();
-  const [filtros, setFiltros] = useState({ busca: '', status: '', plano: '', statusAssinatura: '' });
+  const [filtros, setFiltros] = useState({ busca: '', status: '', plano: '', statusAssinatura: '', incluirArquivados: false });
   const [formulario, setFormulario] = useState(null);
   const [resetSenha, setResetSenha] = useState(null);
+  const [cicloDeVida, setCicloDeVida] = useState(null);
   const [processando, setProcessando] = useState(false);
   const [mensagem, setMensagem] = useState('');
   const [erro, setErro] = useState('');
@@ -367,7 +473,8 @@ function EstabelecimentosSuperadmin() {
     evento.preventDefault();
     setErro('');
     try {
-      await carregarEstabelecimentos(filtros);
+      const { incluirArquivados, ...demais } = filtros;
+      await carregarEstabelecimentos(incluirArquivados ? { ...demais, incluirArquivados: '1' } : demais);
     } catch (falha) {
       setErro(falha.message);
     }
@@ -386,19 +493,93 @@ function EstabelecimentosSuperadmin() {
     }
   }
 
-  async function alternarStatus(estabelecimento) {
+  function abrirCicloDeVida(acao, estabelecimento) {
+    setMensagem('');
+    setErro('');
+    setCicloDeVida({ acao, estabelecimento });
+  }
+
+  const fecharCicloDeVida = useCallback(() => setCicloDeVida(null), []);
+
+  // Erro dentro do modal: o modal continua aberto e mostra a mensagem.
+  async function confirmarCicloDeVida(valor) {
+    const { acao, estabelecimento } = cicloDeVida;
+    setProcessando(true);
+    try {
+      if (acao === 'suspender') {
+        await suspenderEstabelecimento(estabelecimento.id, valor);
+        setMensagem(`${estabelecimento.nomeFantasia} foi suspenso. As sessões abertas da loja foram encerradas.`);
+      } else {
+        await arquivarEstabelecimento(estabelecimento.id, valor);
+        setMensagem(`${estabelecimento.nomeFantasia} foi arquivado. Marque "Incluir arquivados" para vê-lo na lista.`);
+      }
+      setCicloDeVida(null);
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  // Reativar e desarquivar não tiram ninguém do ar: rodam direto, sem modal.
+  async function aplicarSemConfirmacao(acao, estabelecimento) {
     setMensagem('');
     setErro('');
     setProcessando(true);
     try {
-      const status = estabelecimento.status === 'ativo' ? 'inativo' : 'ativo';
-      await atualizarEstabelecimento(estabelecimento.id, { ...estabelecimento, status });
-      setMensagem(`${estabelecimento.nomeFantasia} agora está ${status}.`);
+      if (acao === 'reativar') {
+        await reativarEstabelecimento(estabelecimento.id);
+        setMensagem(`${estabelecimento.nomeFantasia} foi reativado. Administradores e garçons precisam entrar de novo.`);
+      } else {
+        await desarquivarEstabelecimento(estabelecimento.id);
+        setMensagem(`${estabelecimento.nomeFantasia} foi desarquivado e voltou como suspenso.`);
+      }
     } catch (falha) {
       setErro(falha.message);
     } finally {
       setProcessando(false);
     }
+  }
+
+  function acoesDoEstabelecimento(item) {
+    const nome = item.nomeFantasia;
+    return (
+      <div className={styles.acoes}>
+        {item.status !== 'arquivado' && (
+          <button type="button" aria-label={`Editar ${nome}`} title="Editar" onClick={() => abrirEdicao(item)}><Edit3 size={17} /></button>
+        )}
+        {item.status === 'ativo' && (
+          <button type="button" className={styles.acaoPerigo} disabled={processando} aria-label={`Suspender ${nome}`} title="Suspender" onClick={() => abrirCicloDeVida('suspender', item)}><CirclePause size={17} /></button>
+        )}
+        {item.status === 'suspenso' && (
+          <>
+            <button type="button" disabled={processando} aria-label={`Reativar ${nome}`} title="Reativar" onClick={() => aplicarSemConfirmacao('reativar', item)}><CirclePlay size={17} /></button>
+            <button type="button" className={styles.acaoPerigo} disabled={processando} aria-label={`Arquivar ${nome}`} title="Arquivar" onClick={() => abrirCicloDeVida('arquivar', item)}><Archive size={17} /></button>
+          </>
+        )}
+        {item.status === 'arquivado' && (
+          <button type="button" disabled={processando} aria-label={`Desarquivar ${nome}`} title="Desarquivar" onClick={() => aplicarSemConfirmacao('desarquivar', item)}><ArchiveRestore size={17} /></button>
+        )}
+        {item.status !== 'arquivado' && (
+          <button type="button" aria-label={`Resetar senha de administrador de ${nome}`} title="Resetar senha de administrador" onClick={() => abrirResetSenha(item)}><KeyRound size={17} /></button>
+        )}
+      </div>
+    );
+  }
+
+  function situacaoDoEstabelecimento(item) {
+    return (
+      <>
+        <span className={`${styles.status} ${CLASSE_STATUS[item.status] ?? styles.atencao}`}>{textoStatus(item.status)}</span>
+        {item.status === 'suspenso' && (
+          <small className={styles.motivo} title={item.motivoSuspensao || undefined}>
+            {item.motivoSuspensao || 'Motivo não informado'}
+            {item.suspensoEm ? ` • desde ${dataCurta(item.suspensoEm)}` : ''}
+          </small>
+        )}
+        {item.status === 'arquivado' && item.arquivadoEm && (
+          <small className={styles.motivo}>Arquivado em {dataCurta(item.arquivadoEm)}</small>
+        )}
+      </>
+    );
   }
 
   return (
@@ -435,12 +616,23 @@ function EstabelecimentosSuperadmin() {
         />
       )}
 
+      {cicloDeVida && (
+        <ModalCicloDeVida
+          key={`${cicloDeVida.acao}-${cicloDeVida.estabelecimento.id}`}
+          acao={cicloDeVida.acao}
+          estabelecimento={cicloDeVida.estabelecimento}
+          processando={processando}
+          onCancelar={fecharCicloDeVida}
+          onConfirmar={confirmarCicloDeVida}
+        />
+      )}
+
       {mensagem && <div className={styles.sucesso} role="status">{mensagem}</div>}
       {erro && <div className={styles.erro} role="alert">{erro}</div>}
 
       <section className={styles.listaCard}>
         <div className={styles.listaTopo}>
-          <div><h2>Tenants cadastrados</h2><p>A busca consulta no máximo 200 registros por vez.</p></div>
+          <div><h2>Tenants cadastrados</h2><p>A busca consulta no máximo 200 registros por vez. Arquivados só aparecem filtrando por eles.</p></div>
         </div>
         <form className={styles.filtros} onSubmit={filtrar}>
           <label className={styles.busca}>
@@ -450,6 +642,7 @@ function EstabelecimentosSuperadmin() {
           <select aria-label="Filtrar por status" value={filtros.status} onChange={(e) => setFiltros((atuais) => ({ ...atuais, status: e.target.value }))}><option value="">Todos os status</option>{opcoes.statusEstabelecimento.map((item) => <option key={item} value={item}>{textoStatus(item)}</option>)}</select>
           <select aria-label="Filtrar por plano" value={filtros.plano} onChange={(e) => setFiltros((atuais) => ({ ...atuais, plano: e.target.value }))}><option value="">Todos os planos</option>{opcoes.planos.map((item) => <option key={item} value={item}>{textoStatus(item)}</option>)}</select>
           <select aria-label="Filtrar por assinatura" value={filtros.statusAssinatura} onChange={(e) => setFiltros((atuais) => ({ ...atuais, statusAssinatura: e.target.value }))}><option value="">Todas as assinaturas</option>{opcoes.statusAssinatura.map((item) => <option key={item} value={item}>{textoStatus(item)}</option>)}</select>
+          <label className={styles.incluirArquivados}><input type="checkbox" checked={filtros.incluirArquivados} onChange={(e) => setFiltros((atuais) => ({ ...atuais, incluirArquivados: e.target.checked }))} /> Incluir arquivados</label>
           <button className={styles.botaoSecundario} type="submit" disabled={dadosCarregando}>{dadosCarregando ? 'Buscando...' : 'Filtrar'}</button>
         </form>
 
@@ -460,11 +653,11 @@ function EstabelecimentosSuperadmin() {
               {estabelecimentos.map((item) => (
                 <tr key={item.id}>
                   <td data-rotulo="Estabelecimento"><strong>{item.nomeFantasia}</strong><small>/{item.slug}{item.dominioPersonalizado ? ` • ${item.dominioPersonalizado}` : ''}</small></td>
-                  <td data-rotulo="Acesso"><span className={`${styles.status} ${item.status === 'ativo' ? styles.ativo : styles.inativo}`}>{textoStatus(item.status)}</span></td>
+                  <td data-rotulo="Acesso">{situacaoDoEstabelecimento(item)}</td>
                   <td data-rotulo="Plano"><span className={styles.plano}>{textoStatus(item.plano)}</span></td>
                   <td data-rotulo="Assinatura"><span className={`${styles.status} ${item.statusAssinatura === 'ativa' ? styles.ativo : styles.atencao}`}>{textoStatus(item.statusAssinatura)}</span><small className={styles.vencimento}><CalendarClock size={12} /> {dataCurta(item.vencimentoAssinatura)}</small></td>
                   <td data-rotulo="Administradores">{item.totalAdministradores}</td>
-                  <td data-rotulo="Ações"><div className={styles.acoes}><button type="button" aria-label={`Editar ${item.nomeFantasia}`} title="Editar" onClick={() => abrirEdicao(item)}><Edit3 size={17} /></button><button type="button" disabled={processando} aria-label={`${item.status === 'ativo' ? 'Desativar' : 'Ativar'} ${item.nomeFantasia}`} title={item.status === 'ativo' ? 'Desativar' : 'Ativar'} onClick={() => alternarStatus(item)}><Power size={17} /></button><button type="button" aria-label={`Resetar senha de administrador de ${item.nomeFantasia}`} title="Resetar senha de administrador" onClick={() => abrirResetSenha(item)}><KeyRound size={17} /></button></div></td>
+                  <td data-rotulo="Ações">{acoesDoEstabelecimento(item)}</td>
                 </tr>
               ))}
             </tbody>

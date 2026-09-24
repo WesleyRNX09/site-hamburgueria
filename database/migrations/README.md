@@ -126,4 +126,16 @@ A pasta `legado/` preserva o histórico anterior e não é executada pelo runner
   produção. Em duas instruções separadas, para nenhum motor precisar remover e
   recriar o mesmo nome dentro de um único ALTER. Nenhuma linha é reescrita:
   `comanda` e `delivery` seguem válidos.
+- `024_ciclo_de_vida_estabelecimento.sql`: fixa o ciclo de vida do
+  estabelecimento em três estados — `ativo`, `suspenso` e `arquivado` — com o
+  CHECK `chk_estabelecimentos_status`, e acrescenta `suspenso_em`,
+  `motivo_suspensao`, `arquivado_em` e `arquivado_por` (FK para
+  `superadministradores(id)` com ON DELETE SET NULL e índice próprio). Antes
+  do CHECK, converte qualquer status fora da lista (na prática, `inativo`)
+  para `suspenso`, gravando o momento da conversão em `suspenso_em` (UTC).
+  Nenhuma linha é removida e nenhuma loja ativa muda. As transições passam a
+  ser feitas só pelas ações dedicadas do painel do superadministrador
+  (suspender, reativar, arquivar e desarquivar); a edição do estabelecimento
+  deixa de alterar o status. Aplique com a versão do backend que já conhece
+  os três estados: o backend anterior grava `inativo`, que o CHECK recusa.
 - `legado/20260824_operacao_comercial.sql`: histórico anterior, fora do runner.

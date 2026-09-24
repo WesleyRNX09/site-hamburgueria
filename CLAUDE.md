@@ -118,7 +118,15 @@ Este projeto não usa pastas `/frontend` e `/backend` separadas: é um único
 - Testes de isolamento multiempresa: `npm run test:security`.
 - Integração MySQL real (opt-in, banco descartável): `RUN_MYSQL_TESTS=1 npm test`
   — nunca aponte para um banco remoto/persistente ao usar essa variável.
-- Build de produção do frontend: `npm run build`.
+- Build de produção do frontend: `npm run build`. Além do `vite build`, o
+  script também gera os arquivos de SEO (`scripts/generate-seo-files.js`).
+
+## Produção
+
+- Subir o servidor de produção (API e `dist/` no mesmo processo, lendo só o
+  `.env`): `npm start`.
+- Pré-visualizar o build do frontend com o Vite: `npm run preview`.
+- Gerar só os arquivos de SEO, sem novo build: `npm run seo:generate`.
 
 ## Banco de dados
 
@@ -127,6 +135,10 @@ Este projeto não usa pastas `/frontend` e `/backend` separadas: é um único
   autorização explícita e backup validado).
 - Preparo de um schema novo e vazio: `npm run db:prepare`.
 - Checar conexão sem alterar estrutura: `npm run db:check`.
+- Criar ou verificar o administrador do estabelecimento inicial (lê
+  `ADMIN_*` do ambiente): `npm run criar-admin-inicial`.
+- Criar ou verificar o superadministrador (lê `SUPERADMIN_*` do ambiente):
+  `npm run criar-superadmin`.
 
 ---
 
@@ -332,9 +344,9 @@ Configurações de ambiente devem permanecer no `.env`.
 
 O `.env` real não deve ser commitado.
 
-O `.env.example` pode documentar nomes de variáveis, sem valores secretos.
+O `env.example` pode documentar nomes de variáveis, sem valores secretos.
 
-A leitura e a edição diretas do `.env` real são bloqueadas por padrão via `.claude/settings.json` (seção 32); trabalhe com `.env.example`.
+A leitura e a edição diretas do `.env` real são bloqueadas por padrão via `.claude/settings.json` (seção 32); trabalhe com `env.example`.
 
 ---
 

@@ -38,6 +38,10 @@ SELECT
   e.slug,
   e.dominio_personalizado,
   e.status,
+  e.suspenso_em,
+  e.motivo_suspensao,
+  e.arquivado_em,
+  e.arquivado_por,
   e.plano,
   e.status_assinatura,
   e.vencimento_assinatura_em,
@@ -45,6 +49,17 @@ SELECT
   e.atualizado_em
 FROM estabelecimentos AS e
 ORDER BY e.id_estabelecimento;
+
+-- Ciclo de vida (migration 024): status fora dos três estados, loja suspensa
+-- sem data de suspensão e loja arquivada sem data de arquivamento devem ser 0.
+SELECT
+  SUM(CASE WHEN e.status NOT IN ('ativo', 'suspenso', 'arquivado') THEN 1 ELSE 0 END)
+    AS estabelecimentos_com_status_invalido,
+  SUM(CASE WHEN e.status = 'suspenso' AND e.suspenso_em IS NULL THEN 1 ELSE 0 END)
+    AS suspensos_sem_data,
+  SUM(CASE WHEN e.status = 'arquivado' AND e.arquivado_em IS NULL THEN 1 ELSE 0 END)
+    AS arquivados_sem_data
+FROM estabelecimentos AS e;
 
 SELECT
   COUNT(*) AS configuracoes_sem_estabelecimento

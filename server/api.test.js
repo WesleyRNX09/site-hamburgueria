@@ -28,8 +28,14 @@ import { adicionaisSeed, mesasSeed, pedidosSeed, produtosSeed } from './seed.js'
 import { criarHashSenha, criarJwt, verificarJwt, verificarSenha } from './security.js';
 import {
   alternarStatusSuperadministrador,
+  arquivarEstabelecimento,
+  atualizarEstabelecimentoGerencial,
   criarEstabelecimentoGerencial,
-  listarEstabelecimentosGerenciais
+  desarquivarEstabelecimento,
+  listarEstabelecimentosGerenciais,
+  reativarEstabelecimento,
+  SLUGS_RESERVADOS,
+  suspenderEstabelecimento
 } from './superadmin.js';
 import {
   extrairHostname,
@@ -2116,6 +2122,384 @@ test('a rota de auditoria pagina, filtra por estabelecimento e por período', as
     assert.equal(proibido.status, 403);
     const semSessao = await fetch(`${baseUrl}/api/superadmin/auditoria`);
     assert.equal(semSessao.status, 401);
+  } finally {
+    await fecharServidor(servidor);
+  }
+});
+
+/*
+  Banco em memória das ações do superadmin sobre o cadastro do estabelecimento.
+  Registra cada comando e emula só as consultas que listagem, edição e ciclo
+  de vida fazem, respeitando o estado de origem que cada UPDATE exige.
+*/
+function bancoCadastroEstabelecimentos(linhasIniciais) {
+  const lojas = new Map(linhasIniciais.map((linha) => [linha.id_estabelecimento, {
+    dominio_personalizado: null,
+    status: 'ativo',
+    suspenso_em: null,
+    motivo_suspensao: null,
+    arquivado_em: null,
+    arquivado_por: null,
+    plano: 'basico',
+    status_assinatura: 'ativa',
+    vencimento_assinatura_em: null,
+    criado_em: new Date('2026-09-01T00:00:00.000Z'),
+    atualizado_em: new Date('2026-09-01T00:00:00.000Z'),
+    ...linha
+  }]));
+  const comandos = [];
+  const auditoria = [];
+
+  function responder(sql, parametros = []) {
+    comandos.push({ sql, parametros });
+    if (sql.includes('FOR UPDATE') && sql.includes('FROM estabelecimentos')) {
+      const loja = lojas.get(Number(parametros[0]));
+      return [loja ? [{ ...loja }] : []];
+    }
+    if (sql.includes('FROM estabelecimentos e')) {
+      if (sql.includes('WHERE e.id_estabelecimento = ?')) {
+        const loja = lojas.get(Number(parametros[0]));
+        return [loja ? [{ ...loja, total_administradores: 1 }] : []];
+      }
+      let lista = [...lojas.values()];
+      if (sql.includes("e.status <> 'arquivado'")) lista = lista.filter((loja) => loja.status !== 'arquivado');
+      if (sql.includes('e.status = ?')) lista = lista.filter((loja) => loja.status === parametros[0]);
+      return [lista.map((loja) => ({ ...loja, total_administradores: 1 }))];
+    }
+    if (sql.includes('UPDATE estabelecimentos') && sql.includes('nome_fantasia = ?')) {
+      const [nomeFantasia, slug, dominio, plano, statusAssinatura, vencimento, id] = parametros;
+      Object.assign(lojas.get(Number(id)), {
+        nome_fantasia: nomeFantasia,
+        slug,
+        dominio_personalizado: dominio,
+        plano,
+        status_assinatura: statusAssinatura,
+        vencimento_assinatura_em: vencimento
+      });
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('UPDATE estabelecimentos')) {
+      const loja = lojas.get(Number(parametros.at(-1)));
+      const origem = sql.match(/AND status = '(\w+)'/)?.[1];
+      const destino = sql.match(/SET status = '(\w+)'/)?.[1];
+      if (!loja || loja.status !== origem) return [{ affectedRows: 0 }];
+      if (destino === 'suspenso' && origem === 'ativo') {
+        Object.assign(loja, { status: 'suspenso', suspenso_em: new Date(), motivo_suspensao: parametros[0] });
+      } else if (destino === 'ativo') {
+        Object.assign(loja, { status: 'ativo', suspenso_em: null, motivo_suspensao: null });
+      } else if (destino === 'arquivado') {
+        Object.assign(loja, { status: 'arquivado', arquivado_em: new Date(), arquivado_por: parametros[0] });
+      } else {
+        Object.assign(loja, { status: 'suspenso', arquivado_em: null, arquivado_por: null });
+      }
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('INSERT INTO configuracoes_estabelecimento')) return [{ affectedRows: 1 }];
+    if (sql.includes('DELETE FROM sessoes_admin') || sql.includes('DELETE FROM sessoes_garcom')) {
+      return [{ affectedRows: 0 }];
+    }
+    if (sql.includes('INSERT INTO auditoria_superadmin')) {
+      auditoria.push({
+        superadministradorId: parametros[0],
+        idEstabelecimento: parametros[1],
+        acao: parametros[2],
+        detalhes: JSON.parse(parametros[3])
+      });
+      return [{ affectedRows: 1 }];
+    }
+    throw new Error(`Consulta inesperada no teste: ${sql}`);
+  }
+
+  const conexao = {
+    async beginTransaction() { comandos.push({ sql: 'BEGIN', parametros: [] }); },
+    async commit() { comandos.push({ sql: 'COMMIT', parametros: [] }); },
+    async rollback() { comandos.push({ sql: 'ROLLBACK', parametros: [] }); },
+    release() {},
+    async execute(sql, parametros) { return responder(sql, parametros); }
+  };
+  return {
+    lojas,
+    comandos,
+    auditoria,
+    banco: {
+      async getConnection() { return conexao; },
+      async execute(sql, parametros) { return responder(sql, parametros); }
+    }
+  };
+}
+
+async function statusDoErro(promessa) {
+  try {
+    await promessa;
+  } catch (erro) {
+    return { status: erro.status, mensagem: erro.message };
+  }
+  assert.fail('A operação deveria ter sido recusada.');
+}
+
+test('ciclo de vida só aceita as transições previstas e responde 409 às demais', async () => {
+  const { banco, lojas, comandos, auditoria } = bancoCadastroEstabelecimentos([
+    { id_estabelecimento: 11, nome_fantasia: 'Loja A', slug: 'loja-a' }
+  ]);
+  const loja = lojas.get(11);
+  const escritasDeStatus = () => comandos.filter(({ sql }) => /UPDATE estabelecimentos\s+SET status/.test(sql)).length;
+
+  // Motivo obrigatório, com trim, de 1 a 280 caracteres: 400 sem abrir transação.
+  for (const motivo of [undefined, '', '   ', 'x'.repeat(281)]) {
+    assert.equal((await statusDoErro(suspenderEstabelecimento(banco, 11, { motivo }, 1))).status, 400);
+  }
+  assert.equal(comandos.length, 0);
+
+  // Arquivar sem estar suspenso.
+  const semSuspender = await statusDoErro(arquivarEstabelecimento(banco, 11, { confirmacaoSlug: 'loja-a' }, 1));
+  assert.equal(semSuspender.status, 409);
+  assert.match(semSuspender.mensagem, /Suspenda/);
+  assert.equal((await statusDoErro(reativarEstabelecimento(banco, 11, 1))).status, 409);
+  assert.equal((await statusDoErro(desarquivarEstabelecimento(banco, 11, 1))).status, 409);
+  assert.equal(escritasDeStatus(), 0);
+
+  // ativo -> suspenso, com o motivo sem espaços nas pontas.
+  const suspenso = await suspenderEstabelecimento(banco, 11, { motivo: `  ${'m'.repeat(280)}  ` }, 1);
+  assert.equal(suspenso.status, 'suspenso');
+  assert.equal(suspenso.motivoSuspensao, 'm'.repeat(280));
+  assert.ok(suspenso.suspensoEm);
+
+  // Suspender o que já está suspenso.
+  const deNovo = await statusDoErro(suspenderEstabelecimento(banco, 11, { motivo: 'outra vez' }, 1));
+  assert.equal(deNovo.status, 409);
+  assert.match(deNovo.mensagem, /já está suspenso/);
+  assert.equal(loja.motivo_suspensao, 'm'.repeat(280));
+
+  // Arquivar pede o slug exato.
+  assert.equal((await statusDoErro(arquivarEstabelecimento(banco, 11, {}, 1))).status, 400);
+  assert.equal((await statusDoErro(arquivarEstabelecimento(banco, 11, { confirmacaoSlug: 'loja-b' }, 1))).status, 400);
+  assert.equal(loja.status, 'suspenso');
+
+  // suspenso -> ativo limpa data e motivo.
+  const reativado = await reativarEstabelecimento(banco, 11, 1);
+  assert.equal(reativado.status, 'ativo');
+  assert.equal(loja.suspenso_em, null);
+  assert.equal(loja.motivo_suspensao, null);
+
+  // suspenso -> arquivado grava data e autor.
+  await suspenderEstabelecimento(banco, 11, { motivo: 'Encerramento do contrato' }, 1);
+  const arquivado = await arquivarEstabelecimento(banco, 11, { confirmacaoSlug: ' loja-a ' }, 7);
+  assert.equal(arquivado.status, 'arquivado');
+  assert.equal(arquivado.arquivadoPor, 7);
+  assert.ok(arquivado.arquivadoEm);
+
+  // Arquivado não reativa, não suspende e não arquiva de novo.
+  const reativarArquivado = await statusDoErro(reativarEstabelecimento(banco, 11, 1));
+  assert.equal(reativarArquivado.status, 409);
+  assert.match(reativarArquivado.mensagem, /Desarquive/);
+  assert.equal((await statusDoErro(suspenderEstabelecimento(banco, 11, { motivo: 'x' }, 1))).status, 409);
+  assert.equal((await statusDoErro(arquivarEstabelecimento(banco, 11, { confirmacaoSlug: 'loja-a' }, 1))).status, 409);
+
+  // arquivado -> suspenso limpa o arquivamento e mantém a suspensão original.
+  const desarquivado = await desarquivarEstabelecimento(banco, 11, 1);
+  assert.equal(desarquivado.status, 'suspenso');
+  assert.equal(loja.arquivado_em, null);
+  assert.equal(loja.arquivado_por, null);
+  assert.equal(loja.motivo_suspensao, 'Encerramento do contrato');
+
+  // Id inexistente: null, que a rota transforma em 404.
+  assert.equal(await suspenderEstabelecimento(banco, 999, { motivo: 'x' }, 1), null);
+  assert.equal(await reativarEstabelecimento(banco, 999, 1), null);
+
+  // Um evento por ação bem-sucedida, com antes/depois, motivo e autor.
+  assert.deepEqual(auditoria.map(({ acao, detalhes }) => [acao, detalhes.status.antes, detalhes.status.depois]), [
+    ['estabelecimento.suspenso', 'ativo', 'suspenso'],
+    ['estabelecimento.reativado', 'suspenso', 'ativo'],
+    ['estabelecimento.suspenso', 'ativo', 'suspenso'],
+    ['estabelecimento.arquivado', 'suspenso', 'arquivado'],
+    ['estabelecimento.desarquivado', 'arquivado', 'suspenso']
+  ]);
+  assert.equal(auditoria[0].detalhes.motivo, 'm'.repeat(280));
+  assert.equal(auditoria[2].detalhes.motivo, 'Encerramento do contrato');
+  assert.equal(Object.hasOwn(auditoria[1].detalhes, 'motivo'), false);
+  assert.equal(auditoria[3].superadministradorId, 7);
+  assert.equal(auditoria.every(({ idEstabelecimento }) => idEstabelecimento === 11), true);
+  // Só suspender e arquivar encerram sessões.
+  assert.deepEqual(auditoria.map(({ detalhes }) => Boolean(detalhes.sessoesEncerradas)), [true, false, true, true, false]);
+
+  // Toda leitura do estado travou a linha, e nenhuma consulta usou SELECT *.
+  assert.equal(comandos.some(({ sql }) => /SELECT\s+\*/i.test(sql)), false);
+  assert.equal(comandos.filter(({ sql }) => sql.includes('FOR UPDATE')).length > 0, true);
+});
+
+test('edição ignora status, recusa arquivado e audita o antes/depois do cadastro', async () => {
+  const { banco, lojas, comandos, auditoria } = bancoCadastroEstabelecimentos([
+    { id_estabelecimento: 11, nome_fantasia: 'Loja A', slug: 'loja-a', plano: 'basico' },
+    { id_estabelecimento: 12, nome_fantasia: 'Loja Arquivada', slug: 'loja-arquivada', status: 'arquivado' }
+  ]);
+
+  const editado = await atualizarEstabelecimentoGerencial(banco, 11, {
+    nomeFantasia: 'Loja A Nova',
+    slug: 'loja-a-nova',
+    plano: 'premium',
+    vencimentoAssinatura: '2027-03-31',
+    status: 'arquivado',
+    suspensoEm: '2020-01-01',
+    arquivadoPor: 99
+  }, 1);
+  assert.equal(editado.status, 'ativo');
+  assert.equal(lojas.get(11).status, 'ativo');
+  assert.equal(lojas.get(11).arquivado_por, null);
+  const update = comandos.find(({ sql }) => sql.includes('UPDATE estabelecimentos'));
+  assert.equal(/\bstatus\s*=/.test(update.sql.replace('status_assinatura', '')), false);
+  assert.equal(update.parametros.includes('arquivado'), false);
+
+  const [registro] = auditoria;
+  assert.equal(registro.acao, 'estabelecimento.atualizado');
+  assert.deepEqual(registro.detalhes.alteracoes, {
+    nomeFantasia: { antes: 'Loja A', depois: 'Loja A Nova' },
+    slug: { antes: 'loja-a', depois: 'loja-a-nova' },
+    plano: { antes: 'basico', depois: 'premium' },
+    vencimentoAssinatura: { antes: null, depois: '2027-03-31T23:59:59.000Z' }
+  });
+
+  // Arquivado não é editado: 409 antes de qualquer escrita.
+  const totalAntes = comandos.length;
+  const recusa = await statusDoErro(atualizarEstabelecimentoGerencial(banco, 12, { nomeFantasia: 'Outro' }, 1));
+  assert.equal(recusa.status, 409);
+  assert.equal(comandos.slice(totalAntes).some(({ sql }) => sql.includes('UPDATE')), false);
+  assert.equal(lojas.get(12).nome_fantasia, 'Loja Arquivada');
+  assert.equal(auditoria.length, 1);
+});
+
+test('slug reservado é recusado na criação e na troca, sem travar tenant antigo', async () => {
+  assert.equal(SLUGS_RESERVADOS.has('www'), true);
+  assert.equal(SLUGS_RESERVADOS.has('superadmin'), true);
+  assert.equal(SLUGS_RESERVADOS.size, 30);
+
+  const administrador = {
+    nome: 'Admin', usuario: 'admin-novo', email: 'admin@teste.local', senha: 'senha-admin-segura'
+  };
+  const bancoQueNaoDeveSerUsado = {
+    async getConnection() { throw new Error('Slug reservado não pode abrir transação.'); },
+    async execute() { throw new Error('Slug reservado não pode consultar o banco.'); }
+  };
+  for (const slug of ['www', 'api', 'superadmin', 'webhooks']) {
+    const recusa = await statusDoErro(criarEstabelecimentoGerencial(bancoQueNaoDeveSerUsado, {
+      nomeFantasia: 'Nova', slug, primeiroAdministrador: administrador
+    }, 1));
+    assert.equal(recusa.status, 400);
+    assert.match(recusa.mensagem, /reservado/);
+  }
+
+  const { banco, lojas } = bancoCadastroEstabelecimentos([
+    { id_estabelecimento: 11, nome_fantasia: 'Loja A', slug: 'loja-a' },
+    // Tenant criado antes da regra, com um slug que hoje é reservado.
+    { id_estabelecimento: 12, nome_fantasia: 'Loja App', slug: 'app' }
+  ]);
+  const troca = await statusDoErro(atualizarEstabelecimentoGerencial(banco, 11, { slug: 'admin' }, 1));
+  assert.equal(troca.status, 400);
+  assert.equal(lojas.get(11).slug, 'loja-a');
+
+  const antigo = await atualizarEstabelecimentoGerencial(banco, 12, { nomeFantasia: 'Loja App Renomeada' }, 1);
+  assert.equal(antigo.slug, 'app');
+  assert.equal(antigo.nomeFantasia, 'Loja App Renomeada');
+});
+
+test('listagem esconde arquivados por padrão e mostra quando pedido explicitamente', async () => {
+  const { banco } = bancoCadastroEstabelecimentos([
+    { id_estabelecimento: 11, nome_fantasia: 'Ativa', slug: 'ativa' },
+    { id_estabelecimento: 12, nome_fantasia: 'Suspensa', slug: 'suspensa', status: 'suspenso' },
+    { id_estabelecimento: 13, nome_fantasia: 'Arquivada', slug: 'arquivada', status: 'arquivado' }
+  ]);
+  const slugs = (lista) => lista.map((item) => item.slug).sort();
+
+  assert.deepEqual(slugs(await listarEstabelecimentosGerenciais(banco, {})), ['ativa', 'suspensa']);
+  assert.deepEqual(slugs(await listarEstabelecimentosGerenciais(banco, { status: 'arquivado' })), ['arquivada']);
+  assert.deepEqual(slugs(await listarEstabelecimentosGerenciais(banco, { status: 'suspenso' })), ['suspensa']);
+  assert.deepEqual(
+    slugs(await listarEstabelecimentosGerenciais(banco, { incluirArquivados: '1' })),
+    ['arquivada', 'ativa', 'suspensa']
+  );
+  // Valor fora da lista não vira filtro nem libera arquivados.
+  assert.deepEqual(slugs(await listarEstabelecimentosGerenciais(banco, { status: 'inativo' })), ['ativa', 'suspensa']);
+});
+
+test('rotas de ciclo de vida respondem 404, 409 e 400 com a mensagem do servidor', async () => {
+  const { banco: bancoCadastro, lojas } = bancoCadastroEstabelecimentos([
+    { id_estabelecimento: 11, nome_fantasia: 'Loja A', slug: 'loja-a' }
+  ]);
+  const banco = {
+    async getConnection() { return bancoCadastro.getConnection(); },
+    async execute(sql, parametros = []) {
+      if (sql.includes('FROM superadministradores') && sql.includes('senha_hash')) {
+        return [[{
+          id: 1, nome: 'Super', usuario: 'super', email: 'super@teste.local',
+          senha_hash: criarHashSenha('senha-global-segura')
+        }]];
+      }
+      if (sql.includes('INSERT INTO sessoes_superadmin')) return [{ affectedRows: 1 }];
+      if (sql.includes('DELETE FROM sessoes_superadmin')) return [{ affectedRows: 0 }];
+      if (sql.includes('FROM sessoes_superadmin ss')) {
+        return [[{ id: 1, nome: 'Super', usuario: 'super', email: 'super@teste.local' }]];
+      }
+      return bancoCadastro.execute(sql, parametros);
+    }
+  };
+  const servidor = criarServidor({ banco, pastaUploads: tmpdir(), tenantDesenvolvimento: '', jwtSecret: JWT_SECRET_TESTE });
+  await aguardarServidor(servidor, 0);
+  const baseUrl = `http://127.0.0.1:${servidor.address().port}`;
+
+  try {
+    const login = await fetch(`${baseUrl}/api/superadmin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario: 'super', senha: 'senha-global-segura' })
+    });
+    const { token } = await login.json();
+    const chamar = async (metodo, caminho, corpo) => {
+      const resposta = await fetch(`${baseUrl}/api/superadmin/estabelecimentos${caminho}`, {
+        method: metodo,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: corpo === undefined ? undefined : JSON.stringify(corpo)
+      });
+      return { status: resposta.status, corpo: await resposta.json() };
+    };
+
+    assert.equal((await chamar('POST', '/999/suspender', { motivo: 'x' })).status, 404);
+    assert.equal((await chamar('POST', '/999/reativar')).status, 404);
+
+    const semMotivo = await chamar('POST', '/11/suspender', { motivo: '  ' });
+    assert.equal(semMotivo.status, 400);
+    assert.match(semMotivo.corpo.erro, /motivo/);
+
+    const arquivarAtivo = await chamar('POST', '/11/arquivar', { confirmacaoSlug: 'loja-a' });
+    assert.equal(arquivarAtivo.status, 409);
+    assert.match(arquivarAtivo.corpo.erro, /Suspenda/);
+
+    // Do corpo só o motivo é lido: status, id e tenant enviados são ignorados.
+    const suspensao = await chamar('POST', '/11/suspender', {
+      motivo: 'Inadimplência', status: 'arquivado', id_estabelecimento: 22, arquivado_por: 99
+    });
+    assert.equal(suspensao.status, 200);
+    assert.equal(suspensao.corpo.estabelecimento.status, 'suspenso');
+    assert.equal(suspensao.corpo.estabelecimento.motivoSuspensao, 'Inadimplência');
+    assert.equal(lojas.get(11).arquivado_por, null);
+
+    const repetida = await chamar('POST', '/11/suspender', { motivo: 'De novo' });
+    assert.equal(repetida.status, 409);
+    assert.match(repetida.corpo.erro, /já está suspenso/);
+
+    // PUT com status no corpo não muda o status.
+    const edicao = await chamar('PUT', '/11', { nomeFantasia: 'Loja A', status: 'ativo' });
+    assert.equal(edicao.status, 200);
+    assert.equal(edicao.corpo.estabelecimento.status, 'suspenso');
+
+    assert.equal((await chamar('POST', '/11/arquivar', { confirmacaoSlug: 'loja-a' })).status, 200);
+    const edicaoArquivado = await chamar('PUT', '/11', { nomeFantasia: 'Outro nome' });
+    assert.equal(edicaoArquivado.status, 409);
+    assert.match(edicaoArquivado.corpo.erro, /arquivado/);
+
+    // A listagem padrão não traz o arquivado; o filtro explícito traz.
+    assert.equal((await chamar('GET', '')).corpo.estabelecimentos.length, 0);
+    assert.equal((await chamar('GET', '?status=arquivado')).corpo.estabelecimentos.length, 1);
+    assert.equal((await chamar('GET', '?incluirArquivados=1')).corpo.estabelecimentos.length, 1);
+    assert.deepEqual((await chamar('GET', '')).corpo.opcoes.statusEstabelecimento, ['ativo', 'suspenso', 'arquivado']);
   } finally {
     await fecharServidor(servidor);
   }

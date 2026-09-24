@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   alterarSenhaSuperadmin,
   alterarStatusSuperadministrador,
   aoExpirarSessao,
+  arquivarEstabelecimentoSuperadmin,
   atualizarEstabelecimentoSuperadmin,
   criarEstabelecimentoSuperadmin,
   criarSuperadministrador,
+  desarquivarEstabelecimentoSuperadmin,
   ErroApi,
   listarAdministradoresEstabelecimento,
   listarAuditoriaSuperadmin,
@@ -14,7 +16,9 @@ import {
   listarSuperadministradores,
   loginSuperadmin,
   logoutSuperadmin,
+  reativarEstabelecimentoSuperadmin,
   redefinirSenhaAdministradorEstabelecimento,
+  suspenderEstabelecimentoSuperadmin,
   validarSessaoSuperadmin
 } from '../services/api';
 import { SuperadminContext } from './superadminContext';
@@ -36,13 +40,16 @@ export function SuperadminProvider({ children }) {
   const [estabelecimentos, setEstabelecimentos] = useState([]);
   const [opcoes, setOpcoes] = useState({
     planos: ['basico', 'profissional', 'premium'],
-    statusEstabelecimento: ['ativo', 'inativo'],
+    statusEstabelecimento: ['ativo', 'suspenso', 'arquivado'],
     statusAssinatura: ['ativa', 'inadimplente', 'suspensa', 'bloqueada', 'cancelada'],
     fontes: ['Poppins', 'Arial', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Georgia']
   });
   const [superadministradores, setSuperadministradores] = useState([]);
   const [dadosCarregando, setDadosCarregando] = useState(false);
   const [sessaoExpirada, setSessaoExpirada] = useState('');
+  // Últimos filtros da listagem: depois de uma ação de ciclo de vida a lista é
+  // recarregada com eles, para um arquivado sumir da visão padrão.
+  const ultimosFiltros = useRef({});
 
   const limparSessao = useCallback(() => {
     sessionStorage.removeItem(CHAVE_SESSAO);
@@ -62,6 +69,7 @@ export function SuperadminProvider({ children }) {
 
   const carregarEstabelecimentos = useCallback(async (filtros = {}) => {
     setDadosCarregando(true);
+    ultimosFiltros.current = filtros;
     try {
       const resposta = await listarEstabelecimentosSuperadmin(filtros);
       setEstabelecimentos(resposta.estabelecimentos ?? []);
@@ -191,6 +199,43 @@ export function SuperadminProvider({ children }) {
     return estabelecimento;
   }
 
+  /* Suspender, reativar, arquivar e desarquivar: o item é trocado na hora pelo
+     que o servidor devolveu e a lista é recarregada com os filtros atuais. Se
+     a recarga falhar, o item já trocado mantém a tela coerente. Um 409 quer
+     dizer que a tela estava desatualizada (outra aba ou outro superadmin
+     mudou o status): a lista é recarregada antes de mostrar o erro. */
+  async function aplicarCicloDeVida(operacao) {
+    let resposta;
+    try {
+      resposta = await operacao();
+    } catch (erro) {
+      if (erro instanceof ErroApi && erro.status === 409) {
+        await carregarEstabelecimentos(ultimosFiltros.current).catch(() => {});
+      }
+      throw erro;
+    }
+    const { estabelecimento } = resposta;
+    setEstabelecimentos((atuais) => atuais.map((item) => item.id === estabelecimento.id ? estabelecimento : item));
+    await carregarEstabelecimentos(ultimosFiltros.current).catch(() => {});
+    return estabelecimento;
+  }
+
+  function suspenderEstabelecimento(id, motivo) {
+    return aplicarCicloDeVida(() => suspenderEstabelecimentoSuperadmin(id, motivo));
+  }
+
+  function reativarEstabelecimento(id) {
+    return aplicarCicloDeVida(() => reativarEstabelecimentoSuperadmin(id));
+  }
+
+  function arquivarEstabelecimento(id, confirmacaoSlug) {
+    return aplicarCicloDeVida(() => arquivarEstabelecimentoSuperadmin(id, confirmacaoSlug));
+  }
+
+  function desarquivarEstabelecimento(id) {
+    return aplicarCicloDeVida(() => desarquivarEstabelecimentoSuperadmin(id));
+  }
+
   return (
     <SuperadminContext.Provider value={{
       sessao,
@@ -206,6 +251,10 @@ export function SuperadminProvider({ children }) {
       carregarEstabelecimentos,
       criarEstabelecimento,
       atualizarEstabelecimento,
+      suspenderEstabelecimento,
+      reativarEstabelecimento,
+      arquivarEstabelecimento,
+      desarquivarEstabelecimento,
       carregarAuditoria,
       carregarAdministradoresDoEstabelecimento,
       redefinirSenhaAdministrador,

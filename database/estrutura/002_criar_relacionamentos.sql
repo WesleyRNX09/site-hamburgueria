@@ -18,6 +18,11 @@ ALTER TABLE auditoria_superadmin
     FOREIGN KEY (id_estabelecimento)
     REFERENCES estabelecimentos(id_estabelecimento) ON DELETE SET NULL;
 
+ALTER TABLE estabelecimentos
+  ADD CONSTRAINT fk_estabelecimentos_arquivado_por
+  FOREIGN KEY (arquivado_por)
+  REFERENCES superadministradores(id) ON DELETE SET NULL;
+
 ALTER TABLE administradores
   ADD CONSTRAINT fk_administradores_estabelecimento
   FOREIGN KEY (id_estabelecimento)

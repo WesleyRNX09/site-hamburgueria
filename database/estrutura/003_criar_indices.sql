@@ -3,6 +3,7 @@
 CREATE INDEX idx_estabelecimentos_status_assinatura
   ON estabelecimentos (status, status_assinatura, vencimento_assinatura_em);
 CREATE INDEX idx_estabelecimentos_plano ON estabelecimentos (plano);
+CREATE INDEX idx_estabelecimentos_arquivado_por ON estabelecimentos (arquivado_por);
 CREATE INDEX idx_sessoes_superadmin_usuario ON sessoes_superadmin (superadministrador_id);
 CREATE INDEX idx_sessoes_superadmin_expiracao ON sessoes_superadmin (expira_em);
 CREATE INDEX idx_auditoria_superadmin_usuario ON auditoria_superadmin (superadministrador_id);

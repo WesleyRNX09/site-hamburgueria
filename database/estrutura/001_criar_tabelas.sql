@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS estabelecimentos (
   slug VARCHAR(100) NOT NULL,
   dominio_personalizado VARCHAR(253),
   status VARCHAR(30) NOT NULL DEFAULT 'ativo',
+  -- Ciclo de vida (migration 024): suspender pede motivo; arquivar exige estar
+  -- suspenso antes e guarda quem arquivou. Nenhum dado da loja é apagado.
+  suspenso_em DATETIME NULL,
+  motivo_suspensao VARCHAR(280) NULL,
+  arquivado_em DATETIME NULL,
+  arquivado_por BIGINT UNSIGNED NULL,
   -- Token do QR Code único da equipe: um por estabelecimento, criado sob
   -- demanda pelo painel e trocado quando o administrador quiser invalidar os
   -- códigos já impressos.
@@ -40,6 +46,8 @@ CREATE TABLE IF NOT EXISTS estabelecimentos (
   UNIQUE KEY uk_estabelecimentos_token_garcom (token_acesso_garcom),
   CONSTRAINT chk_estabelecimentos_slug_preenchido
     CHECK (CHAR_LENGTH(TRIM(slug)) > 0),
+  CONSTRAINT chk_estabelecimentos_status
+    CHECK (status IN ('ativo', 'suspenso', 'arquivado')),
   CONSTRAINT chk_estabelecimentos_dominio_preenchido
     CHECK (dominio_personalizado IS NULL OR CHAR_LENGTH(TRIM(dominio_personalizado)) > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

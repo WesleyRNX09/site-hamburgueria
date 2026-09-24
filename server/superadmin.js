@@ -3,7 +3,20 @@ import { concederPermissoesPadrao } from './permissoes.js';
 import { criarHashSenha, verificarSenha } from './security.js';
 
 const PLANOS = new Set(['basico', 'profissional', 'premium']);
-const STATUS_ESTABELECIMENTO = new Set(['ativo', 'inativo']);
+const STATUS_ESTABELECIMENTO = new Set(['ativo', 'suspenso', 'arquivado']);
+/*
+  Subdomínios que a plataforma usa ou pode vir a usar. Com DNS curinga, um
+  tenant com um destes slugs responderia no lugar do serviço. A lista é a única
+  fonte da regra: criação e troca de slug consultam só ela. Um tenant antigo que
+  já tenha um destes slugs continua funcionando enquanto não trocar o slug.
+*/
+export const SLUGS_RESERVADOS = Object.freeze(new Set([
+  'www', 'api', 'admin', 'superadmin', 'painel', 'app', 'mail', 'smtp', 'ftp',
+  'ns1', 'ns2', 'static', 'assets', 'cdn', 'uploads', 'docs', 'suporte', 'ajuda',
+  'status', 'blog', 'dev', 'test', 'staging', 'login', 'cadastro', 'dashboard',
+  'garcom', 'impressao', 'webhook', 'webhooks'
+]));
+const TAMANHO_MAXIMO_MOTIVO = 280;
 const STATUS_ASSINATURA = new Set(['ativa', 'inadimplente', 'suspensa', 'bloqueada', 'cancelada']);
 const FONTES = new Map([
   ['poppins', 'Poppins'],
@@ -40,6 +53,12 @@ function normalizarSlug(valor) {
     throw erroDominio('Use no slug apenas letras minúsculas, números e hífens.');
   }
   return slug;
+}
+
+function recusarSlugReservado(slug) {
+  if (SLUGS_RESERVADOS.has(slug)) {
+    throw erroDominio(`O slug "${slug}" é reservado pela plataforma. Escolha outro.`);
+  }
 }
 
 function normalizarDominio(valor) {
@@ -130,7 +149,6 @@ function dadosNormalizados(dados, atual = {}) {
     nomeFantasia,
     slug: normalizarSlug(dados.slug ?? atual.slug),
     dominioPersonalizado: normalizarDominio(dados.dominioPersonalizado ?? atual.dominioPersonalizado),
-    status: valorPermitido(dados.status ?? atual.status ?? 'ativo', STATUS_ESTABELECIMENTO, 'o status'),
     plano: valorPermitido(dados.plano ?? atual.plano ?? 'basico', PLANOS, 'o plano'),
     statusAssinatura: valorPermitido(
       dados.statusAssinatura ?? atual.statusAssinatura ?? 'ativa',
@@ -162,6 +180,10 @@ function mapearEstabelecimento(linha) {
     slug: linha.slug,
     dominioPersonalizado: linha.dominio_personalizado ?? '',
     status: linha.status,
+    suspensoEm: dataIso(linha.suspenso_em),
+    motivoSuspensao: linha.motivo_suspensao ?? '',
+    arquivadoEm: dataIso(linha.arquivado_em),
+    arquivadoPor: linha.arquivado_por ? Number(linha.arquivado_por) : null,
     plano: linha.plano,
     statusAssinatura: linha.status_assinatura,
     vencimentoAssinatura: dataIso(linha.vencimento_assinatura_em),
@@ -181,7 +203,8 @@ function mapearEstabelecimento(linha) {
 
 const SELECAO_ESTABELECIMENTO = `
   SELECT e.id_estabelecimento, e.nome_fantasia, e.slug, e.dominio_personalizado,
-         e.status, e.plano, e.status_assinatura, e.vencimento_assinatura_em,
+         e.status, e.suspenso_em, e.motivo_suspensao, e.arquivado_em,
+         e.arquivado_por, e.plano, e.status_assinatura, e.vencimento_assinatura_em,
          e.criado_em, e.atualizado_em, ce.logo_url, ce.banner_url,
          ce.cor_principal, ce.cor_secundaria, ce.cor_fundo, ce.cor_card,
          ce.cor_texto, ce.fonte,
@@ -204,10 +227,14 @@ export async function listarEstabelecimentosGerenciais(banco, filtros = {}) {
     )`);
     parametros.push(`%${busca}%`, `%${busca}%`, `%${busca}%`);
   }
+  // Arquivado fica fora da listagem padrão: só aparece pedindo o status
+  // 'arquivado' ou marcando explicitamente a inclusão dos arquivados.
   const status = texto(filtros.status, 30).toLowerCase();
   if (STATUS_ESTABELECIMENTO.has(status)) {
     condicoes.push('e.status = ?');
     parametros.push(status);
+  } else if (!['1', 'true'].includes(texto(filtros.incluirArquivados, 5).toLowerCase())) {
+    condicoes.push("e.status <> 'arquivado'");
   }
   const statusAssinatura = texto(filtros.statusAssinatura, 30).toLowerCase();
   if (STATUS_ASSINATURA.has(statusAssinatura)) {
@@ -271,18 +298,18 @@ async function salvarConfiguracaoVisual(conexao, idEstabelecimento, dados) {
 
 export async function criarEstabelecimentoGerencial(banco, dados, superadministradorId) {
   const estabelecimento = dadosNormalizados(dados);
+  recusarSlugReservado(estabelecimento.slug);
   const administrador = validarAdministrador(dados.primeiroAdministrador);
   const idEstabelecimento = await executarTransacao(banco, async (conexao) => {
     const [resultado] = await conexao.execute(`
       INSERT INTO estabelecimentos
         (nome_fantasia, slug, dominio_personalizado, status, plano,
          status_assinatura, vencimento_assinatura_em)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, 'ativo', ?, ?, ?)
     `, [
       estabelecimento.nomeFantasia,
       estabelecimento.slug,
       estabelecimento.dominioPersonalizado,
-      estabelecimento.status,
       estabelecimento.plano,
       estabelecimento.statusAssinatura,
       estabelecimento.vencimentoAssinatura
@@ -306,23 +333,74 @@ export async function criarEstabelecimentoGerencial(banco, dados, superadministr
   return buscarEstabelecimentoGerencial(banco, idEstabelecimento);
 }
 
+/*
+  Campos do cadastro comparados antes/depois na auditoria da edição. O slug
+  entra com o valor antigo e o novo: é ele que muda o endereço da loja.
+*/
+const CAMPOS_AUDITADOS_EDICAO = Object.freeze([
+  ['nomeFantasia', 'nome_fantasia'],
+  ['slug', 'slug'],
+  ['dominioPersonalizado', 'dominio_personalizado'],
+  ['plano', 'plano'],
+  ['statusAssinatura', 'status_assinatura'],
+  ['vencimentoAssinatura', 'vencimento_assinatura_em']
+]);
+
+function valorAuditado(valor) {
+  if (valor instanceof Date) return dataIso(valor);
+  return valor ?? null;
+}
+
+function diferencasEdicao(antes, depois) {
+  const alteracoes = {};
+  for (const [campo, coluna] of CAMPOS_AUDITADOS_EDICAO) {
+    const anterior = valorAuditado(antes[coluna]);
+    const novo = valorAuditado(depois[campo]);
+    if (anterior !== novo) alteracoes[campo] = { antes: anterior, depois: novo };
+  }
+  return alteracoes;
+}
+
+const MENSAGEM_ARQUIVADO_SEM_EDICAO = 'Estabelecimento arquivado não pode ser editado. Desarquive antes.';
+
+/*
+  Edição do cadastro. O status NÃO é lido do corpo: ativo, suspenso e arquivado
+  só mudam pelas ações dedicadas (suspender, reativar, arquivar, desarquivar),
+  que exigem motivo ou confirmação e derrubam sessões. Estabelecimento
+  arquivado não é editado — é preciso desarquivar antes.
+*/
 export async function atualizarEstabelecimentoGerencial(banco, id, dados, superadministradorId) {
   const idEstabelecimento = Number(id);
   if (!Number.isInteger(idEstabelecimento) || idEstabelecimento <= 0) return null;
   const atual = await buscarEstabelecimentoGerencial(banco, idEstabelecimento);
   if (!atual) return null;
+  if (atual.status === 'arquivado') throw erroDominio(MENSAGEM_ARQUIVADO_SEM_EDICAO, 409);
   const estabelecimento = dadosNormalizados(dados, atual);
-  await executarTransacao(banco, async (conexao) => {
+  const encontrado = await executarTransacao(banco, async (conexao) => {
+    const [linhas] = await conexao.execute(`
+      SELECT id_estabelecimento, nome_fantasia, slug, dominio_personalizado, status,
+             plano, status_assinatura, vencimento_assinatura_em
+      FROM estabelecimentos
+      WHERE id_estabelecimento = ?
+      FOR UPDATE
+    `, [idEstabelecimento]);
+    const antes = linhas[0];
+    if (!antes) return false;
+    // Conferido de novo com a linha travada: o arquivamento pode ter entrado
+    // entre a leitura acima e esta transação.
+    if (antes.status === 'arquivado') throw erroDominio(MENSAGEM_ARQUIVADO_SEM_EDICAO, 409);
+    // Slug que não muda não é reavaliado: um tenant antigo com slug hoje
+    // reservado continua editável sem precisar trocar de endereço.
+    if (estabelecimento.slug !== antes.slug) recusarSlugReservado(estabelecimento.slug);
     await conexao.execute(`
       UPDATE estabelecimentos
-      SET nome_fantasia = ?, slug = ?, dominio_personalizado = ?, status = ?,
+      SET nome_fantasia = ?, slug = ?, dominio_personalizado = ?,
           plano = ?, status_assinatura = ?, vencimento_assinatura_em = ?
       WHERE id_estabelecimento = ?
     `, [
       estabelecimento.nomeFantasia,
       estabelecimento.slug,
       estabelecimento.dominioPersonalizado,
-      estabelecimento.status,
       estabelecimento.plano,
       estabelecimento.statusAssinatura,
       estabelecimento.vencimentoAssinatura,
@@ -330,12 +408,182 @@ export async function atualizarEstabelecimentoGerencial(banco, id, dados, supera
     ]);
     await salvarConfiguracaoVisual(conexao, idEstabelecimento, estabelecimento);
     await registrarAuditoria(conexao, superadministradorId, idEstabelecimento, 'estabelecimento.atualizado', {
-      status: estabelecimento.status,
-      plano: estabelecimento.plano,
-      statusAssinatura: estabelecimento.statusAssinatura
+      alteracoes: diferencasEdicao(antes, estabelecimento)
     });
+    return true;
   });
+  if (!encontrado) return null;
   return buscarEstabelecimentoGerencial(banco, idEstabelecimento);
+}
+
+/*
+  Ciclo de vida do estabelecimento:
+
+    ativo --suspender--> suspenso --arquivar--> arquivado
+    ativo <--reativar--- suspenso <-desarquivar- arquivado
+
+  Cada ação só parte de um estado; qualquer outro responde 409 com a mensagem
+  do estado atual, sem gravar nada. A linha é travada (FOR UPDATE) antes da
+  checagem, para duas ações simultâneas não passarem pela mesma transição.
+  Arquivar não apaga nada: a exclusão definitiva é uma etapa futura.
+*/
+const TRANSICOES_ESTABELECIMENTO = Object.freeze({
+  suspender: Object.freeze({
+    de: 'ativo',
+    para: 'suspenso',
+    acao: 'estabelecimento.suspenso',
+    encerraSessoes: true,
+    // Toda escrita presa ao id e ao estado de origem. As datas usam o relógio
+    // do banco, que o pool fixa em UTC.
+    sql: `
+      UPDATE estabelecimentos
+      SET status = 'suspenso', suspenso_em = CURRENT_TIMESTAMP, motivo_suspensao = ?
+      WHERE id_estabelecimento = ? AND status = 'ativo'
+    `,
+    parametros: ({ id, motivo }) => [motivo, id],
+    recusas: {
+      suspenso: 'Este estabelecimento já está suspenso.',
+      arquivado: 'Estabelecimento arquivado não pode ser suspenso. Desarquive antes.'
+    }
+  }),
+  reativar: Object.freeze({
+    de: 'suspenso',
+    para: 'ativo',
+    acao: 'estabelecimento.reativado',
+    encerraSessoes: false,
+    sql: `
+      UPDATE estabelecimentos
+      SET status = 'ativo', suspenso_em = NULL, motivo_suspensao = NULL
+      WHERE id_estabelecimento = ? AND status = 'suspenso'
+    `,
+    parametros: ({ id }) => [id],
+    recusas: {
+      ativo: 'Este estabelecimento já está ativo.',
+      arquivado: 'Estabelecimento arquivado não é reativado diretamente. Desarquive antes: ele volta como suspenso.'
+    }
+  }),
+  arquivar: Object.freeze({
+    de: 'suspenso',
+    para: 'arquivado',
+    acao: 'estabelecimento.arquivado',
+    encerraSessoes: true,
+    sql: `
+      UPDATE estabelecimentos
+      SET status = 'arquivado', arquivado_em = CURRENT_TIMESTAMP, arquivado_por = ?
+      WHERE id_estabelecimento = ? AND status = 'suspenso'
+    `,
+    parametros: ({ id, superadministradorId }) => [superadministradorId, id],
+    recusas: {
+      ativo: 'Suspenda o estabelecimento antes de arquivá-lo.',
+      arquivado: 'Este estabelecimento já está arquivado.'
+    }
+  }),
+  desarquivar: Object.freeze({
+    de: 'arquivado',
+    para: 'suspenso',
+    acao: 'estabelecimento.desarquivado',
+    encerraSessoes: false,
+    sql: `
+      UPDATE estabelecimentos
+      SET status = 'suspenso', arquivado_em = NULL, arquivado_por = NULL
+      WHERE id_estabelecimento = ? AND status = 'arquivado'
+    `,
+    parametros: ({ id }) => [id],
+    recusas: {
+      ativo: 'Somente estabelecimento arquivado pode ser desarquivado. Este está ativo.',
+      suspenso: 'Somente estabelecimento arquivado pode ser desarquivado. Este está suspenso.'
+    }
+  })
+});
+
+function motivoSuspensao(valor) {
+  const motivo = String(valor ?? '').trim();
+  // Contagem por caractere (e não por unidade UTF-16), igual ao VARCHAR(280).
+  const tamanho = Array.from(motivo).length;
+  if (tamanho < 1) throw erroDominio('Informe o motivo da suspensão.');
+  if (tamanho > TAMANHO_MAXIMO_MOTIVO) {
+    throw erroDominio(`O motivo da suspensão deve ter no máximo ${TAMANHO_MAXIMO_MOTIVO} caracteres.`);
+  }
+  return motivo;
+}
+
+async function executarTransicaoEstabelecimento(banco, nome, id, dados, superadministradorId) {
+  const transicao = TRANSICOES_ESTABELECIMENTO[nome];
+  const idEstabelecimento = Number(id);
+  if (!Number.isInteger(idEstabelecimento) || idEstabelecimento <= 0) return null;
+  // Do corpo sai só o que a transição usa, validado antes de abrir a transação.
+  const motivo = nome === 'suspender' ? motivoSuspensao(dados?.motivo) : null;
+  const confirmacaoSlug = nome === 'arquivar' ? texto(dados?.confirmacaoSlug, 100) : null;
+  if (nome === 'arquivar' && !confirmacaoSlug) {
+    throw erroDominio('Digite o slug do estabelecimento para confirmar o arquivamento.');
+  }
+
+  const encontrado = await executarTransacao(banco, async (conexao) => {
+    const [linhas] = await conexao.execute(`
+      SELECT id_estabelecimento, slug, status
+      FROM estabelecimentos
+      WHERE id_estabelecimento = ?
+      FOR UPDATE
+    `, [idEstabelecimento]);
+    const atual = linhas[0];
+    if (!atual) return false;
+    const statusAtual = String(atual.status);
+    if (statusAtual !== transicao.de) {
+      throw erroDominio(
+        transicao.recusas[statusAtual]
+          ?? `A ação não se aplica a um estabelecimento com status "${statusAtual}".`,
+        409
+      );
+    }
+    if (nome === 'arquivar' && confirmacaoSlug !== atual.slug) {
+      throw erroDominio('O slug digitado não confere com o do estabelecimento.');
+    }
+
+    await conexao.execute(transicao.sql, transicao.parametros({
+      id: idEstabelecimento,
+      motivo,
+      superadministradorId
+    }));
+
+    const detalhes = { status: { antes: statusAtual, depois: transicao.para } };
+    if (motivo) detalhes.motivo = motivo;
+    if (transicao.encerraSessoes) {
+      // Derruba todo acesso aberto da loja. Reativar não recria nada: cada
+      // pessoa entra de novo com a própria credencial.
+      const [admins] = await conexao.execute(
+        'DELETE FROM sessoes_admin WHERE id_estabelecimento = ?',
+        [idEstabelecimento]
+      );
+      const [garcons] = await conexao.execute(
+        'DELETE FROM sessoes_garcom WHERE id_estabelecimento = ?',
+        [idEstabelecimento]
+      );
+      detalhes.sessoesEncerradas = {
+        administradores: Number(admins?.affectedRows ?? 0),
+        garcons: Number(garcons?.affectedRows ?? 0)
+      };
+    }
+    await registrarAuditoria(conexao, superadministradorId, idEstabelecimento, transicao.acao, detalhes);
+    return true;
+  });
+  if (!encontrado) return null;
+  return buscarEstabelecimentoGerencial(banco, idEstabelecimento);
+}
+
+export function suspenderEstabelecimento(banco, id, dados, superadministradorId) {
+  return executarTransicaoEstabelecimento(banco, 'suspender', id, dados, superadministradorId);
+}
+
+export function reativarEstabelecimento(banco, id, superadministradorId) {
+  return executarTransicaoEstabelecimento(banco, 'reativar', id, {}, superadministradorId);
+}
+
+export function arquivarEstabelecimento(banco, id, dados, superadministradorId) {
+  return executarTransicaoEstabelecimento(banco, 'arquivar', id, dados, superadministradorId);
+}
+
+export function desarquivarEstabelecimento(banco, id, superadministradorId) {
+  return executarTransicaoEstabelecimento(banco, 'desarquivar', id, {}, superadministradorId);
 }
 
 /*

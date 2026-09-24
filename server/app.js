@@ -105,15 +105,19 @@ import {
 import {
   alterarSenhaSuperadministrador,
   alternarStatusSuperadministrador,
+  arquivarEstabelecimento,
   atualizarEstabelecimentoGerencial,
   buscarEstabelecimentoGerencial,
   criarEstabelecimentoGerencial,
   criarSuperadministrador,
+  desarquivarEstabelecimento,
   listarAuditoriaSuperadmin,
   listarEstabelecimentosGerenciais,
   listarSuperadministradores,
   opcoesSuperadmin,
-  redefinirSenhaAdministrador
+  reativarEstabelecimento,
+  redefinirSenhaAdministrador,
+  suspenderEstabelecimento
 } from './superadmin.js';
 import { resolverEstabelecimento } from './tenant.js';
 
@@ -673,7 +677,8 @@ async function rotaSuperadmin({
       busca: url.searchParams.get('busca'),
       status: url.searchParams.get('status'),
       statusAssinatura: url.searchParams.get('statusAssinatura'),
-      plano: url.searchParams.get('plano')
+      plano: url.searchParams.get('plano'),
+      incluirArquivados: url.searchParams.get('incluirArquivados')
     });
     responderJson(resposta, 200, { estabelecimentos, opcoes: opcoesSuperadmin });
     return true;
@@ -708,6 +713,43 @@ async function rotaSuperadmin({
         await lerJson(requisicao),
         superadministrador.id
       );
+      if (!estabelecimento) throw new ErroHttp(404, 'Estabelecimento não encontrado.');
+      responderJson(resposta, 200, { estabelecimento });
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  /* Ciclo de vida: cada ação tem a própria rota e lê do corpo só o campo que
+     usa (motivo ou confirmacaoSlug). O id vem da URL e o estado atual é
+     conferido no banco, com a linha travada, antes de qualquer escrita. */
+  const cicloDeVida = caminho
+    .match(/^\/api\/superadmin\/estabelecimentos\/(\d+)\/(suspender|reativar|arquivar|desarquivar)$/);
+  if (requisicao.method === 'POST' && cicloDeVida) {
+    try {
+      const [, idEstabelecimento, acao] = cicloDeVida;
+      const dados = await lerJson(requisicao);
+      let estabelecimento;
+      if (acao === 'suspender') {
+        estabelecimento = await suspenderEstabelecimento(
+          banco,
+          idEstabelecimento,
+          { motivo: dados?.motivo },
+          superadministrador.id
+        );
+      } else if (acao === 'arquivar') {
+        estabelecimento = await arquivarEstabelecimento(
+          banco,
+          idEstabelecimento,
+          { confirmacaoSlug: dados?.confirmacaoSlug },
+          superadministrador.id
+        );
+      } else if (acao === 'reativar') {
+        estabelecimento = await reativarEstabelecimento(banco, idEstabelecimento, superadministrador.id);
+      } else {
+        estabelecimento = await desarquivarEstabelecimento(banco, idEstabelecimento, superadministrador.id);
+      }
       if (!estabelecimento) throw new ErroHttp(404, 'Estabelecimento não encontrado.');
       responderJson(resposta, 200, { estabelecimento });
     } catch (erro) {

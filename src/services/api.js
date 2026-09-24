@@ -127,6 +127,37 @@ export function atualizarEstabelecimentoSuperadmin(id, dados) {
   });
 }
 
+/* Ciclo de vida do estabelecimento: cada ação manda só o campo que usa. */
+export function suspenderEstabelecimentoSuperadmin(id, motivo) {
+  return requisicao(`/api/superadmin/estabelecimentos/${id}/suspender`, {
+    metodo: 'POST',
+    dados: { motivo },
+    autenticacao: 'superadmin'
+  });
+}
+
+export function reativarEstabelecimentoSuperadmin(id) {
+  return requisicao(`/api/superadmin/estabelecimentos/${id}/reativar`, {
+    metodo: 'POST',
+    autenticacao: 'superadmin'
+  });
+}
+
+export function arquivarEstabelecimentoSuperadmin(id, confirmacaoSlug) {
+  return requisicao(`/api/superadmin/estabelecimentos/${id}/arquivar`, {
+    metodo: 'POST',
+    dados: { confirmacaoSlug },
+    autenticacao: 'superadmin'
+  });
+}
+
+export function desarquivarEstabelecimentoSuperadmin(id) {
+  return requisicao(`/api/superadmin/estabelecimentos/${id}/desarquivar`, {
+    metodo: 'POST',
+    autenticacao: 'superadmin'
+  });
+}
+
 export function alterarSenhaSuperadmin(dados) {
   return requisicao('/api/superadmin/senha', {
     metodo: 'PUT',

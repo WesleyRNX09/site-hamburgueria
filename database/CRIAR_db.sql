@@ -31,6 +31,12 @@ CREATE TABLE IF NOT EXISTS estabelecimentos (
   slug VARCHAR(100) NOT NULL,
   dominio_personalizado VARCHAR(253),
   status VARCHAR(30) NOT NULL DEFAULT 'ativo',
+  -- Ciclo de vida (migration 024): suspender pede motivo; arquivar exige estar
+  -- suspenso antes e guarda quem arquivou. Nenhum dado da loja é apagado.
+  suspenso_em DATETIME NULL,
+  motivo_suspensao VARCHAR(280) NULL,
+  arquivado_em DATETIME NULL,
+  arquivado_por BIGINT UNSIGNED NULL,
   -- Token do QR Code único da equipe: um por estabelecimento, criado sob
   -- demanda pelo painel e trocado quando o administrador quiser invalidar os
   -- códigos já impressos.
@@ -45,6 +51,8 @@ CREATE TABLE IF NOT EXISTS estabelecimentos (
   UNIQUE KEY uk_estabelecimentos_token_garcom (token_acesso_garcom),
   CONSTRAINT chk_estabelecimentos_slug_preenchido
     CHECK (CHAR_LENGTH(TRIM(slug)) > 0),
+  CONSTRAINT chk_estabelecimentos_status
+    CHECK (status IN ('ativo', 'suspenso', 'arquivado')),
   CONSTRAINT chk_estabelecimentos_dominio_preenchido
     CHECK (dominio_personalizado IS NULL OR CHAR_LENGTH(TRIM(dominio_personalizado)) > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -558,6 +566,7 @@ CREATE TABLE IF NOT EXISTS configuracoes (
 CREATE INDEX idx_estabelecimentos_status_assinatura
   ON estabelecimentos (status, status_assinatura, vencimento_assinatura_em);
 CREATE INDEX idx_estabelecimentos_plano ON estabelecimentos (plano);
+CREATE INDEX idx_estabelecimentos_arquivado_por ON estabelecimentos (arquivado_por);
 CREATE INDEX idx_sessoes_superadmin_usuario ON sessoes_superadmin (superadministrador_id);
 CREATE INDEX idx_sessoes_superadmin_expiracao ON sessoes_superadmin (expira_em);
 CREATE INDEX idx_auditoria_superadmin_usuario ON auditoria_superadmin (superadministrador_id);
@@ -629,6 +638,11 @@ ALTER TABLE auditoria_superadmin
   ADD CONSTRAINT fk_auditoria_superadmin_estabelecimento
     FOREIGN KEY (id_estabelecimento)
     REFERENCES estabelecimentos(id_estabelecimento) ON DELETE SET NULL;
+
+ALTER TABLE estabelecimentos
+  ADD CONSTRAINT fk_estabelecimentos_arquivado_por
+  FOREIGN KEY (arquivado_por)
+  REFERENCES superadministradores(id) ON DELETE SET NULL;
 
 ALTER TABLE administradores
   ADD CONSTRAINT fk_administradores_estabelecimento
@@ -856,7 +870,8 @@ INSERT INTO schema_migrations (versao, checksum) VALUES
   ('020_adicionar_impressao.sql', '5f16a543cda46d77e573cb2fdb012c2928a89e4ea6afe0e30235e31db33d8658'),
   ('021_observacao_geral_da_comanda.sql', '6d8d045464806ecf39f4007e322bceb64dc1740b3eb44a70baa02ceb4f683e04'),
   ('022_impressora_do_caixa.sql', '8d9bc13565eef36400913ae00b4571d5f416e6e35932ef58ded80a302a0f9879'),
-  ('023_recibo_de_fechamento.sql', 'b3f6f90862344408022a15928a096d950d64c54d0a27805f7787d9c8e9327c12')
+  ('023_recibo_de_fechamento.sql', 'b3f6f90862344408022a15928a096d950d64c54d0a27805f7787d9c8e9327c12'),
+  ('024_ciclo_de_vida_estabelecimento.sql', '149fca5e6d8fac267cab94bb82f63e3e09c525563c73c7db01df5aa31a1315e0')
 ON DUPLICATE KEY UPDATE versao = VALUES(versao);
 
 INSERT INTO estabelecimentos

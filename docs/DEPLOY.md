@@ -90,6 +90,16 @@ banco antes de servir. Novos arquivos são sempre gravados na estrutura isolada.
   Os testes locais rodam só em MySQL, então `server/multitenant-security.test.js`
   recusa automaticamente sintaxe de um motor só nas migrations — trate uma falha
   desse teste como bloqueio de release, não como implicância.
+- A `024` fixa o ciclo de vida do estabelecimento (`ativo`, `suspenso`,
+  `arquivado`) com um CHECK e converte `inativo` em `suspenso`, sem apagar
+  nada. Ordem: **backup validado** → suspender escritas no painel do
+  superadministrador → `npm run db:migrate` → publicar e reiniciar o backend
+  desta versão logo em seguida → `database/verificacoes/001_verificar_instalacao.sql`
+  com as três contagens de ciclo de vida em zero. Migration e backend vão
+  juntos: o backend novo lê as colunas da `024`, e o antigo grava `inativo`, que
+  o CHECK passa a recusar. A sintaxe evita os recursos de um motor só, que o
+  teste de segurança recusa, mas a `024` ainda **não foi executada contra um
+  MariaDB 11.8 real**. Aplique primeiro numa cópia do banco de produção.
 - A partir do commit que fixa o fuso, o pool executa `SET time_zone = '+00:00'`
   em toda conexão, então `CURRENT_TIMESTAMP` grava UTC independentemente do
   relógio do servidor. Em produção isso **não muda comportamento**, porque o

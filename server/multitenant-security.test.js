@@ -21,7 +21,7 @@ import {
   PERMISSOES_CONFIGURACAO
 } from './permissoes.js';
 import { aguardarServidor, fecharServidor } from './runtime.js';
-import { criarJwt } from './security.js';
+import { criarHashSenha, criarHashToken, criarJwt } from './security.js';
 import { resolverEstabelecimento } from './tenant.js';
 import { CHAVES_PERMISSOES, PERMISSOES_PADRAO_ADMINISTRADOR } from '../src/utils/permissoes.js';
 
@@ -1028,4 +1028,298 @@ test('código do servidor e SQLs mantêm as restrições permanentes de seguran�
     false,
     'A presença de senha no .env não pode autorizar testes que criam ou removem banco.'
   );
+});
+
+/*
+  Banco em memória para o ciclo de vida do estabelecimento. Guarda duas lojas,
+  as sessões abertas de cada uma e a auditoria, e responde exatamente às
+  consultas que o login do superadmin, as ações de ciclo de vida e a validação
+  de sessão de admin e garçom fazem. Consulta fora dessa lista derruba o teste.
+*/
+function bancoCicloDeVida() {
+  const lojas = new Map([
+    [11, linhaTenant(11, 'loja-a', {
+      suspenso_em: null, motivo_suspensao: null, arquivado_em: null, arquivado_por: null
+    })],
+    [22, linhaTenant(22, 'loja-b', {
+      suspenso_em: null, motivo_suspensao: null, arquivado_em: null, arquivado_por: null
+    })]
+  ]);
+  const tokens = {
+    adminA: criarJwt({ idUsuario: 101, perfil: 'administrador', idEstabelecimento: 11, duracaoMs: 60_000, segredo: segredoJwt }),
+    garcomA: criarJwt({ idUsuario: 201, perfil: 'garcom', idEstabelecimento: 11, duracaoMs: 60_000, segredo: segredoJwt }),
+    adminB: criarJwt({ idUsuario: 102, perfil: 'administrador', idEstabelecimento: 22, duracaoMs: 60_000, segredo: segredoJwt }),
+    garcomB: criarJwt({ idUsuario: 202, perfil: 'garcom', idEstabelecimento: 22, duracaoMs: 60_000, segredo: segredoJwt })
+  };
+  const sessoesAdmin = [
+    { token_hash: criarHashToken(tokens.adminA), id_estabelecimento: 11, administrador_id: 101 },
+    { token_hash: criarHashToken(tokens.adminB), id_estabelecimento: 22, administrador_id: 102 }
+  ];
+  const sessoesGarcom = [
+    { token_hash: criarHashToken(tokens.garcomA), id_estabelecimento: 11, funcionario_id: 201 },
+    { token_hash: criarHashToken(tokens.garcomB), id_estabelecimento: 22, funcionario_id: 202 }
+  ];
+  const auditoria = [];
+  const escritas = [];
+
+  function removerSessoes(lista, idEstabelecimento) {
+    const antes = lista.length;
+    for (let indice = lista.length - 1; indice >= 0; indice -= 1) {
+      if (lista[indice].id_estabelecimento === idEstabelecimento) lista.splice(indice, 1);
+    }
+    return antes - lista.length;
+  }
+
+  function responder(sql, parametros = []) {
+    if (/^\s*(UPDATE|DELETE|INSERT)/i.test(sql)) escritas.push({ sql, parametros });
+    if (sql.includes('FROM superadministradores') && sql.includes('senha_hash')) {
+      return [[{
+        id: 1, nome: 'Super', usuario: 'super', email: 'super@teste.local',
+        senha_hash: criarHashSenha('senha-global-segura')
+      }]];
+    }
+    if (sql.includes('INSERT INTO sessoes_superadmin')) return [{ affectedRows: 1 }];
+    if (sql.includes('DELETE FROM sessoes_superadmin')) return [{ affectedRows: 0 }];
+    if (sql.includes('FROM sessoes_superadmin ss')) {
+      return [[{ id: 1, nome: 'Super', usuario: 'super', email: 'super@teste.local' }]];
+    }
+    if (sql.includes('FROM estabelecimentos AS e')) {
+      return [[...lojas.values()].filter((loja) => loja.slug === parametros[0])];
+    }
+    if (sql.includes('FOR UPDATE') && sql.includes('FROM estabelecimentos')) {
+      const loja = lojas.get(Number(parametros[0]));
+      return [loja ? [{ ...loja }] : []];
+    }
+    if (sql.includes('FROM estabelecimentos e')) {
+      const loja = lojas.get(Number(parametros[0]));
+      return [loja ? [{ ...loja, total_administradores: 1 }] : []];
+    }
+    if (sql.includes('UPDATE estabelecimentos')) {
+      const id = Number(parametros.at(-1));
+      const loja = lojas.get(id);
+      const origem = sql.match(/AND status = '(\w+)'/)?.[1];
+      const destino = sql.match(/SET status = '(\w+)'/)?.[1];
+      if (!loja || loja.status !== origem) return [{ affectedRows: 0 }];
+      if (destino === 'suspenso' && origem === 'ativo') {
+        Object.assign(loja, { status: 'suspenso', suspenso_em: new Date(), motivo_suspensao: parametros[0] });
+      } else if (destino === 'ativo') {
+        Object.assign(loja, { status: 'ativo', suspenso_em: null, motivo_suspensao: null });
+      } else if (destino === 'arquivado') {
+        Object.assign(loja, { status: 'arquivado', arquivado_em: new Date(), arquivado_por: parametros[0] });
+      } else {
+        Object.assign(loja, { status: 'suspenso', arquivado_em: null, arquivado_por: null });
+      }
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('DELETE FROM sessoes_admin') && sql.includes('expira_em')) return [{ affectedRows: 0 }];
+    if (sql.includes('DELETE FROM sessoes_garcom') && sql.includes('expira_em')) return [{ affectedRows: 0 }];
+    if (sql.includes('DELETE FROM sessoes_admin')) {
+      return [{ affectedRows: removerSessoes(sessoesAdmin, Number(parametros[0])) }];
+    }
+    if (sql.includes('DELETE FROM sessoes_garcom')) {
+      return [{ affectedRows: removerSessoes(sessoesGarcom, Number(parametros[0])) }];
+    }
+    if (sql.includes('INSERT INTO auditoria_superadmin')) {
+      auditoria.push({
+        superadministradorId: parametros[0],
+        idEstabelecimento: parametros[1],
+        acao: parametros[2],
+        detalhes: JSON.parse(parametros[3])
+      });
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('FROM administrador_permissoes ap')) return [[{ permissao: 'pedidos.visualizar' }]];
+    if (sql.includes('FROM sessoes_admin s')) {
+      const [hash, idEstabelecimento, idUsuario] = parametros;
+      const sessao = sessoesAdmin.find((item) => item.token_hash === hash
+        && item.id_estabelecimento === Number(idEstabelecimento)
+        && item.administrador_id === Number(idUsuario));
+      return [sessao ? [{
+        id: sessao.administrador_id, nome: 'Admin', usuario: 'admin', email: 'admin@teste.local',
+        id_estabelecimento: sessao.id_estabelecimento
+      }] : []];
+    }
+    if (sql.includes('FROM sessoes_garcom s')) {
+      const [hash, idEstabelecimento, idUsuario] = parametros;
+      const sessao = sessoesGarcom.find((item) => item.token_hash === hash
+        && item.id_estabelecimento === Number(idEstabelecimento)
+        && item.funcionario_id === Number(idUsuario));
+      return [sessao ? [{
+        id: sessao.funcionario_id, nome: 'Garçom', cargo: 'Garçom',
+        id_estabelecimento: sessao.id_estabelecimento
+      }] : []];
+    }
+    throw new Error(`Consulta inesperada no teste: ${sql}`);
+  }
+
+  const conexao = {
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    release() {},
+    async execute(sql, parametros) { return responder(sql, parametros); }
+  };
+  return {
+    lojas,
+    tokens,
+    sessoesAdmin,
+    sessoesGarcom,
+    auditoria,
+    escritas,
+    banco: {
+      async getConnection() { return conexao; },
+      async execute(sql, parametros) { return responder(sql, parametros); }
+    }
+  };
+}
+
+async function servidoresCicloDeVida(banco) {
+  const servidores = ['loja-a', 'loja-b'].map((slug) => criarServidor({
+    banco,
+    pastaUploads: resolve(pastaProjeto, 'server/uploads'),
+    tenantDesenvolvimento: slug,
+    jwtSecret: segredoJwt
+  }));
+  await Promise.all(servidores.map((servidor) => aguardarServidor(servidor, 0)));
+  const [urlA, urlB] = servidores.map((servidor) => `http://127.0.0.1:${servidor.address().port}`);
+  const login = await fetch(`${urlA}/api/superadmin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'super', senha: 'senha-global-segura' })
+  });
+  assert.equal(login.status, 200);
+  const { token: tokenSuperadmin } = await login.json();
+  return {
+    urlA,
+    urlB,
+    tokenSuperadmin,
+    fechar: () => Promise.all(servidores.map((servidor) => fecharServidor(servidor)))
+  };
+}
+
+test('suspender e arquivar a loja A derruba só as sessões da A, não mexe na B, e reativar não as devolve', async () => {
+  const { banco, lojas, tokens, sessoesAdmin, sessoesGarcom, auditoria } = bancoCicloDeVida();
+  const { urlA, urlB, tokenSuperadmin, fechar } = await servidoresCicloDeVida(banco);
+  const acao = (id, nome, corpo = {}) => fetch(`${urlA}/api/superadmin/estabelecimentos/${id}/${nome}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenSuperadmin}` },
+    body: JSON.stringify(corpo)
+  });
+  const sessao = (url, perfil, token) => fetch(`${url}/api/${perfil}/sessao`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  try {
+    // Antes: as quatro sessões valem, cada uma no próprio host.
+    assert.equal((await sessao(urlA, 'admin', tokens.adminA)).status, 200);
+    assert.equal((await sessao(urlA, 'garcom', tokens.garcomA)).status, 200);
+    assert.equal((await sessao(urlB, 'admin', tokens.adminB)).status, 200);
+    assert.equal((await sessao(urlB, 'garcom', tokens.garcomB)).status, 200);
+
+    const suspensao = await acao(11, 'suspender', { motivo: 'Mensalidade em aberto' });
+    assert.equal(suspensao.status, 200);
+    assert.equal((await suspensao.json()).estabelecimento.status, 'suspenso');
+
+    // A loja A perdeu todas as sessões; a B ficou intacta, status e sessões.
+    assert.deepEqual(sessoesAdmin.map((item) => item.id_estabelecimento), [22]);
+    assert.deepEqual(sessoesGarcom.map((item) => item.id_estabelecimento), [22]);
+    assert.equal(lojas.get(22).status, 'ativo');
+    assert.equal(lojas.get(22).motivo_suspensao, null);
+    assert.equal((await sessao(urlB, 'admin', tokens.adminB)).status, 200);
+    assert.equal((await sessao(urlB, 'garcom', tokens.garcomB)).status, 200);
+
+    // Suspensa, a loja A recusa até a validação de sessão.
+    assert.equal((await sessao(urlA, 'admin', tokens.adminA)).status, 403);
+
+    // Reativar não recria sessão: o token antigo do admin e do garçom da A
+    // continua sem valer mesmo com a loja de volta ao ar.
+    assert.equal((await acao(11, 'reativar')).status, 200);
+    assert.equal(lojas.get(11).status, 'ativo');
+    assert.equal((await sessao(urlA, 'admin', tokens.adminA)).status, 401);
+    assert.equal((await sessao(urlA, 'garcom', tokens.garcomA)).status, 401);
+
+    // Arquivar também derruba sessão — inclusive uma aberta depois da reativação.
+    sessoesAdmin.push({ token_hash: criarHashToken(tokens.adminA), id_estabelecimento: 11, administrador_id: 101 });
+    assert.equal((await acao(11, 'suspender', { motivo: 'Cliente pediu o encerramento' })).status, 200);
+    sessoesAdmin.push({ token_hash: criarHashToken(tokens.adminA), id_estabelecimento: 11, administrador_id: 101 });
+    const arquivamento = await acao(11, 'arquivar', { confirmacaoSlug: 'loja-a' });
+    assert.equal(arquivamento.status, 200);
+    assert.equal(lojas.get(11).status, 'arquivado');
+    assert.equal(lojas.get(11).arquivado_por, 1);
+    assert.deepEqual(sessoesAdmin.map((item) => item.id_estabelecimento), [22]);
+    assert.equal(lojas.get(22).status, 'ativo');
+    assert.equal(lojas.get(22).arquivado_em, null);
+
+    // Desarquivar volta para suspenso, sem sessão nenhuma recriada.
+    assert.equal((await acao(11, 'desarquivar')).status, 200);
+    assert.equal(lojas.get(11).status, 'suspenso');
+    assert.deepEqual(sessoesAdmin.map((item) => item.id_estabelecimento), [22]);
+
+    // Toda ação ficou na auditoria da própria loja A, com o autor.
+    assert.equal(auditoria.every((registro) => registro.idEstabelecimento === 11), true);
+    assert.equal(auditoria.every((registro) => registro.superadministradorId === 1), true);
+    assert.deepEqual(auditoria.map((registro) => registro.acao), [
+      'estabelecimento.suspenso',
+      'estabelecimento.reativado',
+      'estabelecimento.suspenso',
+      'estabelecimento.arquivado',
+      'estabelecimento.desarquivado'
+    ]);
+    assert.deepEqual(auditoria[0].detalhes.sessoesEncerradas, { administradores: 1, garcons: 1 });
+  } finally {
+    await fechar();
+  }
+});
+
+test('só o superadministrador suspende, reativa, arquiva ou desarquiva um estabelecimento', async () => {
+  const { banco, lojas, tokens, sessoesAdmin, sessoesGarcom, auditoria, escritas } = bancoCicloDeVida();
+  const { urlA, tokenSuperadmin, fechar } = await servidoresCicloDeVida(banco);
+  const corpos = {
+    suspender: { motivo: 'Tentativa sem permissão' },
+    reativar: {},
+    arquivar: { confirmacaoSlug: 'loja-a' },
+    desarquivar: {}
+  };
+
+  try {
+    for (const token of [tokens.adminA, tokens.garcomA, tokens.adminB]) {
+      for (const [nome, corpo] of Object.entries(corpos)) {
+        for (const id of [11, 22]) {
+          const resposta = await fetch(`${urlA}/api/superadmin/estabelecimentos/${id}/${nome}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(corpo)
+          });
+          assert.equal(resposta.status, 403, `${nome} com token de loja deveria ser 403`);
+        }
+      }
+    }
+    const semToken = await fetch(`${urlA}/api/superadmin/estabelecimentos/11/suspender`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpos.suspender)
+    });
+    assert.equal(semToken.status, 401);
+
+    // Nada foi gravado: status, sessões e auditoria como antes.
+    assert.equal(escritas.some(({ sql }) => /estabelecimentos|sessoes_admin|sessoes_garcom|auditoria/.test(sql)
+      && !/sessoes_superadmin/.test(sql)), false);
+    assert.equal(lojas.get(11).status, 'ativo');
+    assert.equal(lojas.get(22).status, 'ativo');
+    assert.equal(sessoesAdmin.length, 2);
+    assert.equal(sessoesGarcom.length, 2);
+    assert.equal(auditoria.length, 0);
+
+    // O mesmo pedido com o token global passa.
+    const suspensao = await fetch(`${urlA}/api/superadmin/estabelecimentos/22/suspender`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenSuperadmin}` },
+      body: JSON.stringify(corpos.suspender)
+    });
+    assert.equal(suspensao.status, 200);
+    assert.equal(lojas.get(22).status, 'suspenso');
+    assert.equal(lojas.get(11).status, 'ativo');
+  } finally {
+    await fechar();
+  }
 });

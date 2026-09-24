@@ -12,6 +12,10 @@ const PAGINACAO_VAZIA = { pagina: 1, limite: 50, total: 0, paginas: 1 };
 const ROTULOS_ACAO = {
   'estabelecimento.criado': 'Estabelecimento criado',
   'estabelecimento.atualizado': 'Estabelecimento atualizado',
+  'estabelecimento.suspenso': 'Estabelecimento suspenso',
+  'estabelecimento.reativado': 'Estabelecimento reativado',
+  'estabelecimento.arquivado': 'Estabelecimento arquivado',
+  'estabelecimento.desarquivado': 'Estabelecimento desarquivado',
   'superadministrador.criado': 'Superadministrador criado',
   'superadministrador.ativado': 'Superadministrador reativado',
   'superadministrador.desativado': 'Superadministrador desativado',
@@ -31,10 +35,23 @@ function dataHora(valor) {
   }).format(new Date(valor));
 }
 
+/* Detalhes podem trazer pares { antes, depois } (edição e ciclo de vida) e
+   objetos aninhados (alterações, sessões encerradas): tudo vira texto plano,
+   sem markup, para não depender do formato de cada ação. */
+function valorDetalhe(valor) {
+  if (valor === null || valor === undefined || valor === '') return '—';
+  if (typeof valor !== 'object') return String(valor);
+  if (Object.hasOwn(valor, 'antes') && Object.hasOwn(valor, 'depois')) {
+    return `${valorDetalhe(valor.antes)} → ${valorDetalhe(valor.depois)}`;
+  }
+  const partes = Object.entries(valor).map(([chave, item]) => `${chave}: ${valorDetalhe(item)}`);
+  return partes.length ? partes.join(', ') : 'nenhuma';
+}
+
 function resumoDetalhes(detalhes) {
   if (!detalhes || typeof detalhes !== 'object') return '';
   return Object.entries(detalhes)
-    .map(([chave, valor]) => `${chave}: ${valor}`)
+    .map(([chave, valor]) => `${chave}: ${valorDetalhe(valor)}`)
     .join(' • ');
 }
 
