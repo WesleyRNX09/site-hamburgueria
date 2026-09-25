@@ -7,11 +7,13 @@ import {
   CircleDollarSign,
   CirclePause,
   CirclePlay,
+  Download,
   Edit3,
   KeyRound,
   Plus,
   Search,
   ShieldAlert,
+  Trash2,
   X
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -149,6 +151,88 @@ function ModalCicloDeVida({ acao, estabelecimento, processando, onCancelar, onCo
             <button type="submit" className={styles.botaoPerigo} disabled={processando || !podeConfirmar}>
               {suspender ? <CirclePause size={17} /> : <Archive size={17} />}
               {processando ? 'Aplicando...' : suspender ? 'Suspender acesso' : 'Arquivar tenant'}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+/* Mesmo prazo do servidor (exclusaoEstabelecimento.js); aqui é só para a tela
+   mostrar quanto falta. Quem decide se pode excluir é o servidor. */
+const DIAS_PARA_EXCLUSAO = 60;
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+function diasParaExcluir(arquivadoEm) {
+  const arquivado = arquivadoEm ? new Date(arquivadoEm).getTime() : Number.NaN;
+  if (Number.isNaN(arquivado)) return null;
+  const restante = arquivado + (DIAS_PARA_EXCLUSAO * DIA_MS) - Date.now();
+  return restante > 0 ? Math.ceil(restante / DIA_MS) : 0;
+}
+
+/*
+  Exclusão definitiva: irreversível. Pede o nome fantasia exato (não o slug) e
+  avisa que a exportação completa é baixada como parte da exclusão.
+*/
+function ModalExclusaoDefinitiva({ estabelecimento, processando, onCancelar, onConfirmar }) {
+  const [valor, setValor] = useState('');
+  const [erro, setErro] = useState('');
+  const podeConfirmar = valor.trim() === estabelecimento.nomeFantasia;
+
+  useEffect(() => {
+    function aoTeclar(evento) {
+      if (evento.key === 'Escape' && !processando) onCancelar();
+    }
+    document.addEventListener('keydown', aoTeclar);
+    return () => document.removeEventListener('keydown', aoTeclar);
+  }, [onCancelar, processando]);
+
+  async function enviar(evento) {
+    evento.preventDefault();
+    setErro('');
+    try {
+      await onConfirmar(valor.trim());
+    } catch (falha) {
+      setErro(falha.message || 'Não foi possível excluir o estabelecimento.');
+    }
+  }
+
+  return (
+    <div className={styles.modalFundo} role="presentation" onClick={(evento) => { if (evento.target === evento.currentTarget && !processando) onCancelar(); }}>
+      <section className={`${styles.formularioCard} ${styles.modal}`} role="dialog" aria-modal="true" aria-labelledby="titulo-exclusao-definitiva">
+        <div className={styles.formularioTopo}>
+          <div>
+            <span className={styles.rotuloPerigo}>EXCLUSÃO DEFINITIVA</span>
+            <h2 id="titulo-exclusao-definitiva">Excluir {estabelecimento.nomeFantasia}</h2>
+            <p>Esta ação é <strong>irreversível</strong>. Não existe desfazer.</p>
+          </div>
+          <button type="button" className={styles.fechar} aria-label="Fechar" disabled={processando} onClick={onCancelar}><X size={20} /></button>
+        </div>
+        <div className={styles.avisoPerigo}>
+          <p>Serão apagados do banco e do servidor, sem volta: cardápio, pedidos, comandas, pagamentos, equipe, administradores, configurações, imagens enviadas e o histórico de acessos do painel da loja.</p>
+          <p>A exportação completa dos dados é gerada antes e <strong>baixada automaticamente</strong> como parte da exclusão. Guarde esse arquivo: ele é a única cópia.</p>
+        </div>
+        <form className={styles.formulario} onSubmit={enviar}>
+          <label className={styles.campo}>
+            <span>Digite o nome completo <strong>{estabelecimento.nomeFantasia}</strong> para confirmar</span>
+            <input
+              required
+              autoFocus
+              autoComplete="off"
+              spellCheck="false"
+              maxLength="160"
+              value={valor}
+              onChange={(e) => setValor(e.target.value)}
+              placeholder={estabelecimento.nomeFantasia}
+            />
+          </label>
+          {erro && <div className={styles.erro} role="alert">{erro}</div>}
+          <div className={styles.acoesFormulario}>
+            <button type="button" className={styles.botaoSecundario} disabled={processando} onClick={onCancelar}>Cancelar</button>
+            <button type="submit" className={styles.botaoPerigo} disabled={processando || !podeConfirmar}>
+              <Trash2 size={17} />
+              {processando ? 'Excluindo...' : 'Excluir definitivamente'}
             </button>
           </div>
         </form>
@@ -432,12 +516,15 @@ function EstabelecimentosSuperadmin() {
     suspenderEstabelecimento,
     reativarEstabelecimento,
     arquivarEstabelecimento,
-    desarquivarEstabelecimento
+    desarquivarEstabelecimento,
+    exportarEstabelecimento,
+    excluirEstabelecimentoDefinitivamente
   } = useSuperadmin();
   const [filtros, setFiltros] = useState({ busca: '', status: '', plano: '', statusAssinatura: '', incluirArquivados: false });
   const [formulario, setFormulario] = useState(null);
   const [resetSenha, setResetSenha] = useState(null);
   const [cicloDeVida, setCicloDeVida] = useState(null);
+  const [exclusao, setExclusao] = useState(null);
   const [processando, setProcessando] = useState(false);
   const [mensagem, setMensagem] = useState('');
   const [erro, setErro] = useState('');
@@ -512,6 +599,46 @@ function EstabelecimentosSuperadmin() {
   }
 
   const fecharCicloDeVida = useCallback(() => setCicloDeVida(null), []);
+  const fecharExclusao = useCallback(() => setExclusao(null), []);
+
+  // Só baixa o .zip: pode ser pedida quantas vezes for preciso.
+  async function baixarExportacao(estabelecimento) {
+    setMensagem('');
+    setErro('');
+    setProcessando(true);
+    try {
+      const { nomeArquivo } = await exportarEstabelecimento(estabelecimento.id);
+      setMensagem(`Exportação de ${estabelecimento.nomeFantasia} baixada: ${nomeArquivo}.`);
+    } catch (falha) {
+      setErro(falha.message);
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  function abrirExclusao(estabelecimento) {
+    setMensagem('');
+    setErro('');
+    setExclusao(estabelecimento);
+  }
+
+  // Erro dentro do modal: o modal continua aberto e mostra a mensagem.
+  async function confirmarExclusao(nomeDigitado) {
+    const estabelecimento = exclusao;
+    setProcessando(true);
+    try {
+      const { nomeArquivo, limpezaPendente } = await excluirEstabelecimentoDefinitivamente(estabelecimento.id, nomeDigitado);
+      setExclusao(null);
+      setMensagem(
+        `${estabelecimento.nomeFantasia} foi excluído definitivamente. A exportação foi baixada: ${nomeArquivo}.`
+        + (limpezaPendente
+          ? ' A pasta de imagens da loja não pôde ser removida do servidor e precisa de limpeza manual.'
+          : '')
+      );
+    } finally {
+      setProcessando(false);
+    }
+  }
 
   // Erro dentro do modal: o modal continua aberto e mostra a mensagem.
   async function confirmarCicloDeVida(valor) {
@@ -553,6 +680,12 @@ function EstabelecimentosSuperadmin() {
 
   function acoesDoEstabelecimento(item) {
     const nome = item.nomeFantasia;
+    // Só para a tela: o servidor confere o prazo de novo antes de excluir.
+    const diasExclusao = item.status === 'arquivado' ? diasParaExcluir(item.arquivadoEm) : null;
+    const exclusaoLiberada = diasExclusao === 0;
+    const tituloExclusao = exclusaoLiberada
+      ? 'Excluir definitivamente'
+      : `Exclusão definitiva liberada em ${diasExclusao ?? '?'} dia(s)`;
     return (
       <div className={styles.acoes}>
         {item.status !== 'arquivado' && (
@@ -568,7 +701,11 @@ function EstabelecimentosSuperadmin() {
           </>
         )}
         {item.status === 'arquivado' && (
-          <button type="button" disabled={processando} aria-label={`Desarquivar ${nome}`} title="Desarquivar" onClick={() => aplicarSemConfirmacao('desarquivar', item)}><ArchiveRestore size={17} /></button>
+          <>
+            <button type="button" disabled={processando} aria-label={`Desarquivar ${nome}`} title="Desarquivar" onClick={() => aplicarSemConfirmacao('desarquivar', item)}><ArchiveRestore size={17} /></button>
+            <button type="button" disabled={processando} aria-label={`Baixar exportação dos dados de ${nome}`} title="Baixar exportação dos dados" onClick={() => baixarExportacao(item)}><Download size={17} /></button>
+            <button type="button" className={styles.acaoPerigo} disabled={processando || !exclusaoLiberada} aria-label={`${tituloExclusao}: ${nome}`} title={tituloExclusao} onClick={() => abrirExclusao(item)}><Trash2 size={17} /></button>
+          </>
         )}
         {item.status !== 'arquivado' && (
           <button type="button" aria-label={`Resetar senha de administrador de ${nome}`} title="Resetar senha de administrador" onClick={() => abrirResetSenha(item)}><KeyRound size={17} /></button>
@@ -588,7 +725,12 @@ function EstabelecimentosSuperadmin() {
           </small>
         )}
         {item.status === 'arquivado' && item.arquivadoEm && (
-          <small className={styles.motivo}>Arquivado em {dataCurta(item.arquivadoEm)}</small>
+          <small className={styles.motivo}>
+            Arquivado em {dataCurta(item.arquivadoEm)}
+            {diasParaExcluir(item.arquivadoEm) > 0
+              ? ` • exclusão definitiva liberada em ${diasParaExcluir(item.arquivadoEm)} dia(s)`
+              : ' • exclusão definitiva liberada'}
+          </small>
         )}
       </>
     );
@@ -636,6 +778,16 @@ function EstabelecimentosSuperadmin() {
           processando={processando}
           onCancelar={fecharCicloDeVida}
           onConfirmar={confirmarCicloDeVida}
+        />
+      )}
+
+      {exclusao && (
+        <ModalExclusaoDefinitiva
+          key={exclusao.id}
+          estabelecimento={exclusao}
+          processando={processando}
+          onCancelar={fecharExclusao}
+          onConfirmar={confirmarExclusao}
         />
       )}
 

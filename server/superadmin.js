@@ -263,7 +263,8 @@ export async function buscarEstabelecimentoGerencial(banco, id) {
   return linhas[0] ? mapearEstabelecimento(linhas[0]) : null;
 }
 
-async function registrarAuditoria(conexao, superadministradorId, estabelecimentoId, acao, detalhes) {
+// Exportada para a exportação e a exclusão definitiva (exclusaoEstabelecimento.js).
+export async function registrarAuditoria(conexao, superadministradorId, estabelecimentoId, acao, detalhes) {
   await conexao.execute(`
     INSERT INTO auditoria_superadmin
       (superadministrador_id, id_estabelecimento, acao, detalhes_json)

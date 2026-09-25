@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 import { criarServidor } from './app.js';
 import { checksumMigration } from './db/migration-utils.js';
+import {
+  COLUNAS_OCULTAS_ESTABELECIMENTO,
+  REFERENCIAS_SEM_TENANT,
+  TABELAS_DO_ESTABELECIMENTO
+} from './exclusaoEstabelecimento.js';
+import { criarBancoEmMemoria, lerEsquema, semearLoja } from './testes/bancoEmMemoria.js';
 import { buscarAdicional, buscarProduto, criarProduto, listarCatalogo } from './catalog.js';
 import {
   acompanharPedido,
@@ -1845,5 +1852,178 @@ test('administrador criado por outro administrador nasce com senha temporária e
     assert.equal(administradores.get(100).id_estabelecimento, 10);
   } finally {
     await fecharServidor(lojaB.servidor);
+  }
+});
+
+/* Duas lojas completas: A arquivada há 61 dias (a excluir) e B ativa. */
+async function duasLojasParaExclusao() {
+  const memoria = criarBancoEmMemoria();
+  const agora = Date.now();
+  semearLoja(memoria, {
+    id: 11, nome: 'Loja A Arquivada', slug: 'loja-a', status: 'arquivado', base: 1100,
+    arquivadoEm: new Date(agora - 61 * 24 * 60 * 60 * 1000)
+  });
+  semearLoja(memoria, { id: 22, nome: 'Loja B', slug: 'loja-b', base: 2200 });
+  const pastaUploads = await mkdtemp(join(tmpdir(), 'hamburgueria-exclusao-seguranca-'));
+  for (const [id, arquivo] of [[11, 'logo-a.png'], [11, 'produto-a.png'], [22, 'logo-b.png']]) {
+    await mkdir(join(pastaUploads, 'estabelecimentos', String(id)), { recursive: true });
+    await writeFile(join(pastaUploads, 'estabelecimentos', String(id), arquivo), `conteudo-${arquivo}`);
+  }
+  const servidor = criarServidor({ banco: memoria.banco, pastaUploads, tenantDesenvolvimento: '', jwtSecret: segredoJwt });
+  await aguardarServidor(servidor, 0);
+  const url = `http://127.0.0.1:${servidor.address().port}`;
+  const login = await fetch(`${url}/api/superadmin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'super', senha: 'senha-global-segura' })
+  });
+  const { token } = await login.json();
+  const excluir = (id, corpo, tokenUsado = token) => fetch(`${url}/api/superadmin/estabelecimentos/${id}/excluir-definitivamente`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenUsado}` },
+    body: JSON.stringify(corpo)
+  });
+  return {
+    memoria,
+    pastaUploads,
+    excluir,
+    exportar: (id, tokenUsado = token) => fetch(`${url}/api/superadmin/estabelecimentos/${id}/exportar`, {
+      method: 'POST', headers: { Authorization: `Bearer ${tokenUsado}` }
+    }),
+    async encerrar() {
+      await fecharServidor(servidor);
+      await rm(pastaUploads, { recursive: true, force: true });
+    }
+  };
+}
+
+test('exclusão definitiva apaga tudo da loja A, guarda a auditoria em texto e não toca em nada da loja B', async () => {
+  const ambiente = await duasLojasParaExclusao();
+  const { memoria, pastaUploads } = ambiente;
+  const lojaBAntes = structuredClone(memoria.linhasDaLoja(22));
+  try {
+    const resposta = await ambiente.excluir(11, { confirmacaoNome: 'Loja A Arquivada', id_estabelecimento: 22 });
+    assert.equal(resposta.status, 200);
+    assert.equal(resposta.headers.get('content-type'), 'application/zip');
+    assert.match(resposta.headers.get('content-disposition'), /exportacao-loja-a-11-/);
+    assert.equal(resposta.headers.get('x-limpeza-uploads'), null);
+    const zip = Buffer.from(await resposta.arrayBuffer());
+    assert.equal(zip.readUInt32LE(0), 0x04034B50);
+    // A exportação entregue é da loja A e só dela (nomes das entradas do .zip
+    // ficam sem compressão; o conteúdo é conferido em api.test.js).
+    assert.equal(zip.includes(Buffer.from('dados.json')), true);
+    assert.equal(zip.includes(Buffer.from('uploads/logo-a.png')), true);
+    assert.equal(zip.includes(Buffer.from('uploads/produto-a.png')), true);
+    assert.equal(zip.includes(Buffer.from('logo-b.png')), false);
+
+    // Loja A: nenhuma linha em nenhuma tabela, nem a de estabelecimentos.
+    for (const [tabela, linhas] of Object.entries(memoria.linhasDaLoja(11))) {
+      assert.equal(linhas.length, 0, `${tabela} ainda tem linha da loja A`);
+    }
+    assert.equal(memoria.tabela('estabelecimentos').some((linha) => linha.id_estabelecimento === 11), false);
+    await assert.rejects(stat(join(pastaUploads, 'estabelecimentos', '11')), { code: 'ENOENT' });
+
+    // A auditoria sobrevive com id_estabelecimento NULL e os detalhes em JSON.
+    const evento = memoria.tabela('auditoria_superadmin').find((linha) => linha.acao === 'estabelecimento.excluido');
+    assert.equal(evento.id_estabelecimento, null);
+    assert.equal(evento.superadministrador_id, 1);
+    assert.equal(evento.detalhes_json.idEstabelecimento, 11);
+    assert.equal(evento.detalhes_json.nomeFantasia, 'Loja A Arquivada');
+    assert.equal(evento.detalhes_json.slug, 'loja-a');
+    assert.equal(evento.detalhes_json.excluidoPor, 1);
+    assert.equal(evento.detalhes_json.linhasRemovidas.pedidos, 1);
+    assert.equal(evento.detalhes_json.linhasRemovidas.auditoria_admin, 1);
+    assert.equal(evento.detalhes_json.linhasRemovidas.estabelecimentos, 1);
+    // A auditoria anterior da loja A também fica, só sem o vínculo.
+    assert.equal(memoria.tabela('auditoria_superadmin').find((linha) => linha.id === 1118).id_estabelecimento, null);
+
+    // Loja B: exatamente igual, inclusive sessões e uploads.
+    assert.deepEqual(memoria.linhasDaLoja(22), lojaBAntes);
+    assert.equal(memoria.tabela('sessoes_admin').filter((linha) => linha.id_estabelecimento === 22).length, 1);
+    assert.equal(memoria.tabela('sessoes_garcom').filter((linha) => linha.id_estabelecimento === 22).length, 1);
+    await stat(join(pastaUploads, 'estabelecimentos', '22', 'logo-b.png'));
+
+    // Depois de excluída, a loja A não existe mais para nada.
+    assert.equal((await ambiente.excluir(11, { confirmacaoNome: 'Loja A Arquivada' })).status, 404);
+    assert.equal((await ambiente.exportar(11)).status, 404);
+  } finally {
+    await ambiente.encerrar();
+  }
+});
+
+test('exclusão definitiva é recusada se outra loja aponta para dados da loja A', async () => {
+  const ambiente = await duasLojasParaExclusao();
+  const { memoria } = ambiente;
+  try {
+    // Dado corrompido: um pedido da loja B aponta para o garçom da loja A.
+    // Sem a trava, o SET NULL alteraria esse pedido da loja B.
+    memoria.tabela('pedidos').find((linha) => linha.id_estabelecimento === 22).funcionario_id = 1109;
+    const antes = memoria.fotografia();
+    const resposta = await ambiente.excluir(11, { confirmacaoNome: 'Loja A Arquivada' });
+    assert.equal(resposta.status, 409);
+    assert.match((await resposta.json()).erro, /pedidos\.funcionario_id → funcionarios/);
+    assert.deepEqual(memoria.fotografia(), antes);
+    assert.equal(memoria.consultas.some(({ sql }) => /^\s*DELETE FROM (?!sessoes_superadmin)/.test(sql)), false);
+    await stat(join(ambiente.pastaUploads, 'estabelecimentos', '11', 'logo-a.png'));
+  } finally {
+    await ambiente.encerrar();
+  }
+});
+
+test('só o superadministrador exporta ou exclui definitivamente um estabelecimento', async () => {
+  const ambiente = await duasLojasParaExclusao();
+  try {
+    const tokens = [
+      criarJwt({ idUsuario: 1101, perfil: 'administrador', idEstabelecimento: 11, duracaoMs: 60_000, segredo: segredoJwt }),
+      criarJwt({ idUsuario: 2201, perfil: 'administrador', idEstabelecimento: 22, duracaoMs: 60_000, segredo: segredoJwt }),
+      criarJwt({ idUsuario: 1109, perfil: 'garcom', idEstabelecimento: 11, duracaoMs: 60_000, segredo: segredoJwt })
+    ];
+    const antes = ambiente.memoria.fotografia();
+    for (const token of tokens) {
+      assert.equal((await ambiente.excluir(11, { confirmacaoNome: 'Loja A Arquivada' }, token)).status, 403);
+      assert.equal((await ambiente.exportar(11, token)).status, 403);
+    }
+    assert.equal((await ambiente.excluir(11, { confirmacaoNome: 'Loja A Arquivada' }, '')).status, 401);
+    assert.deepEqual(ambiente.memoria.fotografia(), antes);
+  } finally {
+    await ambiente.encerrar();
+  }
+});
+
+test('ordem de remoção, colunas exportadas e travas cruzadas cobrem todo o esquema do CRIAR_db.sql', () => {
+  const { colunas, chaves } = lerEsquema();
+  const ordem = TABELAS_DO_ESTABELECIMENTO.map(({ tabela }) => tabela);
+
+  // Toda tabela com FK para estabelecimentos entra na remoção, exceto a
+  // auditoria global (SET NULL, sobrevive de propósito).
+  const dependentes = new Set(chaves.filter((chave) => chave.pai === 'estabelecimentos'
+    && chave.colunas.includes('id_estabelecimento')).map((chave) => chave.filho));
+  dependentes.add('trabalhos_impressao');
+  dependentes.delete('auditoria_superadmin');
+  assert.deepEqual([...dependentes].sort(), [...ordem].sort());
+  assert.equal(chaves.find((chave) => chave.filho === 'auditoria_superadmin' && chave.pai === 'estabelecimentos').regra, 'SET NULL');
+
+  // Filho sempre antes do pai na ordem de remoção.
+  for (const chave of chaves) {
+    if (!ordem.includes(chave.filho) || !ordem.includes(chave.pai) || chave.filho === chave.pai) continue;
+    assert.ok(ordem.indexOf(chave.filho) < ordem.indexOf(chave.pai), `${chave.filho} precisa sair antes de ${chave.pai}`);
+  }
+
+  // Exportação: toda coluna vai, ou é declarada oculta (senha, hash, token).
+  for (const { tabela, colunas: exportadas, colunasOcultas = [] } of TABELAS_DO_ESTABELECIMENTO) {
+    if (!exportadas) {
+      assert.ok(['sessoes_admin', 'sessoes_garcom'].includes(tabela), `${tabela} fora da exportação`);
+      continue;
+    }
+    assert.deepEqual([...exportadas, ...colunasOcultas].sort(), [...colunas.get(tabela)].sort(), tabela);
+  }
+  assert.deepEqual(COLUNAS_OCULTAS_ESTABELECIMENTO, ['token_acesso_garcom']);
+
+  // Toda FK de uma coluna só entre tabelas da loja (sem o tenant na chave) é
+  // conferida contra referência de outra loja antes de apagar.
+  const conferidas = new Set(REFERENCIAS_SEM_TENANT.map(([filho, coluna, pai]) => `${filho}.${coluna}>${pai}`));
+  for (const chave of chaves) {
+    if (chave.colunas.length !== 1 || !ordem.includes(chave.filho) || !ordem.includes(chave.pai)) continue;
+    assert.ok(conferidas.has(`${chave.filho}.${chave.colunas[0]}>${chave.pai}`), `${chave.filho}.${chave.colunas[0]} sem trava cruzada`);
   }
 });

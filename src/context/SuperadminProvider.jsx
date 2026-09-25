@@ -10,6 +10,8 @@ import {
   criarSuperadministrador,
   desarquivarEstabelecimentoSuperadmin,
   ErroApi,
+  excluirEstabelecimentoDefinitivamenteSuperadmin,
+  exportarEstabelecimentoSuperadmin,
   listarAdministradoresEstabelecimento,
   listarAuditoriaSuperadmin,
   listarEstabelecimentosSuperadmin,
@@ -18,6 +20,7 @@ import {
   logoutSuperadmin,
   reativarEstabelecimentoSuperadmin,
   redefinirSenhaAdministradorEstabelecimento,
+  salvarArquivoBaixado,
   suspenderEstabelecimentoSuperadmin,
   validarSessaoSuperadmin
 } from '../services/api';
@@ -236,6 +239,31 @@ export function SuperadminProvider({ children }) {
     return aplicarCicloDeVida(() => desarquivarEstabelecimentoSuperadmin(id));
   }
 
+  /* Exportação de loja arquivada: só baixa o .zip, não muda nada. */
+  async function exportarEstabelecimento(id) {
+    const arquivo = await exportarEstabelecimentoSuperadmin(id);
+    salvarArquivoBaixado(arquivo);
+    return arquivo;
+  }
+
+  /* Exclusão definitiva: a resposta é a exportação, baixada na hora. A loja
+     sai da lista mesmo que a recarga falhe, porque ela não existe mais. */
+  async function excluirEstabelecimentoDefinitivamente(id, confirmacaoNome) {
+    let arquivo;
+    try {
+      arquivo = await excluirEstabelecimentoDefinitivamenteSuperadmin(id, confirmacaoNome);
+    } catch (erro) {
+      if (erro instanceof ErroApi && erro.status === 409) {
+        await carregarEstabelecimentos(ultimosFiltros.current).catch(() => {});
+      }
+      throw erro;
+    }
+    salvarArquivoBaixado(arquivo);
+    setEstabelecimentos((atuais) => atuais.filter((item) => item.id !== id));
+    await carregarEstabelecimentos(ultimosFiltros.current).catch(() => {});
+    return arquivo;
+  }
+
   return (
     <SuperadminContext.Provider value={{
       sessao,
@@ -255,6 +283,8 @@ export function SuperadminProvider({ children }) {
       reativarEstabelecimento,
       arquivarEstabelecimento,
       desarquivarEstabelecimento,
+      exportarEstabelecimento,
+      excluirEstabelecimentoDefinitivamente,
       carregarAuditoria,
       carregarAdministradoresDoEstabelecimento,
       redefinirSenhaAdministrador,

@@ -199,6 +199,69 @@ export function desarquivarEstabelecimentoSuperadmin(id) {
   });
 }
 
+/*
+  Download da exportação (.zip) de um estabelecimento. Mesma autenticação e o
+  mesmo erro JSON da `requisicao`, mas a resposta boa é binária. O prazo é
+  maior: a exportação lê todas as tabelas e os arquivos da loja.
+*/
+async function requisicaoArquivo(caminho, { dados, autenticacao } = {}) {
+  const cabecalhos = { Accept: 'application/zip, application/json' };
+  if (dados !== undefined) cabecalhos['Content-Type'] = 'application/json';
+  const token = obterToken(CHAVES_SESSAO[autenticacao]);
+  if (token) cabecalhos.Authorization = `Bearer ${token}`;
+
+  let resposta;
+  const controlador = new AbortController();
+  const limite = setTimeout(() => controlador.abort(), 120000);
+  try {
+    resposta = await fetch(`${URL_API}${caminho}`, {
+      method: 'POST',
+      headers: cabecalhos,
+      body: dados === undefined ? undefined : JSON.stringify(dados),
+      signal: controlador.signal
+    });
+  } catch {
+    throw new ErroApi('Não foi possível conectar ao servidor. Verifique se o backend e o MySQL estão ligados.', 0);
+  } finally {
+    clearTimeout(limite);
+  }
+  if (!resposta.ok) {
+    const conteudo = await resposta.json().catch(() => ({}));
+    if (resposta.status === 401) expirarSessao(autenticacao);
+    throw new ErroApi(conteudo.erro || 'Não foi possível concluir a operação.', resposta.status);
+  }
+  const disposicao = resposta.headers.get('Content-Disposition') || '';
+  return {
+    blob: await resposta.blob(),
+    nomeArquivo: disposicao.match(/filename="([^"]+)"/)?.[1] || 'exportacao.zip',
+    limpezaPendente: resposta.headers.get('X-Limpeza-Uploads') === 'pendente'
+  };
+}
+
+export function exportarEstabelecimentoSuperadmin(id) {
+  return requisicaoArquivo(`/api/superadmin/estabelecimentos/${id}/exportar`, { autenticacao: 'superadmin' });
+}
+
+/* Irreversível: do corpo vai só o nome digitado; a resposta é a exportação. */
+export function excluirEstabelecimentoDefinitivamenteSuperadmin(id, confirmacaoNome) {
+  return requisicaoArquivo(`/api/superadmin/estabelecimentos/${id}/excluir-definitivamente`, {
+    dados: { confirmacaoNome },
+    autenticacao: 'superadmin'
+  });
+}
+
+/* Entrega ao navegador um arquivo recebido da API, como download. */
+export function salvarArquivoBaixado({ blob, nomeArquivo }) {
+  const endereco = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = endereco;
+  link.download = nomeArquivo;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(endereco), 1000);
+}
+
 export function alterarSenhaSuperadmin(dados) {
   return requisicao('/api/superadmin/senha', {
     metodo: 'PUT',

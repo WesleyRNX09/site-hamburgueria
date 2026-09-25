@@ -294,6 +294,22 @@ Não executar migration em banco remoto sem autorização explícita.
 
 Comandos que contenham `DROP TABLE`, `DROP DATABASE` ou `TRUNCATE` também pedem confirmação via `.claude/settings.json` (seção 32).
 
+## Exclusão definitiva de estabelecimento
+
+A única remoção em massa prevista no sistema é a exclusão definitiva feita
+pelo superadmin (`server/exclusaoEstabelecimento.js`): só loja arquivada há 60
+dias, com o nome fantasia exato digitado, exportação montada antes e tudo numa
+transação.
+
+- `auditoria_admin` da loja **não sobrevive**: a FK dela para
+  `estabelecimentos` é RESTRICT, então precisa ser apagada. Vai só na
+  exportação. O registro que fica no banco é o evento `estabelecimento.excluido`
+  em `auditoria_superadmin` (FK SET NULL), com os detalhes em JSON.
+- Ao criar uma tabela nova com `id_estabelecimento`, inclua-a em
+  `TABELAS_DO_ESTABELECIMENTO` (posição na ordem de remoção e colunas
+  exportadas, sem senha/hash/token). O teste de segurança compara essa lista com
+  o `CRIAR_db.sql` e falha se ela ficar para trás.
+
 ---
 
 # 13. CRIAR_db.sql

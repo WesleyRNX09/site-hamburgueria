@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { request as requisicaoHttp } from 'node:http';
 import { tmpdir } from 'node:os';
+import { crc32, inflateRawSync } from 'node:zlib';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 
@@ -10,6 +11,13 @@ import mysql from 'mysql2/promise';
 
 import { criarLimitadorTentativas, criarServidor, personalizarIndexHtml } from './app.js';
 import { listarCatalogo, precoParaCentavos } from './catalog.js';
+import {
+  diasParaLiberarExclusao,
+  excluirEstabelecimentoDefinitivamente,
+  TABELAS_DO_ESTABELECIMENTO
+} from './exclusaoEstabelecimento.js';
+import { criarBancoEmMemoria, semearLoja } from './testes/bancoEmMemoria.js';
+import { criarZip } from './zip.js';
 import { fecharBanco, prepararBanco } from './database.js';
 import { checksumMigration, checksumsCompativeisMigration } from './db/migration-utils.js';
 import { removerImagemLocal, salvarImagemDataUrl } from './imageStore.js';
@@ -2824,6 +2832,192 @@ test('mínimo único de 12 caracteres na troca própria e no administrador criad
   assert.equal(insert.parametros.includes('doze-caracts'), false);
 });
 
+/* Leitor mínimo de .zip, só para os testes: índice central + inflate + CRC. */
+function lerZip(buffer) {
+  const fim = buffer.length - 22;
+  assert.equal(buffer.readUInt32LE(fim), 0x06054B50);
+  const total = buffer.readUInt16LE(fim + 10);
+  let posicao = buffer.readUInt32LE(fim + 16);
+  const entradas = new Map();
+  for (let indice = 0; indice < total; indice += 1) {
+    assert.equal(buffer.readUInt32LE(posicao), 0x02014B50);
+    const crc = buffer.readUInt32LE(posicao + 16);
+    const comprimido = buffer.readUInt32LE(posicao + 20);
+    const tamanhoNome = buffer.readUInt16LE(posicao + 28);
+    const tamanhoExtra = buffer.readUInt16LE(posicao + 30);
+    const tamanhoComentario = buffer.readUInt16LE(posicao + 32);
+    const local = buffer.readUInt32LE(posicao + 42);
+    const nome = buffer.subarray(posicao + 46, posicao + 46 + tamanhoNome).toString('utf8');
+    const inicioDados = local + 30 + buffer.readUInt16LE(local + 26) + buffer.readUInt16LE(local + 28);
+    const conteudo = inflateRawSync(buffer.subarray(inicioDados, inicioDados + comprimido));
+    assert.equal(crc32(conteudo) >>> 0, crc, `CRC de ${nome}`);
+    entradas.set(nome, conteudo);
+    posicao += 46 + tamanhoNome + tamanhoExtra + tamanhoComentario;
+  }
+  return entradas;
+}
+
+test('gera .zip válido, com nomes UTF-8, e recusa caminho que sobe de pasta', () => {
+  const zip = criarZip([
+    { nome: 'dados.json', conteudo: JSON.stringify({ loja: 'Pão & Cia' }) },
+    { nome: 'uploads/logo-1.png', conteudo: Buffer.from([0x89, 0x50, 0x4E, 0x47, 0, 1, 2]) }
+  ]);
+  const entradas = lerZip(zip);
+  assert.deepEqual(JSON.parse(entradas.get('dados.json')), { loja: 'Pão & Cia' });
+  assert.deepEqual([...entradas.get('uploads/logo-1.png')], [0x89, 0x50, 0x4E, 0x47, 0, 1, 2]);
+  for (const nome of ['../fora.txt', '/raiz.txt', 'a/../b.txt', 'pasta\\arquivo.txt', '']) {
+    assert.throws(() => criarZip([{ nome, conteudo: 'x' }]), /inválido/, nome);
+  }
+  assert.throws(() => criarZip([{ nome: 'a.txt', conteudo: '1' }, { nome: 'a.txt', conteudo: '2' }]), /repetida/);
+});
+
+const DIA_TESTE_MS = 24 * 60 * 60 * 1000;
+const AGORA_TESTE = new Date('2026-09-25T12:00:00.000Z');
+
+async function lojaParaExcluir({ status = 'arquivado', diasArquivado = 61 } = {}) {
+  const memoria = criarBancoEmMemoria();
+  semearLoja(memoria, {
+    id: 7, nome: 'Burger Arquivada', slug: 'burger-arquivada', status, base: 700,
+    arquivadoEm: status === 'arquivado' ? new Date(AGORA_TESTE.getTime() - diasArquivado * DIA_TESTE_MS) : null
+  });
+  const pastaUploads = await mkdtemp(join(tmpdir(), 'hamburgueria-exclusao-'));
+  await mkdir(join(pastaUploads, 'estabelecimentos', '7'), { recursive: true });
+  await writeFile(join(pastaUploads, 'estabelecimentos', '7', 'logo-burger.png'), Buffer.from('imagem-da-loja-7'));
+  return { memoria, pastaUploads };
+}
+
+test('exclusão definitiva só com loja arquivada há 60 dias e o nome exato digitado', async () => {
+  const tentar = async (memoria, pastaUploads, confirmacaoNome, agora = AGORA_TESTE) => {
+    try {
+      await excluirEstabelecimentoDefinitivamente(memoria.banco, 7, { confirmacaoNome }, 1, { pastaUploads, agora });
+      return { status: 200 };
+    } catch (erro) {
+      return { status: erro.status, mensagem: erro.message };
+    }
+  };
+  const nadaApagado = (memoria) => {
+    assert.equal(memoria.consultas.some(({ sql }) => /^\s*DELETE/.test(sql)), false);
+    assert.equal(memoria.tabela('estabelecimentos').length, 1);
+    assert.equal(memoria.tabela('pedidos').length, 1);
+  };
+
+  // Ativa ou suspensa: 409, mesmo com o nome certo.
+  for (const status of ['ativo', 'suspenso']) {
+    const { memoria, pastaUploads } = await lojaParaExcluir({ status });
+    const resposta = await tentar(memoria, pastaUploads, 'Burger Arquivada');
+    assert.equal(resposta.status, 409, status);
+    assert.match(resposta.mensagem, /arquivado/);
+    nadaApagado(memoria);
+    await rm(pastaUploads, { recursive: true, force: true });
+  }
+
+  // 59 dias: 409 dizendo quanto falta. 60 dias em ponto: passa.
+  const quase = await lojaParaExcluir({ diasArquivado: 59 });
+  const recusa = await tentar(quase.memoria, quase.pastaUploads, 'Burger Arquivada');
+  assert.equal(recusa.status, 409);
+  assert.match(recusa.mensagem, /Faltam 1 dia/);
+  nadaApagado(quase.memoria);
+  assert.equal(diasParaLiberarExclusao(new Date(AGORA_TESTE.getTime() - 50 * DIA_TESTE_MS), AGORA_TESTE), 10);
+  assert.equal(diasParaLiberarExclusao(new Date(AGORA_TESTE.getTime() - 60 * DIA_TESTE_MS), AGORA_TESTE), 0);
+  await rm(quase.pastaUploads, { recursive: true, force: true });
+
+  // Nome: vazio, só o slug, outra caixa ou incompleto não confirmam.
+  const { memoria, pastaUploads } = await lojaParaExcluir({ diasArquivado: 60 });
+  for (const nome of [undefined, '', '   ', 'burger-arquivada', 'burger arquivada', 'BURGER ARQUIVADA', 'Burger']) {
+    const resposta = await tentar(memoria, pastaUploads, nome);
+    assert.equal(resposta.status, 400, String(nome));
+  }
+  nadaApagado(memoria);
+
+  // Nome exato (espaços nas pontas são aparados) com 60 dias: exclui.
+  const excluido = await excluirEstabelecimentoDefinitivamente(
+    memoria.banco, 7, { confirmacaoNome: '  Burger Arquivada ' }, 1, { pastaUploads, agora: AGORA_TESTE }
+  );
+  assert.ok(excluido.zip.length > 0);
+  assert.equal(memoria.tabela('estabelecimentos').length, 0);
+  await rm(pastaUploads, { recursive: true, force: true });
+});
+
+test('se a montagem da exportação falhar, nenhuma linha é apagada', async () => {
+  const { memoria, pastaUploads } = await lojaParaExcluir();
+  const antes = memoria.fotografia();
+  // A leitura dos pedidos para a exportação quebra no meio.
+  memoria.falharQuando((sql) => /FROM pedidos\s+WHERE id_estabelecimento/.test(sql));
+  await assert.rejects(
+    excluirEstabelecimentoDefinitivamente(memoria.banco, 7, { confirmacaoNome: 'Burger Arquivada' }, 1, {
+      pastaUploads, agora: AGORA_TESTE
+    }),
+    /Falha simulada/
+  );
+  assert.equal(memoria.consultas.some(({ sql }) => /^\s*DELETE/.test(sql)), false);
+  assert.deepEqual(memoria.fotografia(), antes);
+  await stat(join(pastaUploads, 'estabelecimentos', '7', 'logo-burger.png'));
+
+  // Uploads com subpasta: a exportação não copiaria, então também não apaga nada.
+  memoria.falharQuando(null);
+  await mkdir(join(pastaUploads, 'estabelecimentos', '7', 'subpasta'));
+  const recusa = await excluirEstabelecimentoDefinitivamente(memoria.banco, 7, { confirmacaoNome: 'Burger Arquivada' }, 1, {
+    pastaUploads, agora: AGORA_TESTE
+  }).catch((erro) => erro);
+  assert.equal(recusa.status, 409);
+  assert.deepEqual(memoria.fotografia(), antes);
+  await rm(pastaUploads, { recursive: true, force: true });
+});
+
+test('exportação de loja arquivada pode ser baixada várias vezes, sem segredos e sem apagar nada', async () => {
+  const { memoria, pastaUploads } = await lojaParaExcluir({ diasArquivado: 3 });
+  const servidor = criarServidor({ banco: memoria.banco, pastaUploads, tenantDesenvolvimento: '', jwtSecret: JWT_SECRET_TESTE });
+  await aguardarServidor(servidor, 0);
+  const baseUrl = `http://127.0.0.1:${servidor.address().port}`;
+  try {
+    const login = await fetch(`${baseUrl}/api/superadmin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario: 'super', senha: 'senha-global-segura' })
+    });
+    const { token } = await login.json();
+    const exportar = (id) => fetch(`${baseUrl}/api/superadmin/estabelecimentos/${id}/exportar`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }
+    });
+    const antes = memoria.fotografia().get('pedidos');
+
+    for (let vez = 0; vez < 2; vez += 1) {
+      const resposta = await exportar(7);
+      assert.equal(resposta.status, 200);
+      assert.equal(resposta.headers.get('content-type'), 'application/zip');
+      assert.match(resposta.headers.get('content-disposition'), /attachment; filename="exportacao-burger-arquivada-7-\d{8}-\d{6}\.zip"/);
+      const entradas = lerZip(Buffer.from(await resposta.arrayBuffer()));
+      const dados = JSON.parse(entradas.get('dados.json'));
+      assert.equal(dados.estabelecimento.nome_fantasia, 'Burger Arquivada');
+      assert.equal(dados.tabelas.pedidos.length, 1);
+      assert.equal(dados.tabelas.administradores[0].usuario, 'admin-burger-arquivada');
+      assert.equal(entradas.get('uploads/logo-burger.png').toString(), 'imagem-da-loja-7');
+      // Nenhuma senha, hash de senha ou token sai na exportação.
+      const texto = entradas.get('dados.json').toString();
+      for (const segredo of ['hash-secreto', 'pin-burger', 'busca-burger', 'token-antigo', 'token-garcom',
+        'token-dispositivo', 'sessao-admin', 'sessao-garcom', 'acompanhamento-burger', 'idempotencia-burger']) {
+        assert.equal(texto.includes(segredo), false, segredo);
+      }
+      assert.equal('sessoes_admin' in dados.tabelas, false);
+    }
+    // Nada apagado; dois acessos registrados.
+    assert.equal(memoria.consultas.some(({ sql }) => /^\s*DELETE FROM (?!sessoes_superadmin)/.test(sql)), false);
+    assert.deepEqual(memoria.fotografia().get('pedidos'), antes);
+    assert.equal(memoria.tabela('auditoria_superadmin').filter((linha) => linha.acao === 'estabelecimento.exportado').length, 2);
+    await stat(join(pastaUploads, 'estabelecimentos', '7', 'logo-burger.png'));
+
+    // Loja que não está arquivada não exporta; id inexistente é 404.
+    memoria.tabela('estabelecimentos')[0].status = 'suspenso';
+    const suspensa = await exportar(7);
+    assert.equal(suspensa.status, 409);
+    assert.match((await suspensa.json()).erro, /arquivado/);
+    assert.equal((await exportar(999)).status, 404);
+  } finally {
+    await fecharServidor(servidor);
+    await rm(pastaUploads, { recursive: true, force: true });
+  }
+});
+
 const executarIntegracao = process.env.RUN_MYSQL_TESTS === '1';
 
 if (!executarIntegracao) {
@@ -4579,6 +4773,71 @@ if (!executarIntegracao) {
     const [[linha]] = await banco.execute('SELECT id_estabelecimento FROM estabelecimentos WHERE slug = ?', [slug]);
     return Number(linha.id_estabelecimento);
   }
+
+  /* Exclusão definitiva contra as chaves estrangeiras reais: se a ordem de
+     remoção estiver errada, o próprio MySQL/MariaDB recusa o DELETE. */
+  test('exclusão definitiva no banco real respeita as FKs e não mexe nas outras lojas', async () => {
+    const contarPorLoja = async (idEstabelecimento) => {
+      const contagens = {};
+      for (const tabela of [...TABELAS_DO_ESTABELECIMENTO.map((item) => item.tabela), 'estabelecimentos']) {
+        const [[linha]] = await banco.execute(
+          `SELECT COUNT(id_estabelecimento) AS total FROM ${tabela} WHERE id_estabelecimento = ?`,
+          [idEstabelecimento]
+        );
+        contagens[tabela] = Number(linha.total);
+      }
+      return contagens;
+    };
+    const idPadrao = await idDaLoja('estabelecimento-padrao');
+    const idLojaB = await idDaLoja('loja-b');
+    const antesPadrao = await contarPorLoja(idPadrao);
+    const antesLojaB = await contarPorLoja(idLojaB);
+
+    const slug = `excluir-${randomUUID().slice(0, 8)}`;
+    const criado = await criarEstabelecimentoGerencial(banco, {
+      nomeFantasia: 'Loja Para Excluir',
+      slug,
+      criarCatalogoExemplo: true,
+      primeiroAdministrador: {
+        nome: 'Admin', usuario: `admin-${slug}`, email: `admin@${slug}.local`, senha: 'senha-inicial-segura'
+      }
+    }, null);
+    await salvarImagemDataUrl('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB', pastaUploads, criado.id, 'logo');
+    await suspenderEstabelecimento(banco, criado.id, { motivo: 'Teste de exclusão' }, null);
+    await arquivarEstabelecimento(banco, criado.id, { confirmacaoSlug: slug }, null);
+    // Só o teste recua a data: 61 dias atrás, no relógio UTC do banco.
+    await banco.execute(
+      'UPDATE estabelecimentos SET arquivado_em = UTC_TIMESTAMP() - INTERVAL 61 DAY WHERE id_estabelecimento = ?',
+      [criado.id]
+    );
+    assert.equal((await contarPorLoja(criado.id)).produtos, 5);
+
+    const resultado = await excluirEstabelecimentoDefinitivamente(
+      banco, criado.id, { confirmacaoNome: 'Loja Para Excluir' }, null, { pastaUploads }
+    );
+    assert.ok(resultado.zip.length > 0);
+    assert.equal(resultado.limpezaPendente, false);
+    for (const [tabela, total] of Object.entries(await contarPorLoja(criado.id))) {
+      assert.equal(total, 0, `${tabela} ainda tem linha da loja excluída`);
+    }
+    await assert.rejects(stat(join(pastaUploads, 'estabelecimentos', String(criado.id))), { code: 'ENOENT' });
+
+    const [[evento]] = await banco.execute(`
+      SELECT id_estabelecimento, detalhes_json
+      FROM auditoria_superadmin
+      WHERE acao = 'estabelecimento.excluido'
+      ORDER BY id DESC
+      LIMIT 1
+    `);
+    assert.equal(evento.id_estabelecimento, null);
+    const detalhes = typeof evento.detalhes_json === 'string' ? JSON.parse(evento.detalhes_json) : evento.detalhes_json;
+    assert.equal(detalhes.idEstabelecimento, criado.id);
+    assert.equal(detalhes.slug, slug);
+    assert.equal(detalhes.linhasRemovidas.produtos, 5);
+
+    assert.deepEqual(await contarPorLoja(idPadrao), antesPadrao);
+    assert.deepEqual(await contarPorLoja(idLojaB), antesLojaB);
+  });
 
   const todasAsPermissoes = [...CHAVES_PERMISSOES].sort();
 

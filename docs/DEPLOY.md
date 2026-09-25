@@ -90,6 +90,18 @@ banco antes de servir. Novos arquivos são sempre gravados na estrutura isolada.
   Os testes locais rodam só em MySQL, então `server/multitenant-security.test.js`
   recusa automaticamente sintaxe de um motor só nas migrations — trate uma falha
   desse teste como bloqueio de release, não como implicância.
+- **Exclusão definitiva de loja arquivada** (sem migration): só 60 dias depois
+  do arquivamento e com o nome fantasia exato digitado. É **irreversível** e
+  apaga também o histórico do painel daquela loja (`auditoria_admin`, FK
+  RESTRICT); fica só o evento `estabelecimento.excluido` na auditoria do
+  superadmin, com os detalhes em JSON. A exportação `.zip` gerada antes da
+  exclusão é entregue só como download da própria resposta: o servidor não
+  guarda cópia, então baixe a exportação separadamente antes de excluir e
+  mantenha o backup do banco em dia. Se a pasta
+  `UPLOADS_PATH/estabelecimentos/{id}/` não puder ser removida depois do
+  commit, o erro vai para o log (`estabelecimento.excluido.limpeza_uploads`),
+  o painel avisa, e a pasta precisa ser apagada à mão. Arquivos antigos no
+  formato `/uploads/{arquivo}` (fora da pasta da loja) não são tocados.
 - **Assinatura deixou de bloquear.** A partir desta versão só
   `estabelecimentos.status` tira a loja do ar (`suspenso` ou `arquivado`);
   `status_assinatura` e `vencimento_assinatura_em` ficam só informativos. Uma

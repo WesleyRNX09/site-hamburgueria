@@ -19,6 +19,10 @@ import {
 } from './catalog.js';
 import { precoParaCentavos } from './catalog.js';
 import { removerImagemLocal, salvarImagemDataUrl } from './imageStore.js';
+import {
+  excluirEstabelecimentoDefinitivamente,
+  exportarEstabelecimentoArquivado
+} from './exclusaoEstabelecimento.js';
 import { registrarErro } from './logger.js';
 import {
   acompanharPedido,
@@ -252,6 +256,21 @@ async function aplicarCors(requisicao, resposta, { origensPermitidas, dominioPri
   resposta.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   resposta.setHeader('Vary', 'Origin');
   return true;
+}
+
+/* Download da exportação de um estabelecimento: o .zip vai inteiro, sem cache.
+   `pendencia` avisa o painel de que a pasta de uploads ficou no disco. */
+function responderExportacao(resposta, { zip, nomeArquivo, limpezaPendente = false }) {
+  cabecalhosSeguranca(resposta);
+  resposta.writeHead(200, {
+    'Content-Type': 'application/zip',
+    'Content-Length': zip.length,
+    'Content-Disposition': `attachment; filename="${nomeArquivo}"`,
+    'Cache-Control': 'no-store',
+    'Access-Control-Expose-Headers': 'Content-Disposition, X-Limpeza-Uploads',
+    ...(limpezaPendente ? { 'X-Limpeza-Uploads': 'pendente' } : {})
+  });
+  resposta.end(zip);
 }
 
 function responderJson(resposta, status, dados) {
@@ -565,6 +584,7 @@ async function rotaPublica({ banco, requisicao, resposta, caminho, url, limitado
 
 async function rotaSuperadmin({
   banco,
+  pastaUploads,
   requisicao,
   resposta,
   caminho,
@@ -751,6 +771,46 @@ async function rotaSuperadmin({
   /* Ciclo de vida: cada ação tem a própria rota e lê do corpo só o campo que
      usa (motivo ou confirmacaoSlug). O id vem da URL e o estado atual é
      conferido no banco, com a linha travada, antes de qualquer escrita. */
+  /* Exportação dos dados de um estabelecimento arquivado: pode ser pedida
+     quantas vezes o superadmin quiser e não apaga nada. */
+  const exportacao = caminho.match(/^\/api\/superadmin\/estabelecimentos\/(\d+)\/exportar$/);
+  if (requisicao.method === 'POST' && exportacao) {
+    try {
+      const pacote = await exportarEstabelecimentoArquivado(banco, exportacao[1], superadministrador.id, {
+        pastaUploads
+      });
+      if (!pacote) throw new ErroHttp(404, 'Estabelecimento não encontrado.');
+      responderExportacao(resposta, pacote);
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
+  /* Exclusão definitiva: irreversível. Do corpo sai só confirmacaoNome; o
+     resto (arquivado há 60 dias, exportação antes de apagar, ordem das
+     tabelas) é conferido em exclusaoEstabelecimento.js. A resposta é a própria
+     exportação, para download. */
+  const exclusaoDefinitiva = caminho
+    .match(/^\/api\/superadmin\/estabelecimentos\/(\d+)\/excluir-definitivamente$/);
+  if (requisicao.method === 'POST' && exclusaoDefinitiva) {
+    try {
+      const dados = await lerJson(requisicao);
+      const pacote = await excluirEstabelecimentoDefinitivamente(
+        banco,
+        exclusaoDefinitiva[1],
+        { confirmacaoNome: dados?.confirmacaoNome },
+        superadministrador.id,
+        { pastaUploads }
+      );
+      if (!pacote) throw new ErroHttp(404, 'Estabelecimento não encontrado.');
+      responderExportacao(resposta, pacote);
+    } catch (erro) {
+      tratarErroDados(erro);
+    }
+    return true;
+  }
+
   const cicloDeVida = caminho
     .match(/^\/api\/superadmin\/estabelecimentos\/(\d+)\/(suspender|reativar|arquivar|desarquivar)$/);
   if (requisicao.method === 'POST' && cicloDeVida) {

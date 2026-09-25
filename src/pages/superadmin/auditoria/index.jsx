@@ -16,6 +16,8 @@ const ROTULOS_ACAO = {
   'estabelecimento.reativado': 'Estabelecimento reativado',
   'estabelecimento.arquivado': 'Estabelecimento arquivado',
   'estabelecimento.desarquivado': 'Estabelecimento desarquivado',
+  'estabelecimento.exportado': 'Exportação de estabelecimento baixada',
+  'estabelecimento.excluido': 'Estabelecimento excluído definitivamente',
   'superadministrador.criado': 'Superadministrador criado',
   'superadministrador.ativado': 'Superadministrador reativado',
   'superadministrador.desativado': 'Superadministrador desativado',

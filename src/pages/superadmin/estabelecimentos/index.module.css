@@ -83,6 +83,10 @@
 .modalFundo { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; overflow-y: auto; background: rgba(0,0,0,.72); padding: 16px; }
 .modal { width: min(560px, 100%); margin: 0; }
 .modal .campo strong { color: #ffc107; }
+.formularioTopo > div > .rotuloPerigo { color: #ff8585; }
+.avisoPerigo { display: grid; gap: 8px; border: 1px solid rgba(255,91,91,.4); border-radius: 10px; background: rgba(255,91,91,.07); margin: -6px 0 18px; padding: 12px 14px; color: #ffb0b0; font-size: 12px; line-height: 1.5; }
+.avisoPerigo p { margin: 0; }
+.avisoPerigo strong { color: #ffd0d0; }
 .vazio { display: grid; place-items: center; gap: 7px; padding: 42px 18px; color: #85858a; text-align: center; }
 .vazio svg { color: #ffc107; }
 .vazio strong { color: #ddd; }
@@ -117,7 +121,7 @@
   .incluirArquivados, .opcaoCaixa, .ajudaOpcao { font-size: 14px; }
   .opcaoCaixa { width: 100%; }
   .tabelaContainer td > .motivo { max-width: none; }
-  .campo > span, .cor > span, .formularioTopo p, .listaTopo p, .ajuda, .erro, .sucesso, .vazio span { font-size: 14px; }
+  .campo > span, .cor > span, .formularioTopo p, .listaTopo p, .ajuda, .erro, .sucesso, .vazio span, .avisoPerigo { font-size: 14px; }
 
   /* Tabela vira lista de cartões: evita rolagem horizontal em telas estreitas */
   .tabelaContainer { overflow-x: visible; border: 0; border-radius: 0; background: transparent; }
