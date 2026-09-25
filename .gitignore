@@ -31,3 +31,5 @@ server/uploads/*
 *.njsproj
 *.sln
 *.sw?
+backup-*.sql
+diff-*.txt
