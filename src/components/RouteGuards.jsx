@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { useApp } from '../context/appContext';
 import { useSuperadmin } from '../context/superadminContext';
+import TrocaSenhaObrigatoria from '../pages/admin/trocaSenha';
 import styles from '../pages/admin/shared.module.css';
 import AdminLayout from './AdminLayout';
 import { itensMenuAdmin } from './AdminLayout/menu';
@@ -44,6 +45,10 @@ export function RequireAdmin() {
   if (!adminSessao) {
     return <Navigate to="/admin/login" replace state={{ origem: location.pathname }} />;
   }
+
+  // Senha temporária: nenhuma tela do painel abre antes da troca. O servidor
+  // recusa as rotas de qualquer forma; aqui é só para o usuário ver o motivo.
+  if (adminSessao.trocarSenhaPendente) return <TrocaSenhaObrigatoria />;
 
   return <Outlet />;
 }

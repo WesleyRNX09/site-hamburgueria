@@ -1,6 +1,6 @@
 import { executarTransacao } from './database.js';
 import { concederPermissoesPadrao } from './permissoes.js';
-import { criarHashSenha, verificarSenha } from './security.js';
+import { criarHashSenha, TAMANHO_MINIMO_SENHA, verificarSenha } from './security.js';
 
 const PLANOS = new Set(['basico', 'profissional', 'premium']);
 const STATUS_ESTABELECIMENTO = new Set(['ativo', 'suspenso', 'arquivado']);
@@ -28,7 +28,6 @@ const FONTES = new Map([
 ]);
 const REGEX_USUARIO = /^[a-z0-9._-]{3,80}$/;
 const REGEX_EMAIL = /^\S+@\S+\.\S+$/;
-const TAMANHO_MINIMO_SENHA = 12;
 const CORES_PADRAO = Object.freeze({
   corPrincipal: '#FFC107',
   corSecundaria: '#0A0A0A',
@@ -296,10 +295,66 @@ async function salvarConfiguracaoVisual(conexao, idEstabelecimento, dados) {
   ]);
 }
 
+/*
+  Cardápio de exemplo, opcional na criação da loja. Conjunto fixo e pequeno,
+  com preço fictício, gravado como registros comuns: o administrador edita ou
+  apaga depois como qualquer outro item. Nada no banco marca que é exemplo.
+*/
+const CATALOGO_EXEMPLO = Object.freeze([
+  Object.freeze({
+    nome: 'Hambúrgueres',
+    produtos: Object.freeze([
+      Object.freeze({ nome: 'X-Burger', descricao: 'Pão, hambúrguer, queijo e salada.', precoCentavos: 2490 }),
+      Object.freeze({ nome: 'X-Bacon', descricao: 'Pão, hambúrguer, queijo, bacon e salada.', precoCentavos: 2890 })
+    ])
+  }),
+  Object.freeze({
+    nome: 'Bebidas',
+    produtos: Object.freeze([
+      Object.freeze({ nome: 'Refrigerante lata', descricao: 'Lata de 350 ml.', precoCentavos: 700 }),
+      Object.freeze({ nome: 'Suco natural', descricao: 'Copo de 400 ml, sabor do dia.', precoCentavos: 900 })
+    ])
+  }),
+  Object.freeze({
+    nome: 'Sobremesas',
+    produtos: Object.freeze([
+      Object.freeze({ nome: 'Milkshake', descricao: 'Copo de 400 ml.', precoCentavos: 1490 })
+    ])
+  })
+]);
+
+/* Sempre dentro da transação da criação e sempre com o id da loja recém-criada:
+   o exemplo nasce ativo, nos dois canais e sem impressora, como o padrão das
+   telas do painel. */
+async function criarCatalogoExemplo(conexao, idEstabelecimento) {
+  for (const [indice, categoria] of CATALOGO_EXEMPLO.entries()) {
+    const [categoriaCriada] = await conexao.execute(`
+      INSERT INTO categorias (id_estabelecimento, nome, canal, impressora_id, ordem, ativo)
+      VALUES (?, ?, 'ambos', NULL, ?, 1)
+    `, [idEstabelecimento, categoria.nome, indice + 1]);
+    for (const produto of categoria.produtos) {
+      await conexao.execute(`
+        INSERT INTO produtos
+          (id_estabelecimento, categoria_id, canal, impressora_id, nome, descricao,
+           preco_centavos, imagem_url, destaque, ativo)
+        VALUES (?, ?, 'ambos', NULL, ?, ?, ?, NULL, NULL, 1)
+      `, [
+        idEstabelecimento,
+        Number(categoriaCriada.insertId),
+        produto.nome,
+        produto.descricao,
+        produto.precoCentavos
+      ]);
+    }
+  }
+}
+
 export async function criarEstabelecimentoGerencial(banco, dados, superadministradorId) {
   const estabelecimento = dadosNormalizados(dados);
   recusarSlugReservado(estabelecimento.slug);
   const administrador = validarAdministrador(dados.primeiroAdministrador);
+  // Só o booleano true liga o exemplo: "true", 1 ou qualquer outro valor não.
+  const criarExemplo = dados.criarCatalogoExemplo === true;
   const idEstabelecimento = await executarTransacao(banco, async (conexao) => {
     const [resultado] = await conexao.execute(`
       INSERT INTO estabelecimentos
@@ -316,13 +371,16 @@ export async function criarEstabelecimentoGerencial(banco, dados, superadministr
     ]);
     const id = Number(resultado.insertId);
     await salvarConfiguracaoVisual(conexao, id, estabelecimento);
+    // A senha foi escolhida pelo superadmin: é temporária, e o primeiro login
+    // só libera a troca (trocar_senha_em_proximo_acesso = 1).
     const [administradorCriado] = await conexao.execute(`
       INSERT INTO administradores
-        (id_estabelecimento, usuario, email, nome, senha_hash, ativo)
-      VALUES (?, ?, ?, ?, ?, 1)
+        (id_estabelecimento, usuario, email, nome, senha_hash, trocar_senha_em_proximo_acesso, ativo)
+      VALUES (?, ?, ?, ?, ?, 1, 1)
     `, [id, administrador.usuario, administrador.email, administrador.nome, administrador.senhaHash]);
     // O primeiro administrador nasce com o conjunto completo do painel.
     await concederPermissoesPadrao(conexao, id, administradorCriado.insertId);
+    if (criarExemplo) await criarCatalogoExemplo(conexao, id);
     await registrarAuditoria(conexao, superadministradorId, id, 'estabelecimento.criado', {
       slug: estabelecimento.slug,
       plano: estabelecimento.plano,
@@ -760,8 +818,9 @@ export async function redefinirSenhaAdministrador(
       FOR UPDATE
     `, [alvoId, tenantId]);
     if (!alvos[0]) return null;
+    // Senha escolhida pelo superadmin é temporária, como a do primeiro acesso.
     await conexao.execute(`
-      UPDATE administradores SET senha_hash = ?
+      UPDATE administradores SET senha_hash = ?, trocar_senha_em_proximo_acesso = 1
       WHERE id = ? AND id_estabelecimento = ?
     `, [criarHashSenha(novaSenha), alvoId, tenantId]);
     // A senha antiga deixou de valer: nenhuma sessão daquele admin sobrevive.

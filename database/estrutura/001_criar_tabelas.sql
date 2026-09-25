@@ -151,6 +151,9 @@ CREATE TABLE IF NOT EXISTS administradores (
   email VARCHAR(160) NOT NULL,
   nome VARCHAR(160) NOT NULL,
   senha_hash VARCHAR(255) NOT NULL,
+  -- 1 quando a senha foi escolhida por outra pessoa (primeiro administrador ou
+  -- redefinição pelo superadmin): o painel só libera a troca de senha.
+  trocar_senha_em_proximo_acesso TINYINT(1) NOT NULL DEFAULT 0,
   ativo TINYINT(1) NOT NULL DEFAULT 1,
   -- Preenchida quando a conta é arquivada; NULL significa conta em uso.
   arquivado_em DATETIME NULL,

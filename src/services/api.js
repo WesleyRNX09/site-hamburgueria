@@ -56,6 +56,23 @@ function expirarSessao(perfil) {
   for (const ouvinte of ouvintesSessaoExpirada) ouvinte(perfil);
 }
 
+/*
+  Senha temporária pendente (403 com este código em chamada do painel): a
+  sessão continua valendo, mas só para trocar a senha. O provider escuta para
+  trocar o painel inteiro pela tela "Defina uma nova senha".
+*/
+export const CODIGO_SENHA_TEMPORARIA_PENDENTE = 'senha_temporaria_pendente';
+const ouvintesTrocaSenhaPendente = new Set();
+
+export function aoExigirTrocaSenha(ouvinte) {
+  ouvintesTrocaSenhaPendente.add(ouvinte);
+  return () => { ouvintesTrocaSenhaPendente.delete(ouvinte); };
+}
+
+export function trocaSenhaPendente(erro) {
+  return erro instanceof ErroApi && erro.codigo === CODIGO_SENHA_TEMPORARIA_PENDENTE;
+}
+
 function obterToken(chave) {
   try {
     return JSON.parse(sessionStorage.getItem(chave))?.token ?? null;
@@ -93,11 +110,15 @@ async function requisicao(caminho, { metodo = 'GET', dados, autenticacao } = {})
   const conteudo = await resposta.json().catch(() => ({}));
   if (resposta.status === 401 && enviouSessao) expirarSessao(autenticacao);
   if (!resposta.ok) {
-    throw new ErroApi(
+    const erro = new ErroApi(
       conteudo.erro || 'Não foi possível concluir a operação.',
       resposta.status,
       typeof conteudo.codigo === 'string' ? conteudo.codigo : null
     );
+    if (enviouSessao && autenticacao === 'admin' && trocaSenhaPendente(erro)) {
+      for (const ouvinte of ouvintesTrocaSenhaPendente) ouvinte();
+    }
+    throw erro;
   }
   return conteudo;
 }

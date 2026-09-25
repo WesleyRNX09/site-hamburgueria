@@ -6,7 +6,7 @@ import { test } from 'node:test';
 
 import { criarServidor } from './app.js';
 import { checksumMigration } from './db/migration-utils.js';
-import { buscarAdicional, buscarProduto, criarProduto } from './catalog.js';
+import { buscarAdicional, buscarProduto, criarProduto, listarCatalogo } from './catalog.js';
 import {
   acompanharPedido,
   atualizarStatusPedido,
@@ -22,7 +22,8 @@ import {
   PERMISSOES_CONFIGURACAO
 } from './permissoes.js';
 import { aguardarServidor, fecharServidor } from './runtime.js';
-import { criarHashSenha, criarHashToken, criarJwt } from './security.js';
+import { criarHashSenha, criarHashToken, criarJwt, verificarSenha } from './security.js';
+import { criarEstabelecimentoGerencial, redefinirSenhaAdministrador } from './superadmin.js';
 import {
   CODIGO_ESTABELECIMENTO_INDISPONIVEL,
   estabelecimentoLiberado,
@@ -1437,5 +1438,412 @@ test('ação em andamento é cortada na requisição seguinte à suspensão, só
     assert.equal((await chamar(urlB, '/api/admin/sessao', { token: tokens.adminB })).status, 200);
   } finally {
     await fechar();
+  }
+});
+
+/*
+  Banco em memória da senha temporária: duas lojas, um administrador em cada,
+  sessões e auditorias. Responde só às consultas do login, da validação da
+  sessão, da troca de senha, do reset pelo superadmin, do logout e da lista de
+  áreas de entrega (a rota comum usada para provar o acesso liberado).
+*/
+function bancoSenhaTemporaria() {
+  const lojas = new Map([
+    ['loja-a', linhaTenant(10, 'loja-a')],
+    ['loja-b', linhaTenant(20, 'loja-b')]
+  ]);
+  const administradores = new Map([
+    [100, {
+      id: 100, id_estabelecimento: 10, usuario: 'admin-a', nome: 'Admin A', email: 'a@loja.local',
+      senha_hash: criarHashSenha('senha-temporaria-a1'), trocar_senha_em_proximo_acesso: 1, ativo: 1
+    }],
+    [200, {
+      id: 200, id_estabelecimento: 20, usuario: 'admin-b', nome: 'Admin B', email: 'b@loja.local',
+      senha_hash: criarHashSenha('senha-definitiva-b1'), trocar_senha_em_proximo_acesso: 0, ativo: 1
+    }]
+  ]);
+  const sessoes = [];
+  const consultasDeNegocio = [];
+
+  function administradorDaLoja(id, idEstabelecimento) {
+    const administrador = administradores.get(Number(id));
+    return administrador && administrador.id_estabelecimento === Number(idEstabelecimento) ? administrador : null;
+  }
+
+  function responder(sql, parametros = []) {
+    if (sql.includes('FROM estabelecimentos AS e')) {
+      return [[lojas.get(parametros[0])].filter(Boolean)];
+    }
+    if (sql.includes('FROM administradores') && sql.includes('LOWER(usuario)')) {
+      const [idEstabelecimento, identificador] = parametros;
+      const administrador = [...administradores.values()].find((item) => item.id_estabelecimento === idEstabelecimento
+        && item.ativo === 1 && [item.usuario, item.email].includes(String(identificador).toLowerCase()));
+      return [administrador ? [{ ...administrador }] : []];
+    }
+    if (sql.includes('INSERT INTO sessoes_admin')) {
+      const [tokenHash, idEstabelecimento, administradorId] = parametros;
+      sessoes.push({ token_hash: tokenHash, id_estabelecimento: idEstabelecimento, administrador_id: Number(administradorId) });
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('INSERT INTO auditoria_admin') || sql.includes('INSERT INTO auditoria_superadmin')) {
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('DELETE FROM sessoes_admin')) {
+      const antes = sessoes.length;
+      let manter;
+      if (sql.includes('expira_em')) manter = () => true;
+      else if (sql.includes('token_hash <> ?')) {
+        const [administradorId, idEstabelecimento, tokenHash] = parametros;
+        manter = (item) => !(item.administrador_id === Number(administradorId)
+          && item.id_estabelecimento === Number(idEstabelecimento) && item.token_hash !== tokenHash);
+      } else if (sql.includes('token_hash = ?')) {
+        const [tokenHash, idEstabelecimento] = parametros;
+        manter = (item) => !(item.token_hash === tokenHash && item.id_estabelecimento === Number(idEstabelecimento));
+      } else {
+        const [administradorId, idEstabelecimento] = parametros;
+        manter = (item) => !(item.administrador_id === Number(administradorId)
+          && item.id_estabelecimento === Number(idEstabelecimento));
+      }
+      const restantes = sessoes.filter(manter);
+      sessoes.splice(0, sessoes.length, ...restantes);
+      return [{ affectedRows: antes - sessoes.length }];
+    }
+    if (sql.includes('FROM sessoes_admin s')) {
+      const [tokenHash, idEstabelecimento, administradorId] = parametros;
+      const sessao = sessoes.find((item) => item.token_hash === tokenHash
+        && item.id_estabelecimento === Number(idEstabelecimento)
+        && item.administrador_id === Number(administradorId));
+      const administrador = sessao && administradorDaLoja(administradorId, idEstabelecimento);
+      return [administrador?.ativo === 1 ? [{ ...administrador }] : []];
+    }
+    if (sql.includes('FROM administrador_permissoes ap')) {
+      return [[{ permissao: 'delivery.editar' }, { permissao: 'funcionarios.gerenciar' }]];
+    }
+    // Administrador criado no painel (criarAdministrador): as colunas e os
+    // valores vêm do próprio INSERT, inclusive a marca de senha temporária.
+    if (sql.includes('INSERT INTO administradores')) {
+      const [, colunas, valores] = sql.match(/\(([^)]*)\)\s*VALUES\s*\(([^)]*)\)/);
+      const parametrosRestantes = [...parametros];
+      const linha = Object.fromEntries(colunas.split(',').map((coluna, indice) => {
+        const valor = valores.split(',')[indice].trim();
+        return [coluna.trim(), valor === '?' ? parametrosRestantes.shift() : Number(valor)];
+      }));
+      const id = Math.max(...administradores.keys()) + 1;
+      administradores.set(id, { trocar_senha_em_proximo_acesso: 0, ...linha, id });
+      return [{ insertId: id, affectedRows: 1 }];
+    }
+    if (sql.includes('INSERT INTO administrador_permissoes')) return [{ affectedRows: 1 }];
+    if (sql.includes('SELECT id, usuario, email, nome, ativo, criado_em')) {
+      const administrador = administradorDaLoja(parametros[0], parametros[1]);
+      return [administrador ? [{ ...administrador, criado_em: new Date() }] : []];
+    }
+    if (sql.includes('FROM areas_entrega')) {
+      consultasDeNegocio.push(Number(parametros[0]));
+      return [[]];
+    }
+    if (sql.includes('SELECT senha_hash FROM administradores')) {
+      const administrador = administradorDaLoja(parametros[0], parametros[1]);
+      return [administrador ? [{ senha_hash: administrador.senha_hash }] : []];
+    }
+    if (sql.includes('SELECT id, usuario, nome FROM administradores')) {
+      const administrador = administradorDaLoja(parametros[0], parametros[1]);
+      return [administrador ? [{ id: administrador.id, usuario: administrador.usuario, nome: administrador.nome }] : []];
+    }
+    if (sql.includes('UPDATE administradores SET senha_hash')) {
+      const [hash, id, idEstabelecimento] = parametros;
+      const administrador = administradorDaLoja(id, idEstabelecimento);
+      if (!administrador) return [{ affectedRows: 0 }];
+      administrador.senha_hash = hash;
+      administrador.trocar_senha_em_proximo_acesso = Number(sql.match(/trocar_senha_em_proximo_acesso = (\d)/)[1]);
+      return [{ affectedRows: 1 }];
+    }
+    throw new Error(`Consulta inesperada no teste: ${sql}`);
+  }
+
+  const conexao = {
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    release() {},
+    async execute(sql, parametros) { return responder(sql, parametros); }
+  };
+  return {
+    administradores,
+    sessoes,
+    consultasDeNegocio,
+    banco: {
+      async getConnection() { return conexao; },
+      async execute(sql, parametros) { return responder(sql, parametros); }
+    }
+  };
+}
+
+async function servidorDaLoja(banco, slug) {
+  const servidor = criarServidor({
+    banco,
+    pastaUploads: resolve(pastaProjeto, 'server/uploads'),
+    tenantDesenvolvimento: slug,
+    jwtSecret: segredoJwt
+  });
+  await aguardarServidor(servidor, 0);
+  const url = `http://127.0.0.1:${servidor.address().port}`;
+  const chamar = async (caminho, { metodo = 'GET', token, corpo } = {}) => {
+    const resposta = await fetch(`${url}${caminho}`, {
+      method: metodo,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: corpo === undefined ? undefined : JSON.stringify(corpo)
+    });
+    const texto = await resposta.text();
+    return { status: resposta.status, texto, corpo: texto ? JSON.parse(texto) : {} };
+  };
+  const entrar = (usuario, senha) => chamar('/api/admin/login', { metodo: 'POST', corpo: { usuario, senha } });
+  return { servidor, chamar, entrar };
+}
+
+test('senha temporária: o painel só atende a troca de senha e o logout até o administrador trocar', async () => {
+  const { banco, administradores, sessoes, consultasDeNegocio } = bancoSenhaTemporaria();
+  const { servidor, chamar, entrar } = await servidorDaLoja(banco, 'loja-a');
+  const pendente = (resposta, rotulo) => {
+    assert.equal(resposta.status, 403, rotulo);
+    assert.equal(resposta.corpo.codigo, 'senha_temporaria_pendente', rotulo);
+  };
+
+  try {
+    // 1º login: entra, mas a resposta avisa que a senha precisa ser trocada.
+    const login = await entrar('admin-a', 'senha-temporaria-a1');
+    assert.equal(login.status, 200);
+    assert.equal(login.corpo.trocarSenhaNoProximoAcesso, true);
+    assert.equal(login.texto.includes('senha-temporaria-a1'), false);
+    assert.equal(login.texto.includes('scrypt'), false);
+    const { token } = login.corpo;
+
+    // Qualquer outra rota autenticada: 403 com o código, antes de consultar dados.
+    pendente(await chamar('/api/admin/sessao', { token }), 'sessao');
+    pendente(await chamar('/api/admin/areas-entrega', { token }), 'areas-entrega');
+    pendente(await chamar('/api/admin/dados', { token }), 'dados');
+    pendente(await chamar('/api/admin/categorias', { metodo: 'POST', token, corpo: { nome: 'Nova' } }), 'categorias');
+    pendente(await chamar('/api/admin/configuracao', { metodo: 'PUT', token, corpo: {} }), 'configuracao');
+    assert.deepEqual(consultasDeNegocio, []);
+
+    // A troca de senha é atendida (com as validações de sempre).
+    assert.equal((await chamar('/api/admin/senha', {
+      metodo: 'PUT', token, corpo: { senhaAtual: 'errada', novaSenha: 'minha-senha-nova-a1', confirmacaoSenha: 'minha-senha-nova-a1' }
+    })).status, 401);
+    assert.equal((await chamar('/api/admin/senha', {
+      metodo: 'PUT', token, corpo: { senhaAtual: 'senha-temporaria-a1', novaSenha: 'curta', confirmacaoSenha: 'curta' }
+    })).status, 400);
+    assert.equal(administradores.get(100).trocar_senha_em_proximo_acesso, 1);
+
+    const troca = await chamar('/api/admin/senha', {
+      metodo: 'PUT', token, corpo: { senhaAtual: 'senha-temporaria-a1', novaSenha: 'minha-senha-nova-a1', confirmacaoSenha: 'minha-senha-nova-a1' }
+    });
+    assert.equal(troca.status, 200);
+    assert.equal(administradores.get(100).trocar_senha_em_proximo_acesso, 0);
+
+    // Mesma sessão, agora liberada.
+    const sessao = await chamar('/api/admin/sessao', { token });
+    assert.equal(sessao.status, 200);
+    assert.equal(sessao.corpo.admin.id, 100);
+    assert.equal((await chamar('/api/admin/areas-entrega', { token })).status, 200);
+    assert.deepEqual(consultasDeNegocio, [10]);
+
+    // A senha temporária não entra mais; a nova entra sem pedir troca.
+    assert.equal((await entrar('admin-a', 'senha-temporaria-a1')).status, 401);
+    const novoLogin = await entrar('admin-a', 'minha-senha-nova-a1');
+    assert.equal(novoLogin.status, 200);
+    assert.equal(novoLogin.corpo.trocarSenhaNoProximoAcesso, false);
+
+    // Reset pelo superadmin: liga a marca de novo e derruba as sessões abertas.
+    await redefinirSenhaAdministrador(banco, 10, 100, {
+      novaSenha: 'senha-redefinida-a12', confirmacaoSenha: 'senha-redefinida-a12'
+    }, 1);
+    assert.equal(administradores.get(100).trocar_senha_em_proximo_acesso, 1);
+    assert.equal((await chamar('/api/admin/sessao', { token: novoLogin.corpo.token })).status, 401);
+    const loginRedefinido = await entrar('admin-a', 'senha-redefinida-a12');
+    assert.equal(loginRedefinido.corpo.trocarSenhaNoProximoAcesso, true);
+    pendente(await chamar('/api/admin/sessao', { token: loginRedefinido.corpo.token }), 'sessao após reset');
+
+    // O logout continua funcionando com a troca pendente.
+    const saida = await chamar('/api/admin/sessao', { metodo: 'DELETE', token: loginRedefinido.corpo.token });
+    assert.equal(saida.status, 200);
+    assert.equal(sessoes.some((item) => item.administrador_id === 100), false);
+  } finally {
+    await fecharServidor(servidor);
+  }
+});
+
+test('senha temporária do administrador da loja A não afeta o administrador da loja B', async () => {
+  const { banco, administradores, consultasDeNegocio } = bancoSenhaTemporaria();
+  const lojaA = await servidorDaLoja(banco, 'loja-a');
+  const lojaB = await servidorDaLoja(banco, 'loja-b');
+
+  try {
+    const loginA = await lojaA.entrar('admin-a', 'senha-temporaria-a1');
+    const loginB = await lojaB.entrar('admin-b', 'senha-definitiva-b1');
+    assert.equal(loginA.corpo.trocarSenhaNoProximoAcesso, true);
+    assert.equal(loginB.corpo.trocarSenhaNoProximoAcesso, false);
+
+    assert.equal((await lojaA.chamar('/api/admin/areas-entrega', { token: loginA.corpo.token })).status, 403);
+    assert.equal((await lojaB.chamar('/api/admin/sessao', { token: loginB.corpo.token })).status, 200);
+    assert.equal((await lojaB.chamar('/api/admin/areas-entrega', { token: loginB.corpo.token })).status, 200);
+    assert.deepEqual(consultasDeNegocio, [20]);
+
+    // O token pendente de A não vale na loja B nem para trocar senha lá.
+    const cruzado = await lojaB.chamar('/api/admin/senha', {
+      metodo: 'PUT', token: loginA.corpo.token,
+      corpo: { senhaAtual: 'senha-temporaria-a1', novaSenha: 'tentativa-cruzada-1', confirmacaoSenha: 'tentativa-cruzada-1' }
+    });
+    assert.equal(cruzado.status, 403);
+    assert.notEqual(cruzado.corpo.codigo, 'senha_temporaria_pendente');
+
+    // Reset com o par loja/administrador trocado não encontra ninguém.
+    assert.equal(await redefinirSenhaAdministrador(banco, 20, 100, {
+      novaSenha: 'senha-cruzada-12x', confirmacaoSenha: 'senha-cruzada-12x'
+    }, 1), null);
+    assert.equal(await redefinirSenhaAdministrador(banco, 10, 200, {
+      novaSenha: 'senha-cruzada-12x', confirmacaoSenha: 'senha-cruzada-12x'
+    }, 1), null);
+    assert.equal(administradores.get(200).trocar_senha_em_proximo_acesso, 0);
+    assert.equal(verificarSenha('senha-definitiva-b1', administradores.get(200).senha_hash), true);
+
+    // Resetar o de A só mexe em A.
+    await redefinirSenhaAdministrador(banco, 10, 100, {
+      novaSenha: 'senha-redefinida-a12', confirmacaoSenha: 'senha-redefinida-a12'
+    }, 1);
+    assert.equal(administradores.get(200).trocar_senha_em_proximo_acesso, 0);
+    assert.equal((await lojaB.chamar('/api/admin/sessao', { token: loginB.corpo.token })).status, 200);
+  } finally {
+    await Promise.all([fecharServidor(lojaA.servidor), fecharServidor(lojaB.servidor)]);
+  }
+});
+
+test('cardápio de exemplo fica só na loja criada com a caixinha marcada', async () => {
+  const categorias = [];
+  const produtos = [];
+  let proximaLoja = 44;
+  let proximoId = 1;
+  function responder(sql, parametros = []) {
+    if (sql.includes('INSERT INTO estabelecimentos')) return [{ insertId: proximaLoja++ }];
+    if (sql.includes('INSERT INTO categorias')) {
+      const [idEstabelecimento, nome, ordem] = parametros;
+      categorias.push({ id: proximoId, id_estabelecimento: idEstabelecimento, nome, ordem, canal: 'ambos', impressora_id: null, ativo: 1 });
+      return [{ insertId: proximoId++ }];
+    }
+    if (sql.includes('INSERT INTO produtos')) {
+      const [idEstabelecimento, categoriaId, nome, descricao, precoCentavos] = parametros;
+      produtos.push({
+        id: proximoId, id_estabelecimento: idEstabelecimento, categoria_id: categoriaId, nome, descricao,
+        preco_centavos: precoCentavos, imagem_url: null, destaque: null, ativo: 1, canal: 'ambos', impressora_id: null
+      });
+      return [{ insertId: proximoId++ }];
+    }
+    if (sql.includes('INSERT INTO')) return [{ insertId: proximoId++, affectedRows: 1 }];
+    if (sql.includes('FROM estabelecimentos e')) {
+      return [[{ ...linhaTenant(Number(parametros[0]), `loja-${parametros[0]}`), criado_em: new Date(), atualizado_em: new Date(), total_administradores: 1 }]];
+    }
+    // Leitura do cardápio (listarCatalogo), sempre filtrada pela loja pedida.
+    if (sql.includes('FROM produtos p')) {
+      return [produtos.filter((produto) => produto.id_estabelecimento === parametros[0]).map((produto) => ({
+        ...produto,
+        categoria: categorias.find((categoria) => categoria.id === produto.categoria_id
+          && categoria.id_estabelecimento === produto.id_estabelecimento)?.nome
+      }))];
+    }
+    if (sql.includes('FROM categorias')) return [categorias.filter((categoria) => categoria.id_estabelecimento === parametros[0])];
+    if (sql.includes('FROM adicionais') || sql.includes('FROM produto_adicionais')) return [[]];
+    throw new Error(`Consulta inesperada no teste: ${sql}`);
+  }
+  const conexao = {
+    async beginTransaction() {}, async commit() {}, async rollback() {}, release() {},
+    async execute(sql, parametros) { return responder(sql, parametros); }
+  };
+  const banco = { async getConnection() { return conexao; }, async execute(sql, parametros) { return responder(sql, parametros); } };
+  const dados = (slug) => ({
+    nomeFantasia: `Loja ${slug}`,
+    slug,
+    primeiroAdministrador: { nome: 'Admin', usuario: `admin-${slug}`, email: `${slug}@loja.local`, senha: 'senha-inicial-segura' }
+  });
+
+  const comExemplo = await criarEstabelecimentoGerencial(banco, { ...dados('com-exemplo'), criarCatalogoExemplo: true }, 1);
+  const semExemplo = await criarEstabelecimentoGerencial(banco, dados('sem-exemplo'), 1);
+
+  const cardapioComExemplo = await listarCatalogo(banco, comExemplo.id, { administrativo: true });
+  assert.deepEqual(cardapioComExemplo.categorias.map((categoria) => categoria.nome), ['Hambúrgueres', 'Bebidas', 'Sobremesas']);
+  assert.deepEqual(
+    cardapioComExemplo.produtos.map((produto) => [produto.nome, produto.categoria, produto.ativo]),
+    [
+      ['X-Burger', 'Hambúrgueres', true],
+      ['X-Bacon', 'Hambúrgueres', true],
+      ['Refrigerante lata', 'Bebidas', true],
+      ['Suco natural', 'Bebidas', true],
+      ['Milkshake', 'Sobremesas', true]
+    ]
+  );
+  const cardapioSemExemplo = await listarCatalogo(banco, semExemplo.id, { administrativo: true });
+  assert.deepEqual(cardapioSemExemplo.categorias, []);
+  assert.deepEqual(cardapioSemExemplo.produtos, []);
+  // Todo registro do exemplo pertence à loja que o pediu.
+  assert.equal([...categorias, ...produtos].every((item) => item.id_estabelecimento === comExemplo.id), true);
+});
+
+test('administrador criado por outro administrador nasce com senha temporária e fica barrado até trocar', async () => {
+  const { banco, administradores, consultasDeNegocio } = bancoSenhaTemporaria();
+  const lojaB = await servidorDaLoja(banco, 'loja-b');
+
+  try {
+    // Quem cria é o admin da loja B, que já usa a própria senha.
+    const criador = await lojaB.entrar('admin-b', 'senha-definitiva-b1');
+    assert.equal(criador.corpo.trocarSenhaNoProximoAcesso, false);
+    const criado = await lojaB.chamar('/api/admin/administradores', {
+      metodo: 'POST',
+      token: criador.corpo.token,
+      corpo: {
+        nome: 'Gerente B', usuario: 'gerente-b', email: 'gerente@loja-b.local',
+        senha: 'senha-escolhida-pelo-colega', confirmacaoSenha: 'senha-escolhida-pelo-colega',
+        // Tentativa de desligar a marca pelo corpo: não é lida.
+        trocar_senha_em_proximo_acesso: 0, trocarSenhaNoProximoAcesso: false
+      }
+    });
+    assert.equal(criado.status, 201);
+    const novo = administradores.get(criado.corpo.administrador.id);
+    assert.equal(novo.id_estabelecimento, 20);
+    assert.equal(novo.trocar_senha_em_proximo_acesso, 1);
+
+    // Primeiro login do novo: a marca vem na resposta e o painel fica fechado.
+    const login = await lojaB.entrar('gerente-b', 'senha-escolhida-pelo-colega');
+    assert.equal(login.status, 200);
+    assert.equal(login.corpo.trocarSenhaNoProximoAcesso, true);
+    const { token } = login.corpo;
+    for (const [caminho, opcoes] of [
+      ['/api/admin/sessao', {}],
+      ['/api/admin/areas-entrega', {}],
+      ['/api/admin/administradores', { metodo: 'POST', corpo: { nome: 'X', usuario: 'x-b', email: 'x@b.local', senha: 'qualquer-senha-12', confirmacaoSenha: 'qualquer-senha-12' } }]
+    ]) {
+      const resposta = await lojaB.chamar(caminho, { ...opcoes, token });
+      assert.equal(resposta.status, 403, caminho);
+      assert.equal(resposta.corpo.codigo, 'senha_temporaria_pendente', caminho);
+    }
+    assert.deepEqual(consultasDeNegocio, []);
+
+    // Troca com o mínimo único de 12: 11 caracteres não passa, 12 passa.
+    assert.equal((await lojaB.chamar('/api/admin/senha', {
+      metodo: 'PUT', token, corpo: { senhaAtual: 'senha-escolhida-pelo-colega', novaSenha: 'onze-caract', confirmacaoSenha: 'onze-caract' }
+    })).status, 400);
+    const troca = await lojaB.chamar('/api/admin/senha', {
+      metodo: 'PUT', token, corpo: { senhaAtual: 'senha-escolhida-pelo-colega', novaSenha: 'doze-caracts', confirmacaoSenha: 'doze-caracts' }
+    });
+    assert.equal(troca.status, 200);
+    assert.equal(novo.trocar_senha_em_proximo_acesso, 0);
+    assert.equal((await lojaB.chamar('/api/admin/areas-entrega', { token })).status, 200);
+    assert.deepEqual(consultasDeNegocio, [20]);
+
+    // Nada disso tocou a loja A.
+    assert.equal(administradores.get(100).trocar_senha_em_proximo_acesso, 1);
+    assert.equal(administradores.get(100).id_estabelecimento, 10);
+  } finally {
+    await fecharServidor(lojaB.servidor);
   }
 });

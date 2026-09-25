@@ -14,7 +14,9 @@ import { fecharBanco, prepararBanco } from './database.js';
 import { checksumMigration, checksumsCompativeisMigration } from './db/migration-utils.js';
 import { removerImagemLocal, salvarImagemDataUrl } from './imageStore.js';
 import {
+  alterarSenhaAdministrador,
   buscarConfiguracaoPublica,
+  criarAdministrador,
   buscarIndicadoresDashboard,
   buscarItensValidados,
   calcularTotaisPedido,
@@ -26,7 +28,7 @@ import {
 import { concederPermissoesPadrao } from './permissoes.js';
 import { aguardarServidor, fecharServidor } from './runtime.js';
 import { adicionaisSeed, mesasSeed, pedidosSeed, produtosSeed } from './seed.js';
-import { criarHashSenha, criarJwt, verificarJwt, verificarSenha } from './security.js';
+import { criarHashSenha, criarJwt, TAMANHO_MINIMO_SENHA, verificarJwt, verificarSenha } from './security.js';
 import {
   alternarStatusSuperadministrador,
   arquivarEstabelecimento,
@@ -35,6 +37,7 @@ import {
   desarquivarEstabelecimento,
   listarEstabelecimentosGerenciais,
   reativarEstabelecimento,
+  redefinirSenhaAdministrador,
   SLUGS_RESERVADOS,
   suspenderEstabelecimento
 } from './superadmin.js';
@@ -2608,6 +2611,219 @@ test('index.html de loja suspensa ou arquivada vira página amigável; inexisten
   }
 });
 
+/* Criação de estabelecimento com banco que só registra os comandos. Os ids
+   gerados são sequenciais por tabela, para o teste conferir os vínculos. */
+function bancoCriacaoEstabelecimento() {
+  const comandos = [];
+  const proximoId = { estabelecimentos: 44, administradores: 91, categorias: 501, produtos: 601 };
+  const conexao = {
+    async beginTransaction() { comandos.push({ sql: 'BEGIN', parametros: [] }); },
+    async commit() { comandos.push({ sql: 'COMMIT', parametros: [] }); },
+    async rollback() { comandos.push({ sql: 'ROLLBACK', parametros: [] }); },
+    release() {},
+    async execute(sql, parametros = []) {
+      comandos.push({ sql, parametros });
+      const tabela = sql.match(/INSERT INTO (\w+)/)?.[1];
+      if (tabela && proximoId[tabela] !== undefined) {
+        const insertId = proximoId[tabela];
+        proximoId[tabela] += 1;
+        return [{ insertId, affectedRows: 1 }];
+      }
+      return [{ affectedRows: 1 }];
+    }
+  };
+  return {
+    comandos,
+    banco: {
+      async getConnection() { return conexao; },
+      async execute(sql, parametros = []) {
+        comandos.push({ sql, parametros });
+        if (sql.includes('FROM estabelecimentos e')) {
+          return [[{
+            id_estabelecimento: Number(parametros[0]), nome_fantasia: 'Loja Nova', slug: 'loja-nova',
+            dominio_personalizado: null, status: 'ativo', plano: 'basico', status_assinatura: 'ativa',
+            vencimento_assinatura_em: null, criado_em: new Date(), atualizado_em: new Date(),
+            total_administradores: 1
+          }]];
+        }
+        throw new Error(`Consulta inesperada no teste: ${sql}`);
+      }
+    }
+  };
+}
+
+const DADOS_NOVA_LOJA = Object.freeze({
+  nomeFantasia: 'Loja Nova',
+  slug: 'loja-nova',
+  primeiroAdministrador: Object.freeze({
+    nome: 'Admin Nova', usuario: 'admin-nova', email: 'admin@nova.local', senha: 'senha-escolhida-pelo-super'
+  })
+});
+
+test('primeiro administrador nasce com senha temporária e o exemplo só entra com a caixinha marcada', async () => {
+  const { banco, comandos } = bancoCriacaoEstabelecimento();
+  await criarEstabelecimentoGerencial(banco, { ...DADOS_NOVA_LOJA, criarCatalogoExemplo: true }, 1);
+
+  const insertAdmin = comandos.find(({ sql }) => sql.includes('INSERT INTO administradores'));
+  assert.match(insertAdmin.sql, /trocar_senha_em_proximo_acesso/);
+  assert.match(insertAdmin.sql, /VALUES \(\?, \?, \?, \?, \?, 1, 1\)/);
+  assert.equal(insertAdmin.parametros.includes('senha-escolhida-pelo-super'), false);
+
+  // Tudo dentro da mesma transação da criação da loja.
+  const inicio = comandos.findIndex(({ sql }) => sql === 'BEGIN');
+  const fim = comandos.findIndex(({ sql }) => sql === 'COMMIT');
+  const categorias = comandos.filter(({ sql }) => sql.includes('INSERT INTO categorias'));
+  const produtos = comandos.filter(({ sql }) => sql.includes('INSERT INTO produtos'));
+  for (const comando of [...categorias, ...produtos]) {
+    const posicao = comandos.indexOf(comando);
+    assert.ok(posicao > inicio && posicao < fim, 'exemplo fora da transação');
+  }
+
+  assert.deepEqual(categorias.map(({ parametros }) => parametros), [
+    [44, 'Hambúrgueres', 1],
+    [44, 'Bebidas', 2],
+    [44, 'Sobremesas', 3]
+  ]);
+  for (const { sql } of categorias) assert.match(sql, /VALUES \(\?, \?, 'ambos', NULL, \?, 1\)/);
+  // Produto na categoria certa (ids 501, 502, 503), com o preço em centavos.
+  assert.deepEqual(produtos.map(({ parametros: [loja, categoria, nome, , preco] }) => [loja, categoria, nome, preco]), [
+    [44, 501, 'X-Burger', 2490],
+    [44, 501, 'X-Bacon', 2890],
+    [44, 502, 'Refrigerante lata', 700],
+    [44, 502, 'Suco natural', 900],
+    [44, 503, 'Milkshake', 1490]
+  ]);
+  for (const { sql, parametros } of produtos) {
+    assert.match(sql, /VALUES \(\?, \?, 'ambos', NULL, \?, \?, \?, NULL, NULL, 1\)/);
+    assert.ok(String(parametros[3]).length > 0, 'descrição obrigatória');
+  }
+
+  // Sem a caixinha — ausente, false ou valor que não seja o booleano true —,
+  // nenhuma categoria e nenhum produto.
+  for (const valor of [undefined, false, 'true', 1]) {
+    const semExemplo = bancoCriacaoEstabelecimento();
+    await criarEstabelecimentoGerencial(semExemplo.banco, { ...DADOS_NOVA_LOJA, criarCatalogoExemplo: valor }, 1);
+    assert.equal(
+      semExemplo.comandos.some(({ sql }) => /INSERT INTO (categorias|produtos)/.test(sql)),
+      false,
+      String(valor)
+    );
+    // A senha temporária vale com ou sem exemplo.
+    assert.match(
+      semExemplo.comandos.find(({ sql }) => sql.includes('INSERT INTO administradores')).sql,
+      /trocar_senha_em_proximo_acesso/
+    );
+  }
+
+  // Auditoria da criação no mesmo formato de antes.
+  const auditoria = comandos.find(({ sql }) => sql.includes('INSERT INTO auditoria_superadmin'));
+  assert.equal(auditoria.parametros[2], 'estabelecimento.criado');
+  assert.deepEqual(Object.keys(JSON.parse(auditoria.parametros[3])), ['slug', 'plano', 'statusAssinatura']);
+});
+
+test('redefinir pelo superadmin liga a senha temporária e trocar a própria senha desliga', async () => {
+  const hashTemporaria = criarHashSenha('senha-temporaria-12');
+  const comandos = [];
+  const conexao = {
+    async beginTransaction() {},
+    async commit() { comandos.push({ sql: 'COMMIT', parametros: [] }); },
+    async rollback() { comandos.push({ sql: 'ROLLBACK', parametros: [] }); },
+    release() {},
+    async execute(sql, parametros = []) {
+      comandos.push({ sql, parametros });
+      if (sql.includes('SELECT id, usuario, nome FROM administradores')) {
+        return [[{ id: 100, usuario: 'admin-a', nome: 'Admin A' }]];
+      }
+      if (sql.includes('SELECT senha_hash FROM administradores')) return [[{ senha_hash: hashTemporaria }]];
+      return [{ affectedRows: 1 }];
+    }
+  };
+  const banco = { async getConnection() { return conexao; } };
+
+  const redefinido = await redefinirSenhaAdministrador(banco, 10, 100, {
+    novaSenha: 'senha-temporaria-12', confirmacaoSenha: 'senha-temporaria-12'
+  }, 1);
+  assert.equal(redefinido.id, 100);
+  const liga = comandos.find(({ sql }) => sql.includes('UPDATE administradores'));
+  assert.match(liga.sql, /SET senha_hash = \?, trocar_senha_em_proximo_acesso = 1/);
+  assert.match(liga.sql, /WHERE id = \? AND id_estabelecimento = \?/);
+  assert.deepEqual(liga.parametros.slice(1), [100, 10]);
+  // Auditoria do reset no mesmo formato de antes, sem a senha.
+  const auditoria = comandos.find(({ sql }) => sql.includes('INSERT INTO auditoria_superadmin'));
+  assert.equal(auditoria.parametros[2], 'administrador.senha_redefinida');
+  assert.deepEqual(JSON.parse(auditoria.parametros[3]), { administrador: 100, usuario: 'admin-a' });
+  assert.equal(JSON.stringify(comandos).includes('senha-temporaria-12'), false);
+
+  comandos.length = 0;
+  await alterarSenhaAdministrador(banco, 10, 100, {
+    senhaAtual: 'senha-temporaria-12', novaSenha: 'senha-propria-nova', confirmacaoSenha: 'senha-propria-nova'
+  }, 'token-da-sessao-atual');
+  const desliga = comandos.find(({ sql }) => sql.includes('UPDATE administradores'));
+  assert.match(desliga.sql, /SET senha_hash = \?, trocar_senha_em_proximo_acesso = 0/);
+  assert.deepEqual(desliga.parametros.slice(1), [100, 10]);
+  // Senha e marca mudam na mesma transação da troca.
+  assert.equal(comandos.at(-1).sql, 'COMMIT');
+  assert.equal(comandos.some(({ sql }) => sql === 'ROLLBACK'), false);
+});
+
+test('mínimo único de 12 caracteres na troca própria e no administrador criado pelo painel', async () => {
+  assert.equal(TAMANHO_MINIMO_SENHA, 12);
+  const hashAtual = criarHashSenha('senha-atual-do-admin');
+  const comandos = [];
+  const conexao = {
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+    release() {},
+    async execute(sql, parametros = []) {
+      comandos.push({ sql, parametros });
+      if (sql.includes('SELECT senha_hash FROM administradores')) return [[{ senha_hash: hashAtual }]];
+      if (sql.includes('INSERT INTO administradores')) return [{ insertId: 300 }];
+      return [{ affectedRows: 1 }];
+    }
+  };
+  const banco = {
+    async getConnection() { return conexao; },
+    async execute(sql, parametros = []) {
+      comandos.push({ sql, parametros });
+      return [[{ id: 300, usuario: 'novo', email: 'novo@loja.local', nome: 'Novo', ativo: 1, criado_em: new Date() }]];
+    }
+  };
+
+  // Troca da própria senha: 10 e 11 recusadas antes de tocar no banco.
+  for (const novaSenha of ['dez-caract', 'onze-caract']) {
+    await assert.rejects(
+      alterarSenhaAdministrador(banco, 10, 100, { senhaAtual: 'senha-atual-do-admin', novaSenha, confirmacaoSenha: novaSenha }, 'token'),
+      (erro) => erro.status === 400 && /12 caracteres/.test(erro.message),
+      `${novaSenha.length} caracteres`
+    );
+  }
+  assert.equal(comandos.length, 0);
+  await alterarSenhaAdministrador(banco, 10, 100, {
+    senhaAtual: 'senha-atual-do-admin', novaSenha: 'doze-caracts', confirmacaoSenha: 'doze-caracts'
+  }, 'token');
+  assert.ok(comandos.some(({ sql }) => sql.includes('UPDATE administradores SET senha_hash')));
+
+  // Administrador criado por outro administrador: mesmo mínimo, e nasce com a
+  // marca de senha temporária, sempre no tenant da sessão.
+  comandos.length = 0;
+  const dadosNovo = (senha) => ({ nome: 'Novo', usuario: 'novo', email: 'novo@loja.local', senha, confirmacaoSenha: senha });
+  for (const senha of ['dez-caract', 'onze-caract']) {
+    await assert.rejects(
+      criarAdministrador(banco, 10, dadosNovo(senha), 100),
+      (erro) => erro.status === 400 && /12 caracteres/.test(erro.message),
+      `${senha.length} caracteres`
+    );
+  }
+  assert.equal(comandos.length, 0);
+  await criarAdministrador(banco, 10, dadosNovo('doze-caracts'), 100);
+  const insert = comandos.find(({ sql }) => sql.includes('INSERT INTO administradores'));
+  assert.match(insert.sql, /trocar_senha_em_proximo_acesso/);
+  assert.match(insert.sql, /VALUES \(\?, \?, \?, \?, \?, 1, 1\)/);
+  assert.equal(insert.parametros[0], 10);
+  assert.equal(insert.parametros.includes('doze-caracts'), false);
+});
+
 const executarIntegracao = process.env.RUN_MYSQL_TESTS === '1';
 
 if (!executarIntegracao) {
@@ -4335,6 +4551,22 @@ if (!executarIntegracao) {
     return chamar('/api/admin/login', { metodo: 'POST', dados: { usuario, senha } });
   }
 
+  /* Conta criada por outro administrador nasce com senha temporária: o
+     primeiro login só libera a troca. Troca e devolve o login, cuja sessão
+     continua valendo, agora liberada para o resto do painel. */
+  async function entrarTrocandoSenhaTemporaria(usuario, senhaTemporaria, novaSenha) {
+    const login = await entrarComo(usuario, senhaTemporaria);
+    assert.equal(login.status, 200);
+    assert.equal(login.corpo.trocarSenhaNoProximoAcesso, true);
+    const troca = await chamar('/api/admin/senha', {
+      metodo: 'PUT',
+      token: login.corpo.token,
+      dados: { senhaAtual: senhaTemporaria, novaSenha, confirmacaoSenha: novaSenha }
+    });
+    assert.equal(troca.status, 200);
+    return login;
+  }
+
   async function permissoesNoBanco(administradorId) {
     const [linhas] = await banco.execute(
       'SELECT permissao FROM administrador_permissoes WHERE administrador_id = ?',
@@ -4494,8 +4726,7 @@ if (!executarIntegracao) {
     assert.equal((await definir(limitado.id, ['funcionarios.gerenciar', 'pedidos.visualizar'])).status, 200);
     assert.equal((await definir(alvo.id, ['pedidos.visualizar'])).status, 200);
 
-    const login = await entrarComo(limitado.usuario, senha);
-    assert.equal(login.status, 200);
+    const login = await entrarTrocandoSenhaTemporaria(limitado.usuario, senha, 'senha-definitiva-do-limitado');
     const tokenLimitado = login.corpo.token;
 
     const propria = await chamar(`/api/admin/administradores/${limitado.id}/permissoes`, {
@@ -4548,8 +4779,10 @@ if (!executarIntegracao) {
   test('arquivar tira o acesso, desarquivar devolve a conta desativada e sem permissões, e apagar remove a conta', async () => {
     const senha = 'senha-arquivavel-segura';
     const conta = await criarAdministradorPeloPainel('arquivavel', senha);
-    const primeiroLogin = await entrarComo(conta.usuario, senha);
-    assert.equal(primeiroLogin.status, 200);
+    // Senha temporária trocada logo no primeiro login; daqui em diante a conta
+    // entra com a própria senha.
+    const senhaDefinitiva = 'senha-definitiva-arquivavel';
+    const primeiroLogin = await entrarTrocandoSenhaTemporaria(conta.usuario, senha, senhaDefinitiva);
 
     const idAdmin = (await chamar('/api/admin/sessao', { token: tokenAdmin })).corpo.admin.id;
     assert.equal((await chamar(`/api/admin/administradores/${idAdmin}/arquivar`, { metodo: 'POST', token: tokenAdmin })).status, 403);
@@ -4563,7 +4796,7 @@ if (!executarIntegracao) {
     // Arquivar.
     assert.equal((await chamar(`/api/admin/administradores/${conta.id}/arquivar`, { metodo: 'POST', token: tokenAdmin })).status, 200);
     assert.equal((await chamar('/api/admin/sessao', { token: primeiroLogin.corpo.token })).status, 401);
-    assert.equal((await entrarComo(conta.usuario, senha)).status, 401);
+    assert.equal((await entrarComo(conta.usuario, senhaDefinitiva)).status, 401);
     const arquivada = await lerConta();
     assert.equal(arquivada.usuario, conta.usuario);
     assert.equal(Number(arquivada.ativo), 0);
@@ -4594,7 +4827,7 @@ if (!executarIntegracao) {
     assert.equal(desarquivada.arquivado_em, null);
     assert.equal(Number(desarquivada.ativo), 0);
     assert.deepEqual(await permissoesNoBanco(conta.id), []);
-    assert.equal((await entrarComo(conta.usuario, senha)).status, 401);
+    assert.equal((await entrarComo(conta.usuario, senhaDefinitiva)).status, 401);
 
     // Reativada, entra, mas sem permissões não abre nada protegido.
     assert.equal((await chamar(`/api/admin/administradores/${conta.id}/status`, {
@@ -4602,7 +4835,7 @@ if (!executarIntegracao) {
       token: tokenAdmin,
       dados: { ativo: true }
     })).status, 200);
-    const reativada = await entrarComo(conta.usuario, senha);
+    const reativada = await entrarComo(conta.usuario, senhaDefinitiva);
     assert.equal(reativada.status, 200);
     assert.equal((await chamar('/api/admin/dashboard/indicadores?periodo=30dias', { token: reativada.corpo.token })).status, 403);
 
@@ -4611,7 +4844,7 @@ if (!executarIntegracao) {
     const [restantes] = await banco.execute('SELECT id FROM administradores WHERE id = ?', [conta.id]);
     assert.equal(restantes.length, 0);
     assert.deepEqual(await permissoesNoBanco(conta.id), []);
-    assert.equal((await entrarComo(conta.usuario, senha)).status, 401);
+    assert.equal((await entrarComo(conta.usuario, senhaDefinitiva)).status, 401);
     const historico = await chamar('/api/admin/dados', { token: tokenAdmin });
     const loginDaContaApagada = historico.corpo.auditoria.find((item) => item.usuario === conta.usuario);
     assert.equal(loginDaContaApagada?.administrador, 'Conta apagada');

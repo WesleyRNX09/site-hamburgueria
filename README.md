@@ -19,9 +19,12 @@ Workbench.
 - vínculo automático entre garçom, mesa, comanda e pedido do salão;
 - identidade e operação da lanchonete: nome, logo, contatos, horário, redes sociais, status, delivery, áreas, taxas, mínimo e pagamentos;
 - dados de dashboard e relatórios calculados a partir dos registros compartilhados.
-- painel global protegido para cadastrar, editar, ativar e desativar
-  estabelecimentos, controlar planos/assinaturas e criar o primeiro
-  administrador de cada tenant.
+- painel global protegido para cadastrar e editar estabelecimentos, registrar
+  plano e assinatura (informativos, não bloqueiam o acesso) e criar o primeiro
+  administrador de cada tenant, e para conduzir o ciclo de vida de cada loja:
+  ela nasce ativa e o superadmin pode suspender (com motivo), reativar,
+  arquivar (confirmando o slug; só a partir de suspensa) e desarquivar (volta
+  como suspensa).
 
 O carrinho permanece no navegador somente até o cliente finalizar a compra. Ao abrir o carrinho e antes do checkout, a API remove itens indisponíveis e atualiza preço, promoção e adicionais. Na criação do pedido, o servidor recalcula tudo novamente, inclusive a taxa pela área de entrega escolhida (ou a taxa única, quando a loja não cadastrou áreas), e grava pedido, itens e pagamento na mesma transação. Cada tentativa leva uma chave idempotente para que reenvios não criem pedidos duplicados.
 

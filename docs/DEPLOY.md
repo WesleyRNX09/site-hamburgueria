@@ -99,6 +99,19 @@ banco antes de servir. Novos arquivos são sempre gravados na estrutura isolada.
   bloqueadas:
   `SELECT id_estabelecimento, slug, status_assinatura, vencimento_assinatura_em FROM estabelecimentos WHERE status = 'ativo' AND (status_assinatura IN ('bloqueada', 'cancelada', 'inadimplente', 'suspensa') OR vencimento_assinatura_em < UTC_TIMESTAMP());`
   Não há migration nesta mudança: é só a regra do backend.
+- A `025` acrescenta `administradores.trocar_senha_em_proximo_acesso`
+  (DEFAULT 0, nenhuma linha reescrita). Ordem: **backup validado** →
+  `npm run db:migrate` → publicar e reiniciar o backend desta versão logo em
+  seguida (o login do administrador passa a ler a coluna nova; sem a `025` ele
+  falha). A partir daí, toda senha escolhida por outra pessoa — primeiro
+  administrador de uma loja nova, "Resetar senha de administrador" no
+  superadmin ou administrador criado por outro administrador no painel — é
+  temporária: o painel só libera a troca de senha até o administrador definir
+  a própria. O mínimo de senha de administrador passa a ser 12 caracteres em
+  todos os fluxos, inclusive na troca da própria senha (antes era 10).
+  Administradores já cadastrados não são afetados. Ainda **não
+  executada contra um MariaDB 11.8 real**: aplique primeiro numa cópia do banco
+  de produção.
 - A `024` fixa o ciclo de vida do estabelecimento (`ativo`, `suspenso`,
   `arquivado`) com um CHECK e converte `inativo` em `suspenso`, sem apagar
   nada. Ordem: **backup validado** → suspender escritas no painel do

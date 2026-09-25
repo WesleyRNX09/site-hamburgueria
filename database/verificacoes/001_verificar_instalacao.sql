@@ -61,6 +61,17 @@ SELECT
     AS arquivados_sem_data
 FROM estabelecimentos AS e;
 
+-- Senha temporária (migration 025): quantos administradores de cada loja ainda
+-- precisam trocar a senha no próximo acesso. Informativo; não precisa ser zero.
+SELECT
+  a.id_estabelecimento,
+  SUM(CASE WHEN a.trocar_senha_em_proximo_acesso = 1 THEN 1 ELSE 0 END)
+    AS administradores_com_senha_temporaria,
+  COUNT(a.id) AS administradores
+FROM administradores AS a
+GROUP BY a.id_estabelecimento
+ORDER BY a.id_estabelecimento;
+
 SELECT
   COUNT(*) AS configuracoes_sem_estabelecimento
 FROM configuracoes_estabelecimento AS ce
@@ -85,8 +96,8 @@ WHERE au.id_estabelecimento IS NOT NULL
 
 SELECT
   CASE
-    WHEN COUNT(*) = 26 THEN 'OK'
-    ELSE CONCAT('REVISAR: ', COUNT(*), ' tabelas encontradas; eram esperadas 26')
+    WHEN COUNT(*) = 31 THEN 'OK'
+    ELSE CONCAT('REVISAR: ', COUNT(*), ' tabelas encontradas; eram esperadas 31')
   END AS resultado_estrutura
 FROM information_schema.tables AS t
 WHERE t.table_schema = DATABASE()

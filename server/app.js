@@ -128,11 +128,24 @@ const DURACAO_SESSAO_GARCOM_MS = 8 * 60 * 60 * 1000;
 const JANELA_TENTATIVAS_LOGIN_MS = 15 * 60 * 1000;
 
 class ErroHttp extends Error {
-  constructor(status, message) {
+  constructor(status, message, codigo = null) {
     super(message);
     this.status = status;
+    if (codigo) this.codigo = codigo;
   }
 }
+
+/* Senha escolhida por outra pessoa (primeiro administrador ou redefinição pelo
+   superadmin): até o administrador definir a própria, o painel só atende a
+   troca de senha e o logout. */
+const CODIGO_SENHA_TEMPORARIA_PENDENTE = 'senha_temporaria_pendente';
+
+/* Códigos de erro que o navegador trata de forma própria e por isso saem no
+   JSON junto de { erro }. Qualquer outro `codigo` interno fica no servidor. */
+const CODIGOS_ERRO_PUBLICOS = new Set([
+  CODIGO_ESTABELECIMENTO_INDISPONIVEL,
+  CODIGO_SENHA_TEMPORARIA_PENDENTE
+]);
 
 export function criarLimitadorTentativas({ limite = 5, janelaMs = JANELA_TENTATIVAS_LOGIN_MS } = {}) {
   const registros = new Map();
@@ -288,7 +301,12 @@ function autenticarJwt(requisicao, jwtSecret, perfilEsperado) {
   return { token, identidade };
 }
 
-async function obterAdministrador(banco, requisicao, jwtSecret) {
+/*
+  Ponto único de validação da sessão do administrador. Com senha temporária
+  pendente, a sessão existe, mas só serve para trocar a senha: quem chama
+  precisa dizer explicitamente que aceita esse caso (permitirSenhaTemporaria).
+*/
+async function obterAdministrador(banco, requisicao, jwtSecret, { permitirSenhaTemporaria = false } = {}) {
   const { token, identidade } = autenticarJwt(requisicao, jwtSecret, 'administrador');
   const idEstabelecimento = requisicao.estabelecimento.id;
 
@@ -297,7 +315,8 @@ async function obterAdministrador(banco, requisicao, jwtSecret) {
     WHERE expira_em <= CURRENT_TIMESTAMP(3) AND id_estabelecimento = ?
   `, [idEstabelecimento]);
   const [linhas] = await banco.execute(`
-    SELECT a.id, a.nome, a.usuario, a.email, a.id_estabelecimento
+    SELECT a.id, a.nome, a.usuario, a.email, a.id_estabelecimento,
+           a.trocar_senha_em_proximo_acesso
     FROM sessoes_admin s
     INNER JOIN administradores a
       ON a.id = s.administrador_id
@@ -310,6 +329,14 @@ async function obterAdministrador(banco, requisicao, jwtSecret) {
   `, [criarHashToken(token), idEstabelecimento, identidade.idUsuario]);
   const sessao = linhas[0];
   if (!sessao) throw new ErroHttp(401, 'Sua sessão expirou. Entre novamente.');
+  // Lida do banco a cada requisição: a troca de senha libera o painel na hora.
+  if (Number(sessao.trocar_senha_em_proximo_acesso) === 1 && !permitirSenhaTemporaria) {
+    throw new ErroHttp(
+      403,
+      'Defina uma nova senha para continuar usando o painel.',
+      CODIGO_SENHA_TEMPORARIA_PENDENTE
+    );
+  }
   // Autorização: as permissões são lidas a cada requisição, depois da sessão
   // validada, então uma alteração vale na hora.
   const permissoes = await listarPermissoesAdministrador(banco, idEstabelecimento, Number(sessao.id));
@@ -813,7 +840,7 @@ async function rotaAdmin({
     const chaves = chavesTentativa(requisicao, 'admin', identificador);
     validarLimiteLogin(limitadorAdmin, chaves);
     const [linhas] = await banco.execute(`
-      SELECT id, nome, usuario, email, senha_hash
+      SELECT id, nome, usuario, email, senha_hash, trocar_senha_em_proximo_acesso
       FROM administradores
       WHERE id_estabelecimento = ?
         AND (LOWER(usuario) = LOWER(?) OR LOWER(email) = LOWER(?))
@@ -841,6 +868,8 @@ async function rotaAdmin({
     responderJson(resposta, 200, {
       token: sessao.token,
       expiraEm: sessao.expiraEm,
+      // Senha temporária: o token vale, mas só para a troca de senha e o logout.
+      trocarSenhaNoProximoAcesso: Number(administrador.trocar_senha_em_proximo_acesso) === 1,
       admin: {
         id: Number(administrador.id),
         nome: administrador.nome,
@@ -873,7 +902,11 @@ async function rotaAdmin({
   }
 
   if (!caminho.startsWith('/api/admin/')) return false;
-  const administradorAutenticado = await obterAdministrador(banco, requisicao, jwtSecret);
+  // Com senha temporária pendente, a troca de senha é a única rota atendida
+  // (o logout acima nem passa por aqui); todas as outras recebem 403.
+  const administradorAutenticado = await obterAdministrador(banco, requisicao, jwtSecret, {
+    permitirSenhaTemporaria: requisicao.method === 'PUT' && caminho === '/api/admin/senha'
+  });
   // Portão único de autorização: cada rota declara sua permissão em
   // server/permissoes.js, e rota não declarada não é atendida.
   const permissaoExigida = permissaoDaRotaAdmin(requisicao.method, caminho);
@@ -2252,10 +2285,10 @@ export function criarServidor({
           ? 'Este cadastro está vinculado a outro registro.'
           : erro.message;
       // `codigo` só acompanha erros que o navegador trata de forma própria
-      // (hoje, a loja fora do ar); o formato { erro } continua o mesmo.
+      // (CODIGOS_ERRO_PUBLICOS); o formato { erro } continua o mesmo.
       responderJson(resposta, status, {
         erro: status >= 500 ? 'Erro interno do servidor.' : mensagem,
-        ...(status < 500 && erro.codigo === CODIGO_ESTABELECIMENTO_INDISPONIVEL ? { codigo: erro.codigo } : {})
+        ...(status < 500 && CODIGOS_ERRO_PUBLICOS.has(erro.codigo) ? { codigo: erro.codigo } : {})
       });
     }
   });

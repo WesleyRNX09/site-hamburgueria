@@ -1,6 +1,10 @@
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
 const TAMANHO_HASH = 64;
+/* Mínimo único para senha de administrador e de superadministrador, em
+   qualquer fluxo: cadastro, reset pelo superadmin, troca da própria senha e
+   administrador criado por outro administrador. */
+export const TAMANHO_MINIMO_SENHA = 12;
 const EMISSOR_JWT = 'site-hamburgueria';
 const PERFIS_JWT = new Set(['administrador', 'garcom', 'superadministrador']);
 

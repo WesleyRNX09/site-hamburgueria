@@ -138,4 +138,11 @@ A pasta `legado/` preserva o histórico anterior e não é executada pelo runner
   (suspender, reativar, arquivar e desarquivar); a edição do estabelecimento
   deixa de alterar o status. Aplique com a versão do backend que já conhece
   os três estados: o backend anterior grava `inativo`, que o CHECK recusa.
+- `025_senha_temporaria_admin.sql`: acrescenta
+  `administradores.trocar_senha_em_proximo_acesso` (TINYINT NOT NULL DEFAULT
+  0). Vale 1 quando a senha foi escolhida por outra pessoa — o primeiro
+  administrador criado pelo superadmin ou uma redefinição de senha feita por
+  ele —, e aí o painel só libera a troca de senha até o administrador definir
+  a própria. Coluna nova com DEFAULT 0: nenhuma linha é reescrita e ninguém já
+  cadastrado passa a ser obrigado a trocar a senha.
 - `legado/20260824_operacao_comercial.sql`: histórico anterior, fora do runner.

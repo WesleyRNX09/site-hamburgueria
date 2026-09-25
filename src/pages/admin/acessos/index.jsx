@@ -196,8 +196,8 @@ function AcessosAdmin() {
       <div className={styles.topoCard}><div><h2>Alterar minha senha</h2><p>A senha atual é validada pelo servidor.</p></div><KeyRound size={25} color="#ffc107" /></div>
       <form className={styles.formulario} onSubmit={trocarSenha}>
         <div className={styles.campo}><label htmlFor="senhaAtual">Senha atual</label><input id="senhaAtual" required type="password" autoComplete="current-password" value={senha.senhaAtual} onChange={(evento) => setSenha((atual) => ({ ...atual, senhaAtual: evento.target.value }))} /></div>
-        <div className={styles.campo}><label htmlFor="novaSenha">Nova senha</label><input id="novaSenha" required minLength={10} type="password" autoComplete="new-password" value={senha.novaSenha} onChange={(evento) => setSenha((atual) => ({ ...atual, novaSenha: evento.target.value }))} /></div>
-        <div className={styles.campo}><label htmlFor="confirmarNovaSenha">Confirmar nova senha</label><input id="confirmarNovaSenha" required minLength={10} type="password" autoComplete="new-password" value={senha.confirmacaoSenha} onChange={(evento) => setSenha((atual) => ({ ...atual, confirmacaoSenha: evento.target.value }))} /></div>
+        <div className={styles.campo}><label htmlFor="novaSenha">Nova senha</label><input id="novaSenha" required minLength={12} type="password" autoComplete="new-password" value={senha.novaSenha} onChange={(evento) => setSenha((atual) => ({ ...atual, novaSenha: evento.target.value }))} /></div>
+        <div className={styles.campo}><label htmlFor="confirmarNovaSenha">Confirmar nova senha</label><input id="confirmarNovaSenha" required minLength={12} type="password" autoComplete="new-password" value={senha.confirmacaoSenha} onChange={(evento) => setSenha((atual) => ({ ...atual, confirmacaoSenha: evento.target.value }))} /></div>
         <button disabled={processando} type="submit" className={styles.botaoPrimario}><Save size={17} /> Alterar senha</button>
       </form>
     </section>
@@ -213,8 +213,8 @@ function AcessosAdmin() {
               <div className={styles.campo}><label htmlFor="novoAdminNome">Nome</label><input id="novoAdminNome" required value={novo.nome} onChange={(evento) => setNovo((atual) => ({ ...atual, nome: evento.target.value }))} /></div>
               <div className={styles.campo}><label htmlFor="novoAdminUsuario">Usuário</label><input id="novoAdminUsuario" required autoComplete="username" value={novo.usuario} onChange={(evento) => setNovo((atual) => ({ ...atual, usuario: evento.target.value }))} /></div>
               <div className={`${styles.campo} ${styles.campoCompleto}`}><label htmlFor="novoAdminEmail">E-mail</label><input id="novoAdminEmail" required type="email" value={novo.email} onChange={(evento) => setNovo((atual) => ({ ...atual, email: evento.target.value }))} /></div>
-              <div className={styles.campo}><label htmlFor="novoAdminSenha">Senha</label><input id="novoAdminSenha" required minLength={10} type="password" autoComplete="new-password" value={novo.senha} onChange={(evento) => setNovo((atual) => ({ ...atual, senha: evento.target.value }))} /></div>
-              <div className={styles.campo}><label htmlFor="novoAdminConfirmacao">Confirmar senha</label><input id="novoAdminConfirmacao" required minLength={10} type="password" autoComplete="new-password" value={novo.confirmacaoSenha} onChange={(evento) => setNovo((atual) => ({ ...atual, confirmacaoSenha: evento.target.value }))} /></div>
+              <div className={styles.campo}><label htmlFor="novoAdminSenha">Senha</label><input id="novoAdminSenha" required minLength={12} type="password" autoComplete="new-password" value={novo.senha} onChange={(evento) => setNovo((atual) => ({ ...atual, senha: evento.target.value }))} /></div>
+              <div className={styles.campo}><label htmlFor="novoAdminConfirmacao">Confirmar senha</label><input id="novoAdminConfirmacao" required minLength={12} type="password" autoComplete="new-password" value={novo.confirmacaoSenha} onChange={(evento) => setNovo((atual) => ({ ...atual, confirmacaoSenha: evento.target.value }))} /></div>
             </div>
             <div className={styles.rodapeFormulario}><button disabled={processando} type="submit" className={styles.botaoPrimario}><UserPlus size={17} /> Cadastrar administrador</button></div>
           </form>

@@ -40,7 +40,8 @@ function formularioVazio() {
     banner: '',
     ...CORES_PADRAO,
     fonte: 'Poppins',
-    primeiroAdministrador: { nome: '', usuario: '', email: '', senha: '', confirmacaoSenha: '' }
+    primeiroAdministrador: { nome: '', usuario: '', email: '', senha: '', confirmacaoSenha: '' },
+    criarCatalogoExemplo: false
   };
 }
 
@@ -249,7 +250,7 @@ function FormularioEstabelecimento({ inicial, editando, opcoes, processando, onC
         {!editando && (
           <fieldset>
             <legend>Primeiro administrador da loja</legend>
-            <p className={styles.ajuda}>Essa conta será criada junto do estabelecimento e ficará limitada a ele.</p>
+            <p className={styles.ajuda}>Essa conta será criada junto do estabelecimento e ficará limitada a ele. A senha é temporária: no primeiro login o administrador precisa trocá-la.</p>
             <div className={styles.gridCampos}>
               <label className={styles.campo}><span>Nome</span><input required maxLength="160" value={dados.primeiroAdministrador.nome} onChange={(e) => alterarAdministrador('nome', e.target.value)} /></label>
               <label className={styles.campo}><span>Usuário</span><input required minLength="3" maxLength="80" pattern="[a-z0-9._-]+" value={dados.primeiroAdministrador.usuario} onChange={(e) => alterarAdministrador('usuario', e.target.value.toLowerCase())} /></label>
@@ -257,6 +258,17 @@ function FormularioEstabelecimento({ inicial, editando, opcoes, processando, onC
               <label className={styles.campo}><span>Senha inicial</span><input required type="password" minLength="12" autoComplete="new-password" value={dados.primeiroAdministrador.senha} onChange={(e) => alterarAdministrador('senha', e.target.value)} /></label>
               <label className={styles.campo}><span>Confirmar senha</span><input required type="password" minLength="12" autoComplete="new-password" value={dados.primeiroAdministrador.confirmacaoSenha} onChange={(e) => alterarAdministrador('confirmacaoSenha', e.target.value)} /></label>
             </div>
+          </fieldset>
+        )}
+
+        {!editando && (
+          <fieldset>
+            <legend>Cardápio inicial</legend>
+            <label className={styles.opcaoCaixa}>
+              <input type="checkbox" checked={dados.criarCatalogoExemplo} onChange={(e) => alterar('criarCatalogoExemplo', e.target.checked)} />
+              <span>Criar categorias e produtos de exemplo</span>
+            </label>
+            <p className={styles.ajudaOpcao}>Hambúrgueres, Bebidas e Sobremesas, com 5 produtos de preço fictício. O administrador edita ou exclui depois.</p>
           </fieldset>
         )}
 

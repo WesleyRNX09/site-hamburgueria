@@ -51,6 +51,10 @@
 .filtros { display: grid; grid-template-columns: minmax(230px, 1.4fr) repeat(3, minmax(150px, .65fr)) auto auto; gap: 9px; margin-bottom: 17px; }
 .incluirArquivados { display: inline-flex; min-height: 44px; align-items: center; gap: 8px; border: 1px solid #36363a; border-radius: 9px; background: #0e0e10; padding: 0 12px; color: #c7c7ca; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; }
 .incluirArquivados input { width: 16px; height: 16px; accent-color: #ffc107; }
+.opcaoCaixa { display: inline-flex; min-height: 44px; align-items: center; gap: 10px; border: 1px solid #36363a; border-radius: 9px; background: #0e0e10; padding: 10px 14px; color: #d7d7da; font-size: 12px; font-weight: 700; cursor: pointer; }
+.opcaoCaixa input { width: 16px; height: 16px; flex: 0 0 auto; accent-color: #ffc107; }
+.opcaoCaixa:has(input:checked) { border-color: rgba(255, 193, 7, .55); }
+.ajudaOpcao { margin: 10px 0 0; color: #929297; font-size: 12px; }
 .filtros select { min-width: 168px; }
 .busca { position: relative; }
 .busca svg { position: absolute; top: 50%; left: 13px; color: #707075; transform: translateY(-50%); }
@@ -110,7 +114,8 @@
   .acoesFormulario { flex-direction: column-reverse; }
   .acoesFormulario button, .filtros button { width: 100%; }
   .campo input, .campo select, .campo textarea, .filtros input, .filtros select, .botaoPrimario, .botaoSecundario, .botaoPerigo { min-height: 46px; font-size: 16px; }
-  .incluirArquivados { font-size: 14px; }
+  .incluirArquivados, .opcaoCaixa, .ajudaOpcao { font-size: 14px; }
+  .opcaoCaixa { width: 100%; }
   .tabelaContainer td > .motivo { max-width: none; }
   .campo > span, .cor > span, .formularioTopo p, .listaTopo p, .ajuda, .erro, .sucesso, .vazio span { font-size: 14px; }
 

@@ -156,6 +156,9 @@ CREATE TABLE IF NOT EXISTS administradores (
   email VARCHAR(160) NOT NULL,
   nome VARCHAR(160) NOT NULL,
   senha_hash VARCHAR(255) NOT NULL,
+  -- 1 quando a senha foi escolhida por outra pessoa (primeiro administrador ou
+  -- redefinição pelo superadmin): o painel só libera a troca de senha.
+  trocar_senha_em_proximo_acesso TINYINT(1) NOT NULL DEFAULT 0,
   ativo TINYINT(1) NOT NULL DEFAULT 1,
   -- Preenchida quando a conta é arquivada; NULL significa conta em uso.
   arquivado_em DATETIME NULL,
@@ -871,7 +874,8 @@ INSERT INTO schema_migrations (versao, checksum) VALUES
   ('021_observacao_geral_da_comanda.sql', '6d8d045464806ecf39f4007e322bceb64dc1740b3eb44a70baa02ceb4f683e04'),
   ('022_impressora_do_caixa.sql', '8d9bc13565eef36400913ae00b4571d5f416e6e35932ef58ded80a302a0f9879'),
   ('023_recibo_de_fechamento.sql', 'b3f6f90862344408022a15928a096d950d64c54d0a27805f7787d9c8e9327c12'),
-  ('024_ciclo_de_vida_estabelecimento.sql', '149fca5e6d8fac267cab94bb82f63e3e09c525563c73c7db01df5aa31a1315e0')
+  ('024_ciclo_de_vida_estabelecimento.sql', '149fca5e6d8fac267cab94bb82f63e3e09c525563c73c7db01df5aa31a1315e0'),
+  ('025_senha_temporaria_admin.sql', 'c5460b98e112cd5a4c039f9dcd44c8a87afb4665c16000fbb809e204d5d15dc4')
 ON DUPLICATE KEY UPDATE versao = VALUES(versao);
 
 INSERT INTO estabelecimentos

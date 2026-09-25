@@ -311,6 +311,47 @@ novas, então sem a `024` a listagem do superadministrador falha. O backend
 anterior ainda grava `inativo` ao desativar uma loja, e o CHECK recusa esse
 valor, então não use o botão antigo entre a migration e o novo deploy.
 
+### Migration 025 — senha temporária do administrador
+
+A `025_senha_temporaria_admin.sql` acrescenta
+`administradores.trocar_senha_em_proximo_acesso` (DEFAULT 0). Ninguém já
+cadastrado passa a ser obrigado a trocar a senha, e nenhuma linha é reescrita.
+
+Ordem de aplicação:
+
+1. gere o backup do banco e confirme que ele restaura;
+2. execute `npm run db:migrate`;
+3. publique e reinicie o backend desta versão logo em seguida — ele lê a
+   coluna nova no login e em toda validação de sessão do painel, então sem a
+   `025` o login do administrador falha;
+4. rode `database/verificacoes/001_verificar_instalacao.sql` e confira a
+   contagem de administradores com senha temporária por loja.
+
+Comportamento de primeiro acesso:
+
+- a senha do primeiro administrador continua sendo digitada pelo
+  superadmin no cadastro da loja (mínimo de 12 caracteres), mas passa a ser
+  **temporária**; o mesmo vale para a senha definida em "Resetar senha de
+  administrador" e para o administrador criado por outro administrador na
+  tela de acessos do painel — em todos os casos, a senha foi escolhida por
+  outra pessoa;
+- toda senha de administrador, em qualquer desses fluxos e também na troca da
+  própria senha, tem no mínimo 12 caracteres;
+- no login com senha temporária, a API responde
+  `trocarSenhaNoProximoAcesso: true`, e o painel mostra só a tela "Defina uma
+  nova senha" (senha temporária + nova senha com pelo menos 12 caracteres,
+  o mesmo mínimo de todas as senhas de administrador);
+- até a troca, toda rota do painel responde `403` com
+  `codigo: "senha_temporaria_pendente"`, exceto a troca de senha
+  (`PUT /api/admin/senha`) e o logout;
+- a troca grava a nova senha e zera a marca na mesma transação; a sessão
+  atual continua e o painel é liberado na hora.
+
+No cadastro da loja há também a caixinha **Criar categorias e produtos de
+exemplo** (desmarcada por padrão). Marcada, cria na mesma transação as
+categorias Hambúrgueres, Bebidas e Sobremesas com 5 produtos de preço fictício,
+ativos e editáveis como qualquer outro item.
+
 ## 13. Verifique a instalação
 
 Antes de liberar tráfego, confirme:

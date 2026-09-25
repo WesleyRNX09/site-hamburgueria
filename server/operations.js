@@ -19,6 +19,7 @@ import {
   criarHashSenha,
   criarHashToken,
   criarIndiceSenhaGarcom,
+  TAMANHO_MINIMO_SENHA,
   verificarSenha
 } from './security.js';
 import { estabelecimentoLiberado } from './tenant.js';
@@ -2749,13 +2750,18 @@ export async function criarAdministrador(banco, idEstabelecimento, dados, admini
   const senha = String(dados.senha ?? '');
   const confirmacao = String(dados.confirmacaoSenha ?? '');
   if (!usuario || !nome || !/^\S+@\S+\.\S+$/.test(email)) throw erroDominio('Informe nome, usuário e e-mail válidos.');
-  if (senha.length < 10) throw erroDominio('A senha deve ter pelo menos 10 caracteres.');
+  if (senha.length < TAMANHO_MINIMO_SENHA) {
+    throw erroDominio(`A senha deve ter pelo menos ${TAMANHO_MINIMO_SENHA} caracteres.`);
+  }
   if (senha !== confirmacao) throw erroDominio('A confirmação da senha não confere.');
   const id = await executarTransacao(banco, async (conexao) => {
+    // Senha escolhida por outro administrador: é temporária, como a do
+    // primeiro acesso e a do reset pelo superadmin. A trava fica na
+    // validação de sessão (obterAdministrador), que já lê esta marca.
     const [resultado] = await conexao.execute(`
       INSERT INTO administradores
-        (id_estabelecimento, usuario, email, nome, senha_hash, ativo)
-      VALUES (?, ?, ?, ?, ?, 1)
+        (id_estabelecimento, usuario, email, nome, senha_hash, trocar_senha_em_proximo_acesso, ativo)
+      VALUES (?, ?, ?, ?, ?, 1, 1)
     `, [idEstabelecimento, usuario, email, nome, criarHashSenha(senha)]);
     await concederPermissoesPadrao(conexao, idEstabelecimento, resultado.insertId);
     await registrarAuditoria(conexao, idEstabelecimento, administradorId, 'administrador.criado', 'administrador', resultado.insertId, { usuario, email });
@@ -2997,7 +3003,9 @@ export async function alterarSenhaAdministrador(
   const senhaAtual = String(dados.senhaAtual ?? '');
   const novaSenha = String(dados.novaSenha ?? '');
   const confirmacao = String(dados.confirmacaoSenha ?? '');
-  if (novaSenha.length < 10) throw erroDominio('A nova senha deve ter pelo menos 10 caracteres.');
+  if (novaSenha.length < TAMANHO_MINIMO_SENHA) {
+    throw erroDominio(`A nova senha deve ter pelo menos ${TAMANHO_MINIMO_SENHA} caracteres.`);
+  }
   if (novaSenha !== confirmacao) throw erroDominio('A confirmação da nova senha não confere.');
   await executarTransacao(banco, async (conexao) => {
     const [linhas] = await conexao.execute(`
@@ -3006,8 +3014,10 @@ export async function alterarSenhaAdministrador(
     `, [administradorId, idEstabelecimento]);
     if (!linhas[0] || !verificarSenha(senhaAtual, linhas[0].senha_hash)) throw erroDominio('A senha atual está incorreta.', 401);
     if (verificarSenha(novaSenha, linhas[0].senha_hash)) throw erroDominio('A nova senha deve ser diferente da senha atual.');
+    // Senha definida pelo próprio administrador: se a anterior era temporária,
+    // a marca de troca obrigatória cai aqui, na mesma transação.
     await conexao.execute(`
-      UPDATE administradores SET senha_hash = ?
+      UPDATE administradores SET senha_hash = ?, trocar_senha_em_proximo_acesso = 0
       WHERE id = ? AND id_estabelecimento = ?
     `, [criarHashSenha(novaSenha), administradorId, idEstabelecimento]);
     await conexao.execute(`

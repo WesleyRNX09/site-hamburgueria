@@ -37,6 +37,7 @@ import {
   criarPedidoDeliveryApi,
   criarProdutoApi,
   criarPromocaoApi,
+  aoExigirTrocaSenha,
   aoExpirarSessao,
   ErroApi,
   cancelarComandaAdminApi,
@@ -61,6 +62,7 @@ import {
   validarSessaoAdmin,
   validarCarrinhoApi,
   validarSessaoGarcom,
+  trocaSenhaPendente,
   alterarSenhaAdministradorApi,
   atualizarPermissoesAdministradorApi,
   arquivarAdministradorApi,
@@ -325,6 +327,23 @@ export function AppProvider({ children }) {
     setSessaoExpirada('Sua sessão expirou. Entre novamente para continuar.');
   }), []);
 
+  /*
+    Senha temporária: qualquer chamada do painel que volte com o código de troca
+    pendente marca a sessão, e o guard de rota passa a mostrar só a tela
+    "Defina uma nova senha". A sessão (token) continua guardada: é com ela que a
+    troca é feita.
+  */
+  const marcarTrocaSenhaPendente = useCallback(() => {
+    setAdminSessao((atual) => {
+      if (!atual?.token || atual.trocarSenhaPendente) return atual;
+      const sessao = { ...atual, permissoes: [], trocarSenhaPendente: true };
+      sessionStorage.setItem(CHAVES.admin, JSON.stringify(sessao));
+      return sessao;
+    });
+  }, []);
+
+  useEffect(() => aoExigirTrocaSenha(marcarTrocaSenhaPendente), [marcarTrocaSenhaPendente]);
+
   useEffect(() => {
     if (areaSuperadmin) return undefined;
     let ativo = true;
@@ -355,8 +374,11 @@ export function AppProvider({ children }) {
         setAdminSessao(sessao);
         aplicarDados(dados);
       })
-      .catch(() => {
+      .catch((erro) => {
         if (!ativo) return;
+        // Senha temporária pendente não derruba a sessão: o ouvinte acima já
+        // marcou a troca obrigatória.
+        if (trocaSenhaPendente(erro)) return;
         sessionStorage.removeItem(CHAVES.admin);
         setAdminSessao(null);
       })
@@ -400,8 +422,12 @@ export function AppProvider({ children }) {
     setAdminSessao(sessao);
   }, []);
 
+  const trocaSenhaAdminPendente = Boolean(adminSessao?.trocarSenhaPendente);
+
   useEffect(() => {
     if (!adminSessao?.token && !garcomSessao?.token) return undefined;
+    // Com a troca de senha pendente o servidor recusa tudo: nada a atualizar.
+    if (adminSessao?.token && trocaSenhaAdminPendente) return undefined;
     const atualizar = () => {
       const operacao = adminSessao?.token
         ? Promise.all([recarregarAdmin(), atualizarSessaoAdmin()])
@@ -410,7 +436,7 @@ export function AppProvider({ children }) {
     };
     const intervalo = setInterval(atualizar, 15000);
     return () => clearInterval(intervalo);
-  }, [adminSessao?.token, garcomSessao?.token, recarregarAdmin, recarregarGarcom, atualizarSessaoAdmin]);
+  }, [adminSessao?.token, garcomSessao?.token, trocaSenhaAdminPendente, recarregarAdmin, recarregarGarcom, atualizarSessaoAdmin]);
 
   const pedidoAtualId = pedidoAtual?.id;
   const pedidoAtualToken = pedidoAtual?.tokenAcompanhamento;
@@ -459,8 +485,17 @@ export function AppProvider({ children }) {
 
   async function entrarAdmin(usuario, senha) {
     try {
-      const { admin, token } = await loginAdmin(usuario, senha);
+      const { admin, token, trocarSenhaNoProximoAcesso } = await loginAdmin(usuario, senha);
       setSessaoExpirada('');
+      if (trocarSenhaNoProximoAcesso) {
+        // Senha temporária: o painel fica fechado até a troca, então nem a
+        // sessão nem os dados do painel são carregados agora (o servidor
+        // recusaria com 403).
+        const pendente = { ...admin, token, permissoes: [], trocarSenhaPendente: true };
+        sessionStorage.setItem(CHAVES.admin, JSON.stringify(pendente));
+        setAdminSessao(pendente);
+        return true;
+      }
       sessionStorage.setItem(CHAVES.admin, JSON.stringify({ ...admin, token }));
       // O login não traz as permissões: a sessão validada devolve a lista atual
       // antes de o painel montar menu e rotas.
@@ -595,6 +630,18 @@ export function AppProvider({ children }) {
   async function alterarSenhaAdministrador(dados) {
     await alterarSenhaAdministradorApi(dados);
     await recarregarAdmin();
+  }
+
+  /* Troca obrigatória da senha temporária. O servidor mantém a sessão atual e
+     zera a marca; a sessão revalidada já traz as permissões e libera o painel. */
+  async function concluirTrocaSenhaObrigatoria(dados) {
+    await alterarSenhaAdministradorApi(dados);
+    const token = lerSessaoComToken(CHAVES.admin)?.token;
+    const { admin } = await validarSessaoAdmin();
+    const sessao = { ...admin, token };
+    sessionStorage.setItem(CHAVES.admin, JSON.stringify(sessao));
+    setAdminSessao(sessao);
+    await recarregarAdmin().catch(() => {});
   }
 
   async function removerProduto(id) {
@@ -913,6 +960,7 @@ export function AppProvider({ children }) {
     criarAdministrador,
     alternarAdministrador,
     alterarSenhaAdministrador,
+    concluirTrocaSenhaObrigatoria,
     atualizarPermissoesAdministrador,
     arquivarAdministrador,
     desarquivarAdministrador,

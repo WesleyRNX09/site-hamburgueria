@@ -483,16 +483,52 @@ Mapear explicitamente os campos aceitos.
 
 # 19. Tema padrão
 
-A identidade visual atual deve continuar sendo o fallback:
+O tema tem duas camadas: a **paleta de fallback de cada área** (neutros de
+fundo, card e texto, fixos no código) e, por cima dela, a **cor de marca do
+estabelecimento**.
+
+## Paleta de fallback por área
+
+A área é marcada no atributo `data-area` do `<html>` (regra em `areaDoTema`,
+`src/utils/theme.js`; valores em `src/css/global.css`):
 
 ```text
-Cor principal: #FFC107
-Fundo principal: #111111
-Tons escuros: #0A0A0A, #141414 e #181818
-Texto principal: #FFFFFF
+Tema claro — área pública (cardápio, checkout, páginas legais),
+painel do estabelecimento (/admin) e garçom (/garcom):
+  Fundo da área pública: #F4F5F7
+  Fundo das páginas do painel e do garçom: #F5F4F7 (--admin-fundo-pagina)
+  Cards: #FFFFFF
+  Texto principal: #1A1A19
+
+Tema escuro — superadmin (/superadmin) e valores base de :root:
+  Fundo principal: #111111
+  Secundária: #0A0A0A
+  Cards: #181818
+  Texto principal: #FFFFFF
 ```
 
-Se uma configuração estiver ausente ou `NULL`, a interface deve continuar funcional usando valores padrão.
+## Cor de marca
+
+- Padrão atual do sistema: `#FFC107` (amarelo), com a fonte Poppins.
+- Cada estabelecimento pode personalizar a própria cor de marca (e a fonte,
+  dentro da allowlist) conforme a necessidade, sem afetar os demais: a
+  configuração é lida e aplicada por tenant.
+- Nas áreas claras, só a cor de marca (`--cor-principal` e as derivadas
+  `--cor-sobre-principal` e `--cor-principal-texto`) e a fonte
+  (`--fonte-principal`) vêm do estabelecimento. Fundo, card e texto ficam
+  sempre na paleta clara (`PALETA_CLARA` em `src/utils/theme.js`), mesmo que o
+  cadastro tenha outras cores salvas.
+- O superadmin não usa a identidade de nenhum estabelecimento.
+- Páginas que o servidor gera sem o React (ex.: "Estabelecimento
+  indisponível") usam a paleta escura com `#FFC107` e nunca a identidade do
+  estabelecimento.
+
+## Fallback
+
+Se uma configuração estiver ausente, `NULL` ou inválida, a interface deve
+continuar funcional com esses valores padrão (backend: `CORES_PADRAO` em
+`server/operations.js`; frontend: `normalizarConfiguracaoPublica` em
+`src/utils/theme.js` e os tokens de `src/css/global.css`).
 
 Nunca deixar a tela pública em branco por configuração ausente.
 
@@ -516,6 +552,10 @@ Aplicar tema preferencialmente por variáveis CSS:
 --cor-texto;
 ```
 
+Na área pública, o estabelecimento define só `--cor-principal` (e derivadas) e
+`--fonte-principal`; `--cor-secundaria`, `--cor-fundo`, `--cor-card` e
+`--cor-texto` vêm da paleta clara da seção 19.
+
 Não armazenar CSS arbitrário no banco.
 
 Valores configuráveis devem ter fallback.
@@ -528,11 +568,13 @@ Evitar múltiplas requisições idênticas para carregar a mesma configuração.
 
 Manter o padrão visual atual:
 
-- tema claro, com a mesma paleta do cardápio online (fundo #F4F5F7, cards
-  brancos); garçom e superadmin seguem no tema escuro;
+- tema claro (seção 19): páginas em #F5F4F7 e cards brancos, a mesma família
+  de cores do cardápio online; o garçom também é claro; só o superadmin segue
+  no tema escuro;
 - cores por variáveis CSS de `src/css/global.css` (`--cor-texto-fraco`,
-  `--cor-borda`, `--cor-campo` etc.), nunca cinzas fixos;
-- destaque amarelo;
+  `--cor-borda`, `--cor-campo`, `--admin-*` etc.), nunca cinzas fixos;
+- destaque na cor de marca do estabelecimento (`--cor-principal`, padrão
+  amarelo #FFC107);
 - bordas discretas;
 - botões arredondados;
 - texto escuro sobre fundo claro;
