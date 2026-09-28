@@ -874,7 +874,7 @@ Este projeto inclui `.claude/settings.json` (versionado, compartilhado pelo time
 
 ## Sempre bloqueados (`deny`)
 
-- leitura ou edição direta do `.env` real (use `.env.example`)
+- leitura ou edição direta do `.env` real (use `env.example`)
 - `git add` do `.env` real
 
 Ajustes recomendados assim que os detalhes reais do projeto forem confirmados:

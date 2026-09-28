@@ -2,6 +2,7 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { criarSegredoJwtTemporario } from './security.js';
+import { normalizarHostsSuperadmin } from './tenant.js';
 
 const pastaProjeto = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const producao = process.env.NODE_ENV === 'production';
@@ -38,6 +39,8 @@ export const config = {
   tenantDesenvolvimento: process.env.TENANT_DESENVOLVIMENTO || (!producao ? 'estabelecimento-padrao' : ''),
   jwtSecret: jwtSecretInformado || criarSegredoJwtTemporario(),
   corsOrigins: listaAmbiente(process.env.CORS_ORIGINS),
+  // null = sem restrição (dev e localhost); lista = só esses hosts atendem /api/superadmin/*.
+  superadminHosts: normalizarHostsSuperadmin(process.env.SUPERADMIN_HOSTS),
   mysql: {
     host: process.env.DB_HOST || '127.0.0.1',
     port: Number(process.env.DB_PORT) || 3306,

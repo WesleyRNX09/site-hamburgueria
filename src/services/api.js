@@ -1,3 +1,9 @@
+import {
+  CODIGO_ESTABELECIMENTO_INDISPONIVEL,
+  MENSAGEM_ESTABELECIMENTO_INDISPONIVEL,
+  motivoParaEncerrarSessao
+} from '../utils/sessaoDerrubada';
+
 const CHAVE_SESSAO_ADMIN = 'hamburgueria_admin_sessao';
 const CHAVE_SESSAO_GARCOM = 'hamburgueria_garcom_sessao';
 const CHAVE_SESSAO_SUPERADMIN = 'hamburgueria_superadmin_sessao';
@@ -13,11 +19,11 @@ export class ErroApi extends Error {
 
 /* Loja suspensa ou arquivada: o servidor responde 403 com este código, sem
    dizer qual dos dois nem o motivo. As telas de login trocam o erro por esta
-   mensagem fixa. */
-export const MENSAGEM_ESTABELECIMENTO_INDISPONIVEL = 'Este estabelecimento está temporariamente indisponível.';
+   mensagem fixa (definida em src/utils/sessaoDerrubada.js). */
+export { MENSAGEM_ESTABELECIMENTO_INDISPONIVEL };
 
 export function estabelecimentoIndisponivel(erro) {
-  return erro instanceof ErroApi && erro.codigo === 'estabelecimento_indisponivel';
+  return erro instanceof ErroApi && erro.codigo === CODIGO_ESTABELECIMENTO_INDISPONIVEL;
 }
 
 export function mensagemDeErroDeAcesso(erro) {
@@ -47,13 +53,13 @@ export function aoExpirarSessao(ouvinte) {
   return () => { ouvintesSessaoExpirada.delete(ouvinte); };
 }
 
-function expirarSessao(perfil) {
+function expirarSessao(perfil, mensagem = null) {
   try {
     sessionStorage.removeItem(CHAVES_SESSAO[perfil]);
   } catch {
     /* sessionStorage indisponível: a sessão em memória ainda é derrubada. */
   }
-  for (const ouvinte of ouvintesSessaoExpirada) ouvinte(perfil);
+  for (const ouvinte of ouvintesSessaoExpirada) ouvinte(perfil, mensagem);
 }
 
 /*
@@ -108,7 +114,14 @@ async function requisicao(caminho, { metodo = 'GET', dados, autenticacao } = {})
   }
 
   const conteudo = await resposta.json().catch(() => ({}));
-  if (resposta.status === 401 && enviouSessao) expirarSessao(autenticacao);
+  // 401, ou loja que ficou indisponível com o painel aberto: a sessão local cai
+  // e o guard leva ao login com a mensagem certa.
+  const motivoEncerramento = motivoParaEncerrarSessao({
+    perfil: enviouSessao ? autenticacao : null,
+    status: resposta.status,
+    codigo: typeof conteudo.codigo === 'string' ? conteudo.codigo : null
+  });
+  if (motivoEncerramento) expirarSessao(autenticacao, motivoEncerramento);
   if (!resposta.ok) {
     const erro = new ErroApi(
       conteudo.erro || 'Não foi possível concluir a operação.',

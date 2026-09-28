@@ -59,6 +59,12 @@ import {
 } from './tenant.js';
 import { montarRecibo } from '../agente-impressao/escpos.js';
 import { CHAVES_PERMISSOES } from '../src/utils/permissoes.js';
+import {
+  CODIGO_ESTABELECIMENTO_INDISPONIVEL,
+  MENSAGEM_ESTABELECIMENTO_INDISPONIVEL,
+  MENSAGEM_SESSAO_EXPIRADA,
+  motivoParaEncerrarSessao
+} from '../src/utils/sessaoDerrubada.js';
 
 const JWT_SECRET_TESTE = 'segredo-jwt-exclusivo-para-testes-com-mais-de-32-bytes';
 
@@ -1492,7 +1498,9 @@ test('superadministrador troca a própria senha e derruba as sessões antigas', 
       comandos.some(({ sql }) => sql.includes('DELETE FROM sessoes_superadmin WHERE superadministrador_id')),
       true
     );
-    const auditoria = comandos.find(({ sql }) => sql.includes('INSERT INTO auditoria_superadmin'));
+    // O login do teste também é auditado (superadmin.login); aqui interessa a troca.
+    const auditoria = comandos.find(({ sql, parametros }) => sql.includes('INSERT INTO auditoria_superadmin')
+      && !String(parametros[2]).startsWith('superadmin.'));
     assert.equal(auditoria.parametros[2], 'superadministrador.senha_alterada');
     assert.equal(JSON.stringify(auditoria.parametros).includes(SENHA_NOVA), false);
     assert.equal(comandos.some(({ sql }) => sql === 'COMMIT'), true);
@@ -1939,7 +1947,9 @@ test('superadmin reseta a senha do admin somente dentro do estabelecimento infor
     // E nada foi escrito: nem UPDATE, nem sessão derrubada, nem auditoria.
     assert.equal(comandos.some(({ sql }) => sql.includes('UPDATE administradores')), false);
     assert.equal(comandos.some(({ sql }) => sql.includes('DELETE FROM sessoes_admin')), false);
-    assert.equal(comandos.some(({ sql }) => sql.includes('INSERT INTO auditoria_superadmin')), false);
+    // Só a auditoria de acesso (o login do próprio teste) pode existir.
+    assert.equal(comandos.some(({ sql, parametros }) => sql.includes('INSERT INTO auditoria_superadmin')
+      && !String(parametros[2]).startsWith('superadmin.')), false);
     assert.equal(administradores.get(200).senha_hash, hashOriginalB);
     assert.equal(verificarSenha('senha-original-loja-b', administradores.get(200).senha_hash), true);
     assert.equal(verificarSenha(NOVA_SENHA, administradores.get(200).senha_hash), false);
@@ -1973,7 +1983,9 @@ test('superadmin reseta a senha do admin somente dentro do estabelecimento infor
     const remocao = comandos.find(({ sql }) => sql.includes('DELETE FROM sessoes_admin'));
     assert.deepEqual(remocao.parametros, [100, 10]);
 
-    const auditoria = comandos.find(({ sql }) => sql.includes('INSERT INTO auditoria_superadmin'));
+    // Fora a auditoria do login do próprio teste, o único evento é o reset.
+    const auditoria = comandos.find(({ sql, parametros }) => sql.includes('INSERT INTO auditoria_superadmin')
+      && !String(parametros[2]).startsWith('superadmin.'));
     assert.equal(auditoria.parametros[0], 1);
     assert.equal(auditoria.parametros[1], 10);
     assert.equal(auditoria.parametros[2], 'administrador.senha_redefinida');
@@ -3186,6 +3198,138 @@ test('listagem informa a última exportação da loja arquivada e se ela é rece
   // Só a exportação desta loja, e só para loja arquivada.
   assert.match(consulta.sql, /CASE WHEN e\.status = 'arquivado'/);
   assert.match(consulta.sql, /ae\.id_estabelecimento = e\.id_estabelecimento\s+AND ae\.acao = 'estabelecimento\.exportado'/);
+});
+
+/* Banco do login do superadmin: uma conta ativa, sessões e a auditoria gravada.
+   `auditoriaQuebrada` simula falha só na gravação da auditoria. */
+function bancoAcessoSuperadmin({ auditoriaQuebrada = false } = {}) {
+  const sessoes = new Set();
+  const auditoria = [];
+  const conta = {
+    id: 1, nome: 'Super Teste', usuario: 'superteste', email: 'super@teste.local',
+    senha_hash: criarHashSenha('senha-global-segura')
+  };
+  return {
+    auditoria,
+    banco: {
+      async execute(sql, parametros = []) {
+        if (sql.includes('FROM superadministradores') && sql.includes('senha_hash')) {
+          const informado = String(parametros[0]).toLowerCase();
+          return [[conta.usuario, conta.email].includes(informado) ? [{ ...conta }] : []];
+        }
+        if (sql.includes('INSERT INTO sessoes_superadmin')) {
+          sessoes.add(parametros[0]);
+          return [{ affectedRows: 1 }];
+        }
+        if (sql.includes('DELETE FROM sessoes_superadmin WHERE token_hash')) {
+          sessoes.delete(parametros[0]);
+          return [{ affectedRows: 1 }];
+        }
+        if (sql.includes('DELETE FROM sessoes_superadmin')) return [{ affectedRows: 0 }];
+        if (sql.includes('FROM sessoes_superadmin ss')) {
+          return [sessoes.has(parametros[0]) ? [{ id: 1, nome: conta.nome, usuario: conta.usuario, email: conta.email }] : []];
+        }
+        if (sql.includes('INSERT INTO auditoria_superadmin')) {
+          if (auditoriaQuebrada) throw new Error('Falha simulada na auditoria.');
+          auditoria.push({ parametros, texto: JSON.stringify(parametros) });
+          return [{ affectedRows: 1 }];
+        }
+        throw new Error(`Consulta inesperada no teste: ${sql}`);
+      }
+    }
+  };
+}
+
+async function servidorAcessoSuperadmin(banco) {
+  const servidor = criarServidor({ banco, pastaUploads: tmpdir(), tenantDesenvolvimento: '', jwtSecret: JWT_SECRET_TESTE });
+  await aguardarServidor(servidor, 0);
+  const url = `http://127.0.0.1:${servidor.address().port}/api/superadmin`;
+  return {
+    servidor,
+    entrar: (usuario, senha) => fetch(`${url}/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usuario, senha })
+    }),
+    sair: (token) => fetch(`${url}/sessao`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+  };
+}
+
+test('login, logout e tentativa recusada do superadmin ficam na auditoria, sem senha nem usuário digitado', async () => {
+  const { banco, auditoria } = bancoAcessoSuperadmin();
+  const { servidor, entrar, sair } = await servidorAcessoSuperadmin(banco);
+  try {
+    // Senha errada numa conta que existe: id interno gravado, nada digitado.
+    const senhaErrada = 'senha-errada-digitada-123';
+    assert.equal((await entrar('superteste', senhaErrada)).status, 401);
+    // Usuário que não existe: mesma resposta, id nulo.
+    const usuarioInexistente = 'usuario-inventado-xyz';
+    const recusa = await entrar(usuarioInexistente, 'qualquer-senha-456');
+    assert.equal(recusa.status, 401);
+    assert.deepEqual(await recusa.json(), { erro: 'Usuário ou senha incorretos.' });
+
+    const login = await entrar('SuperTeste', 'senha-global-segura');
+    assert.equal(login.status, 200);
+    const { token } = await login.json();
+    assert.equal((await sair(token)).status, 200);
+
+    assert.deepEqual(auditoria.map(({ parametros }) => parametros.slice(0, 3)), [
+      [1, null, 'superadmin.login_falhou'],
+      [null, null, 'superadmin.login_falhou'],
+      [1, null, 'superadmin.login'],
+      [1, null, 'superadmin.logout']
+    ]);
+    assert.deepEqual(JSON.parse(auditoria[0].parametros[3]), { motivo: 'credenciais' });
+    assert.deepEqual(JSON.parse(auditoria[1].parametros[3]), { motivo: 'credenciais' });
+    const tudo = auditoria.map(({ texto }) => texto).join(' ').toLowerCase();
+    for (const proibido of [senhaErrada, 'qualquer-senha-456', 'senha-global-segura', usuarioInexistente, 'superteste']) {
+      assert.equal(tudo.includes(proibido), false, `a auditoria não pode conter "${proibido}"`);
+    }
+
+    // Logout sem token não grava nada.
+    const antes = auditoria.length;
+    assert.equal((await fetch(`http://127.0.0.1:${servidor.address().port}/api/superadmin/sessao`, { method: 'DELETE' })).status, 200);
+    assert.equal(auditoria.length, antes);
+  } finally {
+    await fecharServidor(servidor);
+  }
+});
+
+test('falha ao gravar a auditoria de acesso não impede login, logout nem muda a recusa', async () => {
+  const { banco, auditoria } = bancoAcessoSuperadmin({ auditoriaQuebrada: true });
+  const { servidor, entrar, sair } = await servidorAcessoSuperadmin(banco);
+  try {
+    assert.equal((await entrar('superteste', 'senha-errada-digitada-123')).status, 401);
+    const login = await entrar('superteste', 'senha-global-segura');
+    assert.equal(login.status, 200);
+    const { token } = await login.json();
+    assert.equal((await sair(token)).status, 200);
+    assert.equal(auditoria.length, 0);
+  } finally {
+    await fecharServidor(servidor);
+  }
+});
+
+test('painel aberto com a loja indisponível derruba a sessão do admin e do garçom com a mensagem genérica', () => {
+  const indisponivel = { status: 403, codigo: 'estabelecimento_indisponivel' };
+  for (const perfil of ['admin', 'garcom']) {
+    assert.equal(
+      motivoParaEncerrarSessao({ perfil, ...indisponivel }),
+      'Este estabelecimento está temporariamente indisponível.',
+      perfil
+    );
+    // Sessão que não vale mais continua caindo com a mensagem de sempre.
+    assert.equal(motivoParaEncerrarSessao({ perfil, status: 401 }), MENSAGEM_SESSAO_EXPIRADA, perfil);
+    // Outros 403 (permissão, senha temporária) não derrubam a sessão.
+    assert.equal(motivoParaEncerrarSessao({ perfil, status: 403, codigo: 'senha_temporaria_pendente' }), null, perfil);
+    assert.equal(motivoParaEncerrarSessao({ perfil, status: 403, codigo: null }), null, perfil);
+    assert.equal(motivoParaEncerrarSessao({ perfil, status: 500, codigo: 'estabelecimento_indisponivel' }), null, perfil);
+  }
+  // Chamada sem sessão (login, cardápio público) nunca derruba nada.
+  assert.equal(motivoParaEncerrarSessao({ perfil: null, ...indisponivel }), null);
+  assert.equal(motivoParaEncerrarSessao({ perfil: null, status: 401 }), null);
+  // O superadmin não pertence a loja nenhuma: o código não se aplica a ele.
+  assert.equal(motivoParaEncerrarSessao({ perfil: 'superadmin', ...indisponivel }), null);
+  assert.equal(MENSAGEM_ESTABELECIMENTO_INDISPONIVEL, 'Este estabelecimento está temporariamente indisponível.');
+  assert.equal(CODIGO_ESTABELECIMENTO_INDISPONIVEL, 'estabelecimento_indisponivel');
 });
 
 const executarIntegracao = process.env.RUN_MYSQL_TESTS === '1';

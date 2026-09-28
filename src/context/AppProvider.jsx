@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { configuracaoInicial } from '../data/initialData';
 import { estaAbertoNoHorario } from '../utils/horarios';
 import { possuiPermissao } from '../utils/permissoes';
+import { MENSAGEM_SESSAO_EXPIRADA } from '../utils/sessaoDerrubada';
 import { aplicarTema, areaDoTema, normalizarConfiguracaoPublica, usaTemaClaro } from '../utils/theme';
 import {
   acompanharPedidoApi,
@@ -314,7 +315,7 @@ export function AppProvider({ children }) {
     acesso na hora, para o guard de rota levar ao login com o motivo à vista,
     em vez de deixar o erro preso na tela com um token que já não vale.
   */
-  useEffect(() => aoExpirarSessao((perfil) => {
+  useEffect(() => aoExpirarSessao((perfil, mensagem) => {
     if (perfil === 'admin') {
       setAdminSessao(null);
       setSessaoAdminCarregando(false);
@@ -324,7 +325,9 @@ export function AppProvider({ children }) {
     } else {
       return;
     }
-    setSessaoExpirada('Sua sessão expirou. Entre novamente para continuar.');
+    // A mensagem vem de src/utils/sessaoDerrubada.js: sessão expirada ou loja
+    // indisponível (suspensa/arquivada com o painel aberto), sem o motivo.
+    setSessaoExpirada(mensagem || MENSAGEM_SESSAO_EXPIRADA);
   }), []);
 
   /*

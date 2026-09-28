@@ -90,6 +90,15 @@ banco antes de servir. Novos arquivos são sempre gravados na estrutura isolada.
   Os testes locais rodam só em MySQL, então `server/multitenant-security.test.js`
   recusa automaticamente sintaxe de um motor só nas migrations — trate uma falha
   desse teste como bloqueio de release, não como implicância.
+- **Defina `SUPERADMIN_HOSTS` em produção** (sem migration). Lista separada
+  por vírgulas com o host do painel global (ex.:
+  `SUPERADMIN_HOSTS=pedidos.exemplo.com.br`). Fora desses hosts,
+  `/api/superadmin/*` responde `404`, inclusive o login. Sem a variável, o
+  comportamento é o de antes (responde em qualquer host). Depois do deploy,
+  confira que o login do superadmin funciona no host da lista e dá 404 no
+  endereço de uma loja. Login, saída e tentativa recusada do superadmin passam
+  a ser gravados na auditoria (`superadmin.login`, `superadmin.logout`,
+  `superadmin.login_falhou`).
 - **Exclusão definitiva de loja arquivada** (sem migration): só 60 dias depois
   do arquivamento e com o nome fantasia exato digitado. É **irreversível** e
   apaga também o histórico do painel daquela loja (`auditoria_admin`, FK

@@ -95,6 +95,8 @@ SUPERADMIN_EMAIL=superadmin@exemplo.com
 SUPERADMIN_NAME=Superadministrador
 SUPERADMIN_PASSWORD=
 SYNC_SUPERADMIN_CREDENTIALS=0
+# Obrigatório em produção: hosts onde a API do superadmin responde.
+SUPERADMIN_HOSTS=
 
 # Dados demonstrativos — mantenha desativados em produção
 SEED_DEMO_DATA=0
@@ -304,6 +306,18 @@ Na infraestrutura:
 3. preserve o cabeçalho `Host` no proxy;
 4. encaminhe todas as rotas, inclusive `/uploads/`, ao Node;
 5. valide dois slugs diferentes antes de liberar produção.
+
+**Configure `SUPERADMIN_HOSTS` em produção.** É a lista, separada por
+vírgulas, dos hosts onde a API do superadmin (`/api/superadmin/*`) responde —
+só o nome do host, sem `https://` nem caminho; a porta é ignorada. Exemplo:
+`SUPERADMIN_HOSTS=pedidos.exemplo.com.br`. Fora da lista, toda rota do
+superadmin, inclusive o login, responde o mesmo `404` de rota inexistente, sem
+consultar o banco. Vazia ou ausente, a API responde em qualquer host (útil no
+desenvolvimento local, mas expõe o login do painel global nos domínios das
+lojas). Uma lista preenchida só com valores inválidos bloqueia tudo. Todo
+login, saída e tentativa recusada do superadmin fica na auditoria
+(`superadmin.login`, `superadmin.logout`, `superadmin.login_falhou`), sem senha
+nem o usuário digitado.
 
 O domínio principal sem subdomínio pode hospedar o acesso do
 superadministrador, mas as rotas públicas de uma loja exigem um tenant válido.

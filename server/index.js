@@ -20,6 +20,7 @@ async function iniciar() {
     publicSiteUrl: config.publicSiteUrl,
     dominioPrincipal: config.dominioPrincipal,
     tenantDesenvolvimento: config.tenantDesenvolvimento,
+    superadminHosts: config.superadminHosts,
     jwtSecret: config.jwtSecret
   });
 

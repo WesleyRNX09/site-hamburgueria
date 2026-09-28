@@ -122,9 +122,14 @@ import {
   opcoesSuperadmin,
   reativarEstabelecimento,
   redefinirSenhaAdministrador,
+  registrarAuditoria,
   suspenderEstabelecimento
 } from './superadmin.js';
-import { CODIGO_ESTABELECIMENTO_INDISPONIVEL, resolverEstabelecimento } from './tenant.js';
+import {
+  CODIGO_ESTABELECIMENTO_INDISPONIVEL,
+  hostPermitidoSuperadmin,
+  resolverEstabelecimento
+} from './tenant.js';
 
 const LIMITE_CORPO = 2 * 1024 * 1024;
 const DURACAO_SESSAO_ADMIN_MS = 12 * 60 * 60 * 1000;
@@ -584,6 +589,20 @@ async function rotaPublica({ banco, requisicao, resposta, caminho, url, limitado
   return false;
 }
 
+/*
+  Auditoria de acesso ao painel global (login, logout, tentativa recusada).
+  Nunca leva senha nem o texto digitado no campo de usuário. Se a gravação
+  falhar, o erro vai só para o log: auditoria não impede ninguém de entrar ou
+  sair.
+*/
+async function auditarAcessoSuperadmin(banco, superadministradorId, acao, detalhes = {}) {
+  try {
+    await registrarAuditoria(banco, superadministradorId ?? null, null, acao, detalhes);
+  } catch (erro) {
+    registrarErro(erro, { operacao: acao });
+  }
+}
+
 async function rotaSuperadmin({
   banco,
   pastaUploads,
@@ -611,10 +630,19 @@ async function rotaSuperadmin({
     const superadministrador = linhas[0];
     if (!superadministrador || !verificarSenha(String(dados.senha ?? ''), superadministrador.senha_hash)) {
       chaves.forEach((chave) => limitadorSuperadmin.registrarFalha(chave));
+      // O id só entra quando a conta existe (dado interno; a resposta é a
+      // mesma nos dois casos). Nada do que foi digitado é gravado.
+      await auditarAcessoSuperadmin(
+        banco,
+        superadministrador ? Number(superadministrador.id) : null,
+        'superadmin.login_falhou',
+        { motivo: 'credenciais' }
+      );
       throw new ErroHttp(401, 'Usuário ou senha incorretos.');
     }
     chaves.forEach((chave) => limitadorSuperadmin.limpar(chave));
     const sessao = await criarSessaoSuperadministrador(banco, jwtSecret, Number(superadministrador.id));
+    await auditarAcessoSuperadmin(banco, Number(superadministrador.id), 'superadmin.login');
     responderJson(resposta, 200, {
       token: sessao.token,
       expiraEm: sessao.expiraEm,
@@ -639,11 +667,12 @@ async function rotaSuperadmin({
   if (requisicao.method === 'DELETE' && caminho === '/api/superadmin/sessao') {
     const token = tokenBearer(requisicao);
     if (token) {
-      await obterSuperadministrador(banco, requisicao, jwtSecret);
+      const quemSai = await obterSuperadministrador(banco, requisicao, jwtSecret);
       await banco.execute(
         'DELETE FROM sessoes_superadmin WHERE token_hash = ?',
         [criarHashToken(token)]
       );
+      await auditarAcessoSuperadmin(banco, quemSai.id, 'superadmin.logout');
     }
     responderJson(resposta, 200, { sucesso: true });
     return true;
@@ -1957,7 +1986,7 @@ async function rotaImpressao({ banco, requisicao, resposta, caminho, limitadorIm
 }
 
 async function rotaApi(parametros) {
-  const { banco, requisicao, resposta, dominioPrincipal, tenantDesenvolvimento } = parametros;
+  const { banco, requisicao, resposta, dominioPrincipal, tenantDesenvolvimento, superadminHosts } = parametros;
   if (requisicao.method === 'OPTIONS') {
     cabecalhosSeguranca(resposta);
     resposta.writeHead(204, { Allow: 'GET, POST, PUT, PATCH, DELETE, OPTIONS' });
@@ -1965,6 +1994,9 @@ async function rotaApi(parametros) {
     return true;
   }
   if (parametros.caminho.startsWith('/api/superadmin/')) {
+    // Com SUPERADMIN_HOSTS definida, fora desses hosts a API global some: o
+    // mesmo 404 de rota inexistente, antes de login, sessão ou banco.
+    if (!hostPermitidoSuperadmin(requisicao.headers.host, superadminHosts)) return false;
     return rotaSuperadmin(parametros);
   }
   if (parametros.caminho.startsWith('/api/impressao/')) {
@@ -2274,6 +2306,7 @@ export function criarServidor({
   publicSiteUrl = '',
   dominioPrincipal = '',
   tenantDesenvolvimento = 'estabelecimento-padrao',
+  superadminHosts = null,
   jwtSecret = criarSegredoJwtTemporario()
 }) {
   const limitadorAdmin = criarLimitadorTentativas({ limite: 10 });
@@ -2315,6 +2348,7 @@ export function criarServidor({
           limitadorImpressao,
           dominioPrincipal,
           tenantDesenvolvimento,
+          superadminHosts,
           jwtSecret
         });
         if (!atendida) responderJson(resposta, 404, { erro: 'Rota da API não encontrada.' });

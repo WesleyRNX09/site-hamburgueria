@@ -47,6 +47,37 @@ export function extrairHostname(cabecalhoHost) {
   return informado.split(':')[0];
 }
 
+/*
+  SUPERADMIN_HOSTS: hosts onde a API do superadmin responde. Mesma normalização
+  do host da requisição (minúsculas, sem porta). Não definida ou em branco →
+  null (sem restrição). Definida → lista; entrada inválida é descartada, e uma
+  lista que sobra vazia bloqueia tudo em vez de liberar.
+*/
+export function normalizarHostsSuperadmin(valor) {
+  if (valor === undefined || valor === null || !String(valor).trim()) return null;
+  const hosts = [];
+  for (const item of String(valor).split(',')) {
+    const informado = item.trim();
+    if (!informado) continue;
+    try {
+      hosts.push(extrairHostname(informado));
+    } catch {
+      // Entrada inválida (com esquema, caminho ou espaço) não libera nada.
+    }
+  }
+  return Object.freeze([...new Set(hosts)]);
+}
+
+/* true se a API do superadmin pode responder neste Host. */
+export function hostPermitidoSuperadmin(cabecalhoHost, hostsPermitidos) {
+  if (!hostsPermitidos) return true;
+  try {
+    return hostsPermitidos.includes(extrairHostname(cabecalhoHost));
+  } catch {
+    return false;
+  }
+}
+
 export function identificarEstabelecimentoPeloHost(hostname, {
   dominioPrincipal = '',
   tenantDesenvolvimento = ''

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { request as requisicaoHttp } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +35,8 @@ import { criarEstabelecimentoGerencial, redefinirSenhaAdministrador } from './su
 import {
   CODIGO_ESTABELECIMENTO_INDISPONIVEL,
   estabelecimentoLiberado,
+  hostPermitidoSuperadmin,
+  normalizarHostsSuperadmin,
   resolverEstabelecimento
 } from './tenant.js';
 import { CHAVES_PERMISSOES, PERMISSOES_PADRAO_ADMINISTRADOR } from '../src/utils/permissoes.js';
@@ -1320,17 +1323,21 @@ test('suspender e arquivar a loja A derruba só as sessões da A, não mexe na B
     assert.equal(lojas.get(11).status, 'suspenso');
     assert.deepEqual(sessoesAdmin.map((item) => item.id_estabelecimento), [22]);
 
+    // O login do superadmin fica na auditoria sem loja; as ações, na loja A.
+    assert.deepEqual(auditoria.filter((registro) => registro.acao === 'superadmin.login')
+      .map((registro) => registro.idEstabelecimento), [null]);
+    const acoesDaLoja = auditoria.filter((registro) => !registro.acao.startsWith('superadmin.'));
     // Toda ação ficou na auditoria da própria loja A, com o autor.
-    assert.equal(auditoria.every((registro) => registro.idEstabelecimento === 11), true);
-    assert.equal(auditoria.every((registro) => registro.superadministradorId === 1), true);
-    assert.deepEqual(auditoria.map((registro) => registro.acao), [
+    assert.equal(acoesDaLoja.every((registro) => registro.idEstabelecimento === 11), true);
+    assert.equal(acoesDaLoja.every((registro) => registro.superadministradorId === 1), true);
+    assert.deepEqual(acoesDaLoja.map((registro) => registro.acao), [
       'estabelecimento.suspenso',
       'estabelecimento.reativado',
       'estabelecimento.suspenso',
       'estabelecimento.arquivado',
       'estabelecimento.desarquivado'
     ]);
-    assert.deepEqual(auditoria[0].detalhes.sessoesEncerradas, { administradores: 1, garcons: 1 });
+    assert.deepEqual(acoesDaLoja[0].detalhes.sessoesEncerradas, { administradores: 1, garcons: 1 });
   } finally {
     await fechar();
   }
@@ -1367,13 +1374,15 @@ test('só o superadministrador suspende, reativa, arquiva ou desarquiva um estab
     assert.equal(semToken.status, 401);
 
     // Nada foi gravado: status, sessões e auditoria como antes.
-    assert.equal(escritas.some(({ sql }) => /estabelecimentos|sessoes_admin|sessoes_garcom|auditoria/.test(sql)
-      && !/sessoes_superadmin/.test(sql)), false);
+    // Fora a sessão e a auditoria do login do próprio superadmin, nada escrito.
+    assert.equal(escritas.some(({ sql, parametros }) => /estabelecimentos|sessoes_admin|sessoes_garcom|auditoria/.test(sql)
+      && !/sessoes_superadmin/.test(sql)
+      && !(sql.includes('INSERT INTO auditoria_superadmin') && String(parametros[2]).startsWith('superadmin.'))), false);
     assert.equal(lojas.get(11).status, 'ativo');
     assert.equal(lojas.get(22).status, 'ativo');
     assert.equal(sessoesAdmin.length, 2);
     assert.equal(sessoesGarcom.length, 2);
-    assert.equal(auditoria.length, 0);
+    assert.equal(auditoria.filter((registro) => !registro.acao.startsWith('superadmin.')).length, 0);
 
     // O mesmo pedido com o token global passa.
     const suspensao = await fetch(`${urlA}/api/superadmin/estabelecimentos/22/suspender`, {
@@ -2060,5 +2069,127 @@ test('sem exportação recente da própria loja a exclusão responde 409 com có
     assert.deepEqual(memoria.linhasDaLoja(22), lojaBAntes);
   } finally {
     await ambiente.encerrar();
+  }
+});
+
+/* Pedido HTTP com Host escolhido (o fetch do Node ignora esse cabeçalho). */
+function pedirComHost(porta, host, caminho, { metodo = 'GET', corpo, token } = {}) {
+  return new Promise((resolver, rejeitar) => {
+    const texto = corpo === undefined ? undefined : JSON.stringify(corpo);
+    const pedido = requisicaoHttp({
+      host: '127.0.0.1',
+      port: porta,
+      path: caminho,
+      method: metodo,
+      headers: {
+        Host: host,
+        ...(texto ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(texto) } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    }, (resposta) => {
+      let dados = '';
+      resposta.setEncoding('utf8');
+      resposta.on('data', (parte) => { dados += parte; });
+      resposta.on('end', () => resolver({ status: resposta.statusCode, corpo: dados ? JSON.parse(dados) : null }));
+    });
+    pedido.on('error', rejeitar);
+    if (texto) pedido.write(texto);
+    pedido.end();
+  });
+}
+
+function bancoHostSuperadmin() {
+  const consultas = [];
+  return {
+    consultas,
+    banco: {
+      async execute(sql, parametros = []) {
+        consultas.push(sql);
+        if (sql.includes('FROM superadministradores') && sql.includes('senha_hash')) {
+          return [[{ id: 1, nome: 'Super', usuario: 'super', email: 'super@teste.local', senha_hash: criarHashSenha('senha-global-segura') }]];
+        }
+        if (sql.includes('sessoes_superadmin') || sql.includes('INSERT INTO auditoria_superadmin')) return [{ affectedRows: 1 }];
+        if (sql.includes('FROM estabelecimentos AS e')) {
+          return [[linhaTenant(11, 'loja-a')].filter((linha) => linha.slug === parametros[0])];
+        }
+        throw new Error(`Consulta inesperada no teste: ${sql}`);
+      }
+    }
+  };
+}
+
+test('com SUPERADMIN_HOSTS, a API do superadmin só existe nos hosts da lista', async () => {
+  // Normalização: minúsculas, sem porta; entrada inválida não libera nada.
+  assert.equal(normalizarHostsSuperadmin(undefined), null);
+  assert.equal(normalizarHostsSuperadmin('   '), null);
+  assert.deepEqual(normalizarHostsSuperadmin(' ADMIN.plataforma.test:8443 , painel.plataforma.test,,'), ['admin.plataforma.test', 'painel.plataforma.test']);
+  assert.deepEqual(normalizarHostsSuperadmin('https://admin.plataforma.test/, admin plataforma'), []);
+  assert.equal(hostPermitidoSuperadmin('qualquer.coisa', null), true);
+  assert.equal(hostPermitidoSuperadmin('admin.plataforma.test', []), false);
+
+  const { banco, consultas } = bancoHostSuperadmin();
+  const servidor = criarServidor({
+    banco,
+    pastaUploads: resolve(pastaProjeto, 'server/uploads'),
+    dominioPrincipal: 'plataforma.test',
+    tenantDesenvolvimento: '',
+    superadminHosts: normalizarHostsSuperadmin('admin.plataforma.test'),
+    jwtSecret: segredoJwt
+  });
+  const livre = criarServidor({
+    banco,
+    pastaUploads: resolve(pastaProjeto, 'server/uploads'),
+    dominioPrincipal: 'plataforma.test',
+    tenantDesenvolvimento: '',
+    jwtSecret: segredoJwt
+  });
+  try {
+    await Promise.all([aguardarServidor(servidor, 0), aguardarServidor(livre, 0)]);
+    const porta = servidor.address().port;
+    const tokenSuperadmin = criarJwt({ idUsuario: 1, perfil: 'superadministrador', superadministrador: true, duracaoMs: 60_000, segredo: segredoJwt });
+    const rotas = [
+      ['POST', '/api/superadmin/login', { usuario: 'super', senha: 'senha-global-segura' }],
+      ['GET', '/api/superadmin/sessao'],
+      ['DELETE', '/api/superadmin/sessao'],
+      ['GET', '/api/superadmin/estabelecimentos'],
+      ['GET', '/api/superadmin/estabelecimentos/11'],
+      ['GET', '/api/superadmin/auditoria'],
+      ['GET', '/api/superadmin/superadministradores'],
+      ['PUT', '/api/superadmin/senha', {}],
+      ['POST', '/api/superadmin/estabelecimentos/11/suspender', { motivo: 'x' }],
+      ['POST', '/api/superadmin/estabelecimentos/11/exportar'],
+      ['POST', '/api/superadmin/estabelecimentos/11/excluir-definitivamente', { confirmacaoNome: 'x' }],
+      ['GET', '/api/superadmin/rota-que-nao-existe']
+    ];
+
+    // Fora da lista (loja, domínio principal, localhost, sufixo enganoso):
+    // o mesmo 404 de rota inexistente, com ou sem token, sem consultar nada.
+    for (const host of ['loja-a.plataforma.test', 'plataforma.test', '127.0.0.1:3001', 'localhost', 'admin.plataforma.test.golpe.com']) {
+      for (const [metodo, caminho, corpo] of rotas) {
+        const resposta = await pedirComHost(porta, host, caminho, { metodo, corpo, token: tokenSuperadmin });
+        assert.equal(resposta.status, 404, `${host} ${metodo} ${caminho}`);
+        assert.deepEqual(resposta.corpo, { erro: 'Rota da API não encontrada.' }, `${host} ${metodo} ${caminho}`);
+      }
+    }
+    assert.deepEqual(consultas, []);
+
+    // Na lista, com porta e maiúsculas: funciona.
+    const login = await pedirComHost(porta, 'ADMIN.plataforma.test:3001', '/api/superadmin/login', {
+      metodo: 'POST', corpo: { usuario: 'super', senha: 'senha-global-segura' }
+    });
+    assert.equal(login.status, 200);
+    assert.equal(typeof login.corpo.token, 'string');
+
+    // As rotas das lojas continuam iguais, inclusive no host de uma loja.
+    const painelLoja = await pedirComHost(porta, 'loja-a.plataforma.test', '/api/admin/sessao');
+    assert.equal(painelLoja.status, 401);
+
+    // Sem a variável: comportamento de antes, em qualquer host.
+    const semRestricao = await pedirComHost(livre.address().port, 'loja-a.plataforma.test', '/api/superadmin/login', {
+      metodo: 'POST', corpo: { usuario: 'super', senha: 'senha-global-segura' }
+    });
+    assert.equal(semRestricao.status, 200);
+  } finally {
+    await Promise.all([fecharServidor(servidor), fecharServidor(livre)]);
   }
 });
