@@ -94,14 +94,23 @@ banco antes de servir. Novos arquivos são sempre gravados na estrutura isolada.
   do arquivamento e com o nome fantasia exato digitado. É **irreversível** e
   apaga também o histórico do painel daquela loja (`auditoria_admin`, FK
   RESTRICT); fica só o evento `estabelecimento.excluido` na auditoria do
-  superadmin, com os detalhes em JSON. A exportação `.zip` gerada antes da
-  exclusão é entregue só como download da própria resposta: o servidor não
-  guarda cópia, então baixe a exportação separadamente antes de excluir e
-  mantenha o backup do banco em dia. Se a pasta
-  `UPLOADS_PATH/estabelecimentos/{id}/` não puder ser removida depois do
-  commit, o erro vai para o log (`estabelecimento.excluido.limpeza_uploads`),
-  o painel avisa, e a pasta precisa ser apagada à mão. Arquivos antigos no
-  formato `/uploads/{arquivo}` (fora da pasta da loja) não são tocados.
+  superadmin, com os detalhes em JSON. **A exclusão só é liberada se a loja
+  tiver sido exportada nas últimas 24 horas** (evento
+  `estabelecimento.exportado` desta loja, por qualquer superadmin); sem isso a
+  API responde `409` com `codigo: "exportacao_recente_pendente"` e nada é
+  apagado. O sistema só sabe que a exportação foi gerada, não se o `.zip` foi
+  salvo no computador de quem baixou: confira que o arquivo abre antes de
+  excluir. A exportação montada na própria exclusão também é entregue só como
+  download da resposta — o servidor não guarda cópia —, então mantenha o
+  backup do banco em dia. Exportação acima de 4 GiB é recusada com `409`
+  antes de qualquer remoção. Se a pasta `UPLOADS_PATH/estabelecimentos/{id}/`
+  não puder ser removida depois do commit, a exclusão continua valendo: o erro
+  vai para o log (`estabelecimento.excluido.limpeza_uploads`), para a
+  auditoria do superadmin (`estabelecimento.limpeza_disco_falhou`, com o
+  caminho relativo e a mensagem do erro) e para o aviso no painel, e a pasta
+  precisa ser apagada à mão. **Pendência conhecida:** arquivos antigos no
+  formato `/uploads/{arquivo}` (fora da pasta da loja) não são exportados nem
+  apagados.
 - **Assinatura deixou de bloquear.** A partir desta versão só
   `estabelecimentos.status` tira a loja do ar (`suspenso` ou `arquivado`);
   `status_assinatura` e `vencimento_assinatura_em` ficam só informativos. Uma

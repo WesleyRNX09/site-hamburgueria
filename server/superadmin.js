@@ -166,6 +166,28 @@ function dadosNormalizados(dados, atual = {}) {
   };
 }
 
+/*
+  Exportação recente, exigida antes da exclusão definitiva: um evento
+  estabelecimento.exportado DESTA loja nas últimas 24 horas (qualquer
+  superadmin). Regra única, usada pela listagem (para a tela) e pela exclusão
+  (que decide). Fica aqui, e não em exclusaoEstabelecimento.js, porque aquele
+  módulo já importa este — o contrário faria import circular.
+
+  As datas vêm do banco em UTC (o pool fixa o fuso) e são comparadas com o
+  mesmo `agora` da regra dos 60 dias. Uma data no futuro só vale dentro de uma
+  folga pequena de diferença de relógio entre banco e servidor; além disso, não
+  conta como exportação recente.
+*/
+export const HORAS_EXPORTACAO_RECENTE = 24;
+const FOLGA_RELOGIO_MS = 5 * 60 * 1000;
+
+export function exportacaoEhRecente(ultimaExportacaoEm, agora = new Date()) {
+  const ultima = ultimaExportacaoEm ? new Date(ultimaExportacaoEm).getTime() : Number.NaN;
+  if (Number.isNaN(ultima)) return false;
+  const inicioJanela = agora.getTime() - (HORAS_EXPORTACAO_RECENTE * 60 * 60 * 1000);
+  return ultima >= inicioJanela && ultima <= agora.getTime() + FOLGA_RELOGIO_MS;
+}
+
 function dataIso(valor) {
   if (!valor) return null;
   const data = new Date(valor);
@@ -196,7 +218,10 @@ function mapearEstabelecimento(linha) {
     corCard: linha.cor_card ?? CORES_PADRAO.corCard,
     corTexto: linha.cor_texto ?? CORES_PADRAO.corTexto,
     fonte: linha.fonte ?? 'Poppins',
-    totalAdministradores: Number(linha.total_administradores ?? 0)
+    totalAdministradores: Number(linha.total_administradores ?? 0),
+    // Só para a tela; quem decide a exclusão confere de novo, com a linha travada.
+    ultimaExportacaoEm: dataIso(linha.ultima_exportacao_em),
+    exportacaoRecente: exportacaoEhRecente(linha.ultima_exportacao_em)
   };
 }
 
@@ -208,7 +233,12 @@ const SELECAO_ESTABELECIMENTO = `
          ce.cor_principal, ce.cor_secundaria, ce.cor_fundo, ce.cor_card,
          ce.cor_texto, ce.fonte,
          (SELECT COUNT(a.id) FROM administradores a
-          WHERE a.id_estabelecimento = e.id_estabelecimento) AS total_administradores
+          WHERE a.id_estabelecimento = e.id_estabelecimento) AS total_administradores,
+         CASE WHEN e.status = 'arquivado' THEN (
+           SELECT MAX(ae.criado_em) FROM auditoria_superadmin ae
+           WHERE ae.id_estabelecimento = e.id_estabelecimento
+             AND ae.acao = 'estabelecimento.exportado'
+         ) END AS ultima_exportacao_em
   FROM estabelecimentos e
   LEFT JOIN configuracoes_estabelecimento ce
     ON ce.id_estabelecimento = e.id_estabelecimento

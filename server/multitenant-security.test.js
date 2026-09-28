@@ -1855,8 +1855,10 @@ test('administrador criado por outro administrador nasce com senha temporária e
   }
 });
 
-/* Duas lojas completas: A arquivada há 61 dias (a excluir) e B ativa. */
-async function duasLojasParaExclusao() {
+/* Duas lojas completas: A arquivada há 61 dias (a excluir) e B ativa. Por
+   padrão a loja A já foi exportada agora, pelo endpoint real, como a exclusão
+   exige; `exportarAntes: false` monta o cenário sem exportação. */
+async function duasLojasParaExclusao({ exportarAntes = true } = {}) {
   const memoria = criarBancoEmMemoria();
   const agora = Date.now();
   semearLoja(memoria, {
@@ -1883,13 +1885,15 @@ async function duasLojasParaExclusao() {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenUsado}` },
     body: JSON.stringify(corpo)
   });
+  const exportar = (id, tokenUsado = token) => fetch(`${url}/api/superadmin/estabelecimentos/${id}/exportar`, {
+    method: 'POST', headers: { Authorization: `Bearer ${tokenUsado}` }
+  });
+  if (exportarAntes) assert.equal((await exportar(11)).status, 200);
   return {
     memoria,
     pastaUploads,
     excluir,
-    exportar: (id, tokenUsado = token) => fetch(`${url}/api/superadmin/estabelecimentos/${id}/exportar`, {
-      method: 'POST', headers: { Authorization: `Bearer ${tokenUsado}` }
-    }),
+    exportar,
     async encerrar() {
       await fecharServidor(servidor);
       await rm(pastaUploads, { recursive: true, force: true });
@@ -2025,5 +2029,36 @@ test('ordem de remoção, colunas exportadas e travas cruzadas cobrem todo o esq
   for (const chave of chaves) {
     if (chave.colunas.length !== 1 || !ordem.includes(chave.filho) || !ordem.includes(chave.pai)) continue;
     assert.ok(conferidas.has(`${chave.filho}.${chave.colunas[0]}>${chave.pai}`), `${chave.filho}.${chave.colunas[0]} sem trava cruzada`);
+  }
+});
+
+test('sem exportação recente da própria loja a exclusão responde 409 com código e não apaga nada', async () => {
+  const ambiente = await duasLojasParaExclusao({ exportarAntes: false });
+  const { memoria } = ambiente;
+  try {
+    // Exportação recente da loja B não conta para a loja A.
+    memoria.inserir('auditoria_superadmin', {
+      id: 2299, superadministrador_id: 1, id_estabelecimento: 22, acao: 'estabelecimento.exportado',
+      detalhes_json: { arquivo: 'loja-b.zip' }, criado_em: new Date()
+    });
+    const antes = memoria.fotografia();
+    const recusa = await ambiente.excluir(11, { confirmacaoNome: 'Loja A Arquivada' });
+    assert.equal(recusa.status, 409);
+    assert.deepEqual(await recusa.json(), {
+      erro: 'Baixe a exportação dos dados nas últimas 24 horas antes de excluir.',
+      codigo: 'exportacao_recente_pendente'
+    });
+    assert.deepEqual(memoria.fotografia(), antes);
+    assert.equal(memoria.consultas.some(({ sql }) => /^\s*DELETE FROM (?!sessoes_superadmin)/.test(sql)), false);
+    await stat(join(ambiente.pastaUploads, 'estabelecimentos', '11', 'logo-a.png'));
+
+    // Exportando a própria loja A, a exclusão passa — e a loja B fica igual.
+    const lojaBAntes = structuredClone(memoria.linhasDaLoja(22));
+    assert.equal((await ambiente.exportar(11)).status, 200);
+    assert.equal((await ambiente.excluir(11, { confirmacaoNome: 'Loja A Arquivada' })).status, 200);
+    assert.equal(memoria.tabela('estabelecimentos').some((linha) => linha.id_estabelecimento === 11), false);
+    assert.deepEqual(memoria.linhasDaLoja(22), lojaBAntes);
+  } finally {
+    await ambiente.encerrar();
   }
 });

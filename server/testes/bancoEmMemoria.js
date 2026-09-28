@@ -127,6 +127,16 @@ export function criarBancoEmMemoria() {
       return [[{ total }]];
     }
 
+    const ultimaAcao = sql.match(
+      /^\s*SELECT MAX\(criado_em\) AS (\w+)\s+FROM auditoria_superadmin\s+WHERE id_estabelecimento = \? AND acao = '([\w.]+)'\s*$/
+    );
+    if (ultimaAcao) {
+      const datas = tabelas.get('auditoria_superadmin')
+        .filter((linha) => linha.id_estabelecimento === parametros[0] && linha.acao === ultimaAcao[2])
+        .map((linha) => new Date(linha.criado_em).getTime());
+      return [[{ [ultimaAcao[1]]: datas.length ? new Date(Math.max(...datas)) : null }]];
+    }
+
     const selecao = sql.match(/^\s*SELECT ([\s\S]+?)\s+FROM (\w+)\s+WHERE id_estabelecimento = \?(\s+FOR UPDATE)?\s*$/);
     if (selecao) {
       const lista = selecao[1].split(',').map((item) => item.trim());

@@ -5,7 +5,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { executarTransacao } from './database.js';
 import { pastaUploadsEstabelecimento } from './imageStore.js';
 import { registrarErro } from './logger.js';
-import { registrarAuditoria } from './superadmin.js';
+import { exportacaoEhRecente, HORAS_EXPORTACAO_RECENTE, registrarAuditoria } from './superadmin.js';
 import { criarZip } from './zip.js';
 
 /*
@@ -22,6 +22,8 @@ import { criarZip } from './zip.js';
 */
 
 export const DIAS_PARA_EXCLUSAO = 60;
+/* Código do 409 de exclusão sem exportação recente, para o painel reconhecer. */
+export const CODIGO_EXPORTACAO_RECENTE_PENDENTE = 'exportacao_recente_pendente';
 const DIA_MS = 24 * 60 * 60 * 1000;
 
 /*
@@ -200,9 +202,10 @@ export const REFERENCIAS_SEM_TENANT = Object.freeze([
   ['trabalhos_impressao', 'comanda_id', 'comandas']
 ]);
 
-function erroDominio(mensagem, status = 400) {
+function erroDominio(mensagem, status = 400, codigo = null) {
   const erro = new Error(mensagem);
   erro.status = status;
+  if (codigo) erro.codigo = codigo;
   return erro;
 }
 
@@ -303,7 +306,7 @@ function carimboArquivo(data) {
   Monta o .zip com dados.json (todas as linhas da loja, sem senha nem token) e
   a cópia de uploads/estabelecimentos/{id}/. Só lê: nada é gravado nem apagado.
 */
-async function montarExportacao(conexao, estabelecimento, pastaUploads, agora) {
+async function montarExportacao(conexao, estabelecimento, pastaUploads, agora, limiteBytes) {
   const idEstabelecimento = Number(estabelecimento.id_estabelecimento);
   const tabelas = {};
   const linhasPorTabela = {};
@@ -342,10 +345,23 @@ async function montarExportacao(conexao, estabelecimento, pastaUploads, agora) {
       sha256: createHash('sha256').update(conteudo).digest('hex')
     }))
   };
-  const zip = criarZip([
-    { nome: 'dados.json', conteudo: JSON.stringify(dados, null, 2) },
-    ...arquivos.map(({ nome, conteudo }) => ({ nome: `uploads/${nome}`, conteudo }))
-  ], { data: agora });
+  let zip;
+  try {
+    zip = criarZip([
+      { nome: 'dados.json', conteudo: JSON.stringify(dados, null, 2) },
+      ...arquivos.map(({ nome, conteudo }) => ({ nome: `uploads/${nome}`, conteudo }))
+    ], { data: agora, limiteBytes });
+  } catch (erro) {
+    // Acontece antes de qualquer DELETE: a transação volta e nada é apagado.
+    if (erro.limiteExcedido) {
+      throw erroDominio(
+        'A exportação passa do limite de 4 GiB do arquivo .zip. Nada foi apagado. '
+          + 'Reduza as imagens da loja no disco ou faça a exportação manualmente antes de excluir.',
+        409
+      );
+    }
+    throw erro;
+  }
   const slug = String(estabelecimento.slug).replace(/[^a-z0-9-]/g, '') || 'loja';
   return {
     zip,
@@ -366,7 +382,7 @@ export async function exportarEstabelecimentoArquivado(
   banco,
   id,
   superadministradorId,
-  { pastaUploads, agora = new Date() }
+  { pastaUploads, agora = new Date(), limiteExportacaoBytes } = {}
 ) {
   const idEstabelecimento = idValido(id);
   if (!idEstabelecimento) return null;
@@ -374,7 +390,7 @@ export async function exportarEstabelecimentoArquivado(
     const estabelecimento = await travarEstabelecimento(conexao, idEstabelecimento);
     if (!estabelecimento) return null;
     exigirArquivado(estabelecimento, 'exportado');
-    const exportacao = await montarExportacao(conexao, estabelecimento, pastaUploads, agora);
+    const exportacao = await montarExportacao(conexao, estabelecimento, pastaUploads, agora, limiteExportacaoBytes);
     await registrarAuditoria(conexao, superadministradorId, idEstabelecimento, 'estabelecimento.exportado', {
       arquivo: exportacao.nomeArquivo,
       arquivos: exportacao.resumo.arquivos,
@@ -388,9 +404,57 @@ async function removerPastaUploads(pasta) {
   await rm(pasta, { recursive: true, force: true });
 }
 
+/* Última exportação DESTA loja registrada na auditoria (qualquer superadmin). */
+async function buscarUltimaExportacao(conexao, idEstabelecimento) {
+  const [linhas] = await conexao.execute(`
+    SELECT MAX(criado_em) AS ultima_exportacao
+    FROM auditoria_superadmin
+    WHERE id_estabelecimento = ? AND acao = 'estabelecimento.exportado'
+  `, [idEstabelecimento]);
+  return linhas[0]?.ultima_exportacao ?? null;
+}
+
+/* Troca um trecho de texto por outro, sem expressão regular (caminhos têm \ ). */
+function trocarTexto(texto, trecho, substituto) {
+  return trecho ? texto.split(trecho).join(substituto) : texto;
+}
+
+/*
+  Falha ao apagar a pasta de uploads depois do commit: o banco já está limpo,
+  então nada é desfeito. Fica o registro na auditoria do superadmin — com
+  id_estabelecimento nulo, porque a loja não existe mais —, com o caminho
+  relativo e a mensagem do erro sem o caminho absoluto do servidor. Se nem isso
+  for gravado, sobra só o log.
+*/
+async function registrarFalhaLimpeza(banco, superadministradorId, { idEstabelecimento, slug, pastaUploads, pasta, erro }) {
+  const raiz = resolve(pastaUploads);
+  const absoluta = resolve(pasta);
+  const caminhoRelativo = relative(raiz, absoluta).replace(/\\/g, '/');
+  const mensagem = trocarTexto(
+    trocarTexto(String(erro?.message ?? 'Falha desconhecida'), absoluta, caminhoRelativo),
+    raiz,
+    'UPLOADS_PATH'
+  ).slice(0, 500);
+  try {
+    await registrarAuditoria(banco, superadministradorId, null, 'estabelecimento.limpeza_disco_falhou', {
+      idEstabelecimento,
+      slug,
+      caminhoRelativo,
+      codigoErro: typeof erro?.code === 'string' ? erro.code : null,
+      mensagem
+    });
+  } catch (erroAuditoria) {
+    registrarErro(erroAuditoria, {
+      operacao: 'estabelecimento.limpeza_disco_falhou.auditoria',
+      idEstabelecimento
+    });
+  }
+}
+
 /*
   Exclusão definitiva. Ordem, sem exceção:
-    1. trava a linha e valida: arquivado, 60 dias, nome digitado exato;
+    1. trava a linha e valida: arquivado, 60 dias, nome digitado exato e
+       exportação desta loja nas últimas 24 horas;
     2. recusa se outra loja aponta para dados desta;
     3. monta a exportação completa (falhou → nada é apagado);
     4. apaga as tabelas dependentes na ordem de TABELAS_DO_ESTABELECIMENTO;
@@ -398,14 +462,18 @@ async function removerPastaUploads(pasta) {
        detalhes em JSON (o id_estabelecimento dela vira NULL no passo 6);
     6. apaga a linha de estabelecimentos e confirma a transação;
     7. só então remove a pasta de uploads — se falhar, o banco já está limpo e
-       a sobra no disco fica registrada como pendência manual.
+       a sobra no disco fica registrada (log + estabelecimento.limpeza_disco_falhou
+       na auditoria) como pendência manual.
+
+  `limiteExportacaoBytes` e `removerPasta` existem só para os testes (teto
+  menor do .zip e falha simulada na limpeza do disco).
 */
 export async function excluirEstabelecimentoDefinitivamente(
   banco,
   id,
   dados,
   superadministradorId,
-  { pastaUploads, agora = new Date() }
+  { pastaUploads, agora = new Date(), limiteExportacaoBytes, removerPasta = removerPastaUploads } = {}
 ) {
   const idEstabelecimento = idValido(id);
   if (!idEstabelecimento) return null;
@@ -431,9 +499,19 @@ export async function excluirEstabelecimentoDefinitivamente(
     if (confirmacaoNome !== estabelecimento.nome_fantasia) {
       throw erroDominio('O nome digitado não confere com o nome do estabelecimento.');
     }
+    // O servidor não sabe se o download anterior foi salvo; exige ao menos que
+    // alguém tenha gerado a exportação desta loja há pouco.
+    const ultimaExportacao = await buscarUltimaExportacao(conexao, idEstabelecimento);
+    if (!exportacaoEhRecente(ultimaExportacao, agora)) {
+      throw erroDominio(
+        `Baixe a exportação dos dados nas últimas ${HORAS_EXPORTACAO_RECENTE} horas antes de excluir.`,
+        409,
+        CODIGO_EXPORTACAO_RECENTE_PENDENTE
+      );
+    }
 
     await verificarReferenciasCruzadas(conexao, idEstabelecimento);
-    const exportacao = await montarExportacao(conexao, estabelecimento, pastaUploads, agora);
+    const exportacao = await montarExportacao(conexao, estabelecimento, pastaUploads, agora, limiteExportacaoBytes);
 
     const linhasRemovidas = {};
     for (const { tabela } of TABELAS_DO_ESTABELECIMENTO) {
@@ -473,13 +551,20 @@ export async function excluirEstabelecimentoDefinitivamente(
   let limpezaPendente = false;
   const pasta = pastaUploadsEstabelecimento(pastaUploads, idEstabelecimento);
   try {
-    await removerPastaUploads(pasta);
+    await removerPasta(pasta);
   } catch (erro) {
     limpezaPendente = true;
     registrarErro(erro, {
       operacao: 'estabelecimento.excluido.limpeza_uploads',
       idEstabelecimento,
       pasta
+    });
+    await registrarFalhaLimpeza(banco, superadministradorId, {
+      idEstabelecimento,
+      slug: resultado.slug,
+      pastaUploads,
+      pasta,
+      erro
     });
   }
   return { ...resultado.exportacao, limpezaPendente };

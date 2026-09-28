@@ -18,6 +18,7 @@ const ROTULOS_ACAO = {
   'estabelecimento.desarquivado': 'Estabelecimento desarquivado',
   'estabelecimento.exportado': 'Exportação de estabelecimento baixada',
   'estabelecimento.excluido': 'Estabelecimento excluído definitivamente',
+  'estabelecimento.limpeza_disco_falhou': 'Limpeza das imagens no disco falhou (exclusão mantida)',
   'superadministrador.criado': 'Superadministrador criado',
   'superadministrador.ativado': 'Superadministrador reativado',
   'superadministrador.desativado': 'Superadministrador desativado',

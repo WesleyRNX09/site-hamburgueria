@@ -228,7 +228,11 @@ async function requisicaoArquivo(caminho, { dados, autenticacao } = {}) {
   if (!resposta.ok) {
     const conteudo = await resposta.json().catch(() => ({}));
     if (resposta.status === 401) expirarSessao(autenticacao);
-    throw new ErroApi(conteudo.erro || 'Não foi possível concluir a operação.', resposta.status);
+    throw new ErroApi(
+      conteudo.erro || 'Não foi possível concluir a operação.',
+      resposta.status,
+      typeof conteudo.codigo === 'string' ? conteudo.codigo : null
+    );
   }
   const disposicao = resposta.headers.get('Content-Disposition') || '';
   return {

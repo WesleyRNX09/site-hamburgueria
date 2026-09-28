@@ -175,10 +175,31 @@ function diasParaExcluir(arquivadoEm) {
   Exclusão definitiva: irreversível. Pede o nome fantasia exato (não o slug) e
   avisa que a exportação completa é baixada como parte da exclusão.
 */
-function ModalExclusaoDefinitiva({ estabelecimento, processando, onCancelar, onConfirmar }) {
+function dataHora(valor) {
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(valor));
+}
+
+function ModalExclusaoDefinitiva({ estabelecimento, processando, onCancelar, onConfirmar, onExportar }) {
   const [valor, setValor] = useState('');
   const [erro, setErro] = useState('');
-  const podeConfirmar = valor.trim() === estabelecimento.nomeFantasia;
+  const [exportando, setExportando] = useState(false);
+  // Vem do servidor (listagem recarregada depois de cada exportação); a
+  // exclusão confere a regra de novo antes de apagar.
+  const exportacaoRecente = Boolean(estabelecimento.exportacaoRecente);
+  const ultimaExportacao = estabelecimento.ultimaExportacaoEm;
+  const podeConfirmar = exportacaoRecente && valor.trim() === estabelecimento.nomeFantasia;
+
+  async function baixarAgora() {
+    setErro('');
+    setExportando(true);
+    try {
+      await onExportar(estabelecimento);
+    } catch (falha) {
+      setErro(falha.message || 'Não foi possível gerar a exportação.');
+    } finally {
+      setExportando(false);
+    }
+  }
 
   useEffect(() => {
     function aoTeclar(evento) {
@@ -213,6 +234,25 @@ function ModalExclusaoDefinitiva({ estabelecimento, processando, onCancelar, onC
           <p>Serão apagados do banco e do servidor, sem volta: cardápio, pedidos, comandas, pagamentos, equipe, administradores, configurações, imagens enviadas e o histórico de acessos do painel da loja.</p>
           <p>A exportação completa dos dados é gerada antes e <strong>baixada automaticamente</strong> como parte da exclusão. Guarde esse arquivo: ele é a única cópia.</p>
         </div>
+        <div className={exportacaoRecente ? styles.exportacaoOk : styles.exportacaoPendente} role="status">
+          {exportacaoRecente ? (
+            <p>Última exportação desta loja: <strong>{dataHora(ultimaExportacao)}</strong>.</p>
+          ) : (
+            <p>
+              {ultimaExportacao
+                ? `A última exportação desta loja (${dataHora(ultimaExportacao)}) tem mais de 24 horas.`
+                : 'Esta loja ainda não foi exportada.'}
+              {' '}A exclusão fica bloqueada até alguém baixar a exportação dos dados — ela vale por 24 horas.
+            </p>
+          )}
+          <p>O sistema registra que a exportação foi gerada, mas não sabe se o arquivo foi salvo no seu computador. Confirme que o .zip foi salvo e abre corretamente antes de excluir.</p>
+          {!exportacaoRecente && (
+            <button type="button" className={styles.botaoSecundario} disabled={processando || exportando} onClick={baixarAgora}>
+              <Download size={17} />
+              {exportando ? 'Gerando exportação...' : 'Baixar exportação agora'}
+            </button>
+          )}
+        </div>
         <form className={styles.formulario} onSubmit={enviar}>
           <label className={styles.campo}>
             <span>Digite o nome completo <strong>{estabelecimento.nomeFantasia}</strong> para confirmar</span>
@@ -230,7 +270,7 @@ function ModalExclusaoDefinitiva({ estabelecimento, processando, onCancelar, onC
           {erro && <div className={styles.erro} role="alert">{erro}</div>}
           <div className={styles.acoesFormulario}>
             <button type="button" className={styles.botaoSecundario} disabled={processando} onClick={onCancelar}>Cancelar</button>
-            <button type="submit" className={styles.botaoPerigo} disabled={processando || !podeConfirmar}>
+            <button type="submit" className={styles.botaoPerigo} disabled={processando || exportando || !podeConfirmar} title={exportacaoRecente ? undefined : 'Baixe a exportação dos dados nas últimas 24 horas antes de excluir.'}>
               <Trash2 size={17} />
               {processando ? 'Excluindo...' : 'Excluir definitivamente'}
             </button>
@@ -616,6 +656,13 @@ function EstabelecimentosSuperadmin() {
     }
   }
 
+  // Dentro do modal de exclusão: o erro aparece no próprio modal, e a lista
+  // recarregada pelo provider libera (ou não) a exclusão.
+  async function exportarPeloModal(estabelecimento) {
+    const { nomeArquivo } = await exportarEstabelecimento(estabelecimento.id);
+    setMensagem(`Exportação de ${estabelecimento.nomeFantasia} baixada: ${nomeArquivo}.`);
+  }
+
   function abrirExclusao(estabelecimento) {
     setMensagem('');
     setErro('');
@@ -632,7 +679,7 @@ function EstabelecimentosSuperadmin() {
       setMensagem(
         `${estabelecimento.nomeFantasia} foi excluído definitivamente. A exportação foi baixada: ${nomeArquivo}.`
         + (limpezaPendente
-          ? ' A pasta de imagens da loja não pôde ser removida do servidor e precisa de limpeza manual.'
+          ? ' A pasta de imagens da loja não pôde ser removida do servidor e precisa de limpeza manual (registrado na auditoria).'
           : '')
       );
     } finally {
@@ -784,10 +831,13 @@ function EstabelecimentosSuperadmin() {
       {exclusao && (
         <ModalExclusaoDefinitiva
           key={exclusao.id}
-          estabelecimento={exclusao}
+          // Versão mais nova vinda do servidor (recarregada após exportar);
+          // sem ela, a cópia de quando o modal abriu.
+          estabelecimento={estabelecimentos.find((item) => item.id === exclusao.id) ?? exclusao}
           processando={processando}
           onCancelar={fecharExclusao}
           onConfirmar={confirmarExclusao}
+          onExportar={exportarPeloModal}
         />
       )}
 

@@ -243,6 +243,9 @@ export function SuperadminProvider({ children }) {
   async function exportarEstabelecimento(id) {
     const arquivo = await exportarEstabelecimentoSuperadmin(id);
     salvarArquivoBaixado(arquivo);
+    // A liberação da exclusão depende do registro desta exportação no
+    // servidor: a tela recarrega o estado em vez de presumir.
+    await carregarEstabelecimentos(ultimosFiltros.current).catch(() => {});
     return arquivo;
   }
 

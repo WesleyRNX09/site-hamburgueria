@@ -20,6 +20,7 @@ import {
 import { precoParaCentavos } from './catalog.js';
 import { removerImagemLocal, salvarImagemDataUrl } from './imageStore.js';
 import {
+  CODIGO_EXPORTACAO_RECENTE_PENDENTE,
   excluirEstabelecimentoDefinitivamente,
   exportarEstabelecimentoArquivado
 } from './exclusaoEstabelecimento.js';
@@ -148,7 +149,8 @@ const CODIGO_SENHA_TEMPORARIA_PENDENTE = 'senha_temporaria_pendente';
    JSON junto de { erro }. Qualquer outro `codigo` interno fica no servidor. */
 const CODIGOS_ERRO_PUBLICOS = new Set([
   CODIGO_ESTABELECIMENTO_INDISPONIVEL,
-  CODIGO_SENHA_TEMPORARIA_PENDENTE
+  CODIGO_SENHA_TEMPORARIA_PENDENTE,
+  CODIGO_EXPORTACAO_RECENTE_PENDENTE
 ]);
 
 export function criarLimitadorTentativas({ limite = 5, janelaMs = JANELA_TENTATIVAS_LOGIN_MS } = {}) {

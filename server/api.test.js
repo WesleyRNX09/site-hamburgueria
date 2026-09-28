@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { request as requisicaoHttp } from 'node:http';
 import { tmpdir } from 'node:os';
 import { crc32, inflateRawSync } from 'node:zlib';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { after, before, test } from 'node:test';
 
 import mysql from 'mysql2/promise';
@@ -12,8 +12,10 @@ import mysql from 'mysql2/promise';
 import { criarLimitadorTentativas, criarServidor, personalizarIndexHtml } from './app.js';
 import { listarCatalogo, precoParaCentavos } from './catalog.js';
 import {
+  CODIGO_EXPORTACAO_RECENTE_PENDENTE,
   diasParaLiberarExclusao,
   excluirEstabelecimentoDefinitivamente,
+  exportarEstabelecimentoArquivado,
   TABELAS_DO_ESTABELECIMENTO
 } from './exclusaoEstabelecimento.js';
 import { criarBancoEmMemoria, semearLoja } from './testes/bancoEmMemoria.js';
@@ -39,6 +41,7 @@ import { adicionaisSeed, mesasSeed, pedidosSeed, produtosSeed } from './seed.js'
 import { criarHashSenha, criarJwt, TAMANHO_MINIMO_SENHA, verificarJwt, verificarSenha } from './security.js';
 import {
   alternarStatusSuperadministrador,
+  exportacaoEhRecente,
   arquivarEstabelecimento,
   atualizarEstabelecimentoGerencial,
   criarEstabelecimentoGerencial,
@@ -2874,12 +2877,23 @@ test('gera .zip válido, com nomes UTF-8, e recusa caminho que sobe de pasta', (
 const DIA_TESTE_MS = 24 * 60 * 60 * 1000;
 const AGORA_TESTE = new Date('2026-09-25T12:00:00.000Z');
 
-async function lojaParaExcluir({ status = 'arquivado', diasArquivado = 61 } = {}) {
+/* `exportadaHaMs`: há quanto tempo, antes de AGORA_TESTE, a loja foi exportada
+   (null = nunca). O padrão é uma exportação recente, para que os testes que
+   não tratam dessa regra continuem testando só o que testam. */
+function registrarExportacaoTeste(memoria, idEstabelecimento, exportadaHaMs, id) {
+  memoria.inserir('auditoria_superadmin', {
+    id, superadministrador_id: 2, id_estabelecimento: idEstabelecimento, acao: 'estabelecimento.exportado',
+    detalhes_json: { arquivo: 'teste.zip' }, criado_em: new Date(AGORA_TESTE.getTime() - exportadaHaMs)
+  });
+}
+
+async function lojaParaExcluir({ status = 'arquivado', diasArquivado = 61, exportadaHaMs = 60 * 60 * 1000 } = {}) {
   const memoria = criarBancoEmMemoria();
   semearLoja(memoria, {
     id: 7, nome: 'Burger Arquivada', slug: 'burger-arquivada', status, base: 700,
     arquivadoEm: status === 'arquivado' ? new Date(AGORA_TESTE.getTime() - diasArquivado * DIA_TESTE_MS) : null
   });
+  if (exportadaHaMs !== null) registrarExportacaoTeste(memoria, 7, exportadaHaMs, 799);
   const pastaUploads = await mkdtemp(join(tmpdir(), 'hamburgueria-exclusao-'));
   await mkdir(join(pastaUploads, 'estabelecimentos', '7'), { recursive: true });
   await writeFile(join(pastaUploads, 'estabelecimentos', '7', 'logo-burger.png'), Buffer.from('imagem-da-loja-7'));
@@ -2965,7 +2979,7 @@ test('se a montagem da exportação falhar, nenhuma linha é apagada', async () 
 });
 
 test('exportação de loja arquivada pode ser baixada várias vezes, sem segredos e sem apagar nada', async () => {
-  const { memoria, pastaUploads } = await lojaParaExcluir({ diasArquivado: 3 });
+  const { memoria, pastaUploads } = await lojaParaExcluir({ diasArquivado: 3, exportadaHaMs: null });
   const servidor = criarServidor({ banco: memoria.banco, pastaUploads, tenantDesenvolvimento: '', jwtSecret: JWT_SECRET_TESTE });
   await aguardarServidor(servidor, 0);
   const baseUrl = `http://127.0.0.1:${servidor.address().port}`;
@@ -3016,6 +3030,162 @@ test('exportação de loja arquivada pode ser baixada várias vezes, sem segredo
     await fecharServidor(servidor);
     await rm(pastaUploads, { recursive: true, force: true });
   }
+});
+
+test('exclusão exige exportação DESTA loja nas últimas 24 horas', async () => {
+  const MINUTO = 60 * 1000;
+  const HORA = 60 * MINUTO;
+  const tentar = async (memoria, pastaUploads) => {
+    try {
+      await excluirEstabelecimentoDefinitivamente(memoria.banco, 7, { confirmacaoNome: 'Burger Arquivada' }, 1, {
+        pastaUploads, agora: AGORA_TESTE
+      });
+      return { status: 200 };
+    } catch (erro) {
+      return { status: erro.status, codigo: erro.codigo, mensagem: erro.message };
+    }
+  };
+  const nadaApagado = (memoria, rotulo) => {
+    assert.equal(memoria.consultas.some(({ sql }) => /^\s*DELETE/.test(sql)), false, rotulo);
+    assert.equal(memoria.tabela('estabelecimentos').some((linha) => linha.id_estabelecimento === 7), true, rotulo);
+  };
+
+  // Sem exportação, exportada há 24h01, ou com data no futuro além da folga de
+  // relógio: 409 com o código próprio, nada apagado.
+  for (const [rotulo, exportadaHaMs] of [['nunca', null], ['24h01', 24 * HORA + MINUTO], ['futuro', -10 * MINUTO]]) {
+    const { memoria, pastaUploads } = await lojaParaExcluir({ exportadaHaMs });
+    const resposta = await tentar(memoria, pastaUploads);
+    assert.equal(resposta.status, 409, rotulo);
+    assert.equal(resposta.codigo, CODIGO_EXPORTACAO_RECENTE_PENDENTE, rotulo);
+    assert.equal(resposta.mensagem, 'Baixe a exportação dos dados nas últimas 24 horas antes de excluir.', rotulo);
+    nadaApagado(memoria, rotulo);
+    await rm(pastaUploads, { recursive: true, force: true });
+  }
+
+  // Exportação recente de OUTRA loja não libera.
+  const outra = await lojaParaExcluir({ exportadaHaMs: null });
+  semearLoja(outra.memoria, { id: 8, nome: 'Outra Loja', slug: 'outra-loja', status: 'arquivado', base: 800, arquivadoEm: AGORA_TESTE });
+  registrarExportacaoTeste(outra.memoria, 8, MINUTO, 899);
+  const recusaOutra = await tentar(outra.memoria, outra.pastaUploads);
+  assert.equal(recusaOutra.status, 409);
+  assert.equal(recusaOutra.codigo, CODIGO_EXPORTACAO_RECENTE_PENDENTE);
+  nadaApagado(outra.memoria, 'outra loja');
+  await rm(outra.pastaUploads, { recursive: true, force: true });
+
+  // 23h59 atrás ainda vale: a exclusão segue.
+  const { memoria, pastaUploads } = await lojaParaExcluir({ exportadaHaMs: 24 * HORA - MINUTO });
+  assert.equal((await tentar(memoria, pastaUploads)).status, 200);
+  assert.equal(memoria.tabela('estabelecimentos').length, 0);
+  await rm(pastaUploads, { recursive: true, force: true });
+
+  // A regra em si, nas bordas.
+  assert.equal(exportacaoEhRecente(new Date(AGORA_TESTE.getTime() - 24 * HORA), AGORA_TESTE), true);
+  assert.equal(exportacaoEhRecente(new Date(AGORA_TESTE.getTime() - 24 * HORA - 1), AGORA_TESTE), false);
+  assert.equal(exportacaoEhRecente(new Date(AGORA_TESTE.getTime() + 4 * MINUTO), AGORA_TESTE), true);
+  assert.equal(exportacaoEhRecente(null, AGORA_TESTE), false);
+  assert.equal(exportacaoEhRecente('data-invalida', AGORA_TESTE), false);
+});
+
+test('falha na limpeza do disco não desfaz a exclusão e fica na auditoria do superadmin', async () => {
+  const { memoria, pastaUploads } = await lojaParaExcluir();
+  const pastaDaLoja = join(pastaUploads, 'estabelecimentos', '7');
+  const falhaDeDisco = async () => {
+    const erro = new Error(`EBUSY: resource busy or locked, rmdir '${resolve(pastaDaLoja)}'`);
+    erro.code = 'EBUSY';
+    throw erro;
+  };
+  const resultado = await excluirEstabelecimentoDefinitivamente(memoria.banco, 7, { confirmacaoNome: 'Burger Arquivada' }, 3, {
+    pastaUploads, agora: AGORA_TESTE, removerPasta: falhaDeDisco
+  });
+  // A exclusão no banco ficou; a exportação ainda é entregue.
+  assert.equal(resultado.limpezaPendente, true);
+  assert.equal(lerZip(resultado.zip).has('dados.json'), true);
+  assert.equal(memoria.tabela('estabelecimentos').length, 0);
+  await stat(join(pastaDaLoja, 'logo-burger.png'));
+
+  const evento = memoria.tabela('auditoria_superadmin').find((linha) => linha.acao === 'estabelecimento.limpeza_disco_falhou');
+  assert.equal(evento.id_estabelecimento, null);
+  assert.equal(evento.superadministrador_id, 3);
+  assert.deepEqual(evento.detalhes_json, {
+    idEstabelecimento: 7,
+    slug: 'burger-arquivada',
+    caminhoRelativo: 'estabelecimentos/7',
+    codigoErro: 'EBUSY',
+    mensagem: "EBUSY: resource busy or locked, rmdir 'estabelecimentos/7'"
+  });
+  // Nenhum caminho absoluto do servidor na auditoria.
+  assert.equal(JSON.stringify(evento.detalhes_json).includes(resolve(pastaUploads)), false);
+  await rm(pastaUploads, { recursive: true, force: true });
+
+  // Se nem a auditoria da falha puder ser gravada: só log, exclusão mantida.
+  const segunda = await lojaParaExcluir();
+  const resultadoSemAuditoria = await excluirEstabelecimentoDefinitivamente(segunda.memoria.banco, 7, {
+    confirmacaoNome: 'Burger Arquivada'
+  }, 3, {
+    pastaUploads: segunda.pastaUploads,
+    agora: AGORA_TESTE,
+    removerPasta: async () => {
+      segunda.memoria.falharQuando((sql) => sql.includes('INSERT INTO auditoria_superadmin'));
+      throw Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' });
+    }
+  });
+  assert.equal(resultadoSemAuditoria.limpezaPendente, true);
+  assert.ok(resultadoSemAuditoria.zip.length > 0);
+  assert.equal(segunda.memoria.tabela('estabelecimentos').length, 0);
+  assert.equal(segunda.memoria.tabela('auditoria_superadmin').some((linha) => linha.acao === 'estabelecimento.limpeza_disco_falhou'), false);
+  await rm(segunda.pastaUploads, { recursive: true, force: true });
+});
+
+test('exportação acima do limite do .zip é recusada com mensagem clara antes de qualquer DELETE', async () => {
+  assert.throws(
+    () => criarZip([{ nome: 'grande.bin', conteudo: Buffer.alloc(2000, 7) }], { limiteBytes: 100 }),
+    (erro) => erro.limiteExcedido === true
+  );
+  // O limite só pode baixar: um valor maior que o máximo sem ZIP64 é ignorado.
+  assert.doesNotThrow(() => criarZip([{ nome: 'pequeno.txt', conteudo: 'ok' }], { limiteBytes: 2 ** 40 }));
+
+  const { memoria, pastaUploads } = await lojaParaExcluir();
+  const antes = memoria.fotografia();
+  const recusa = await excluirEstabelecimentoDefinitivamente(memoria.banco, 7, { confirmacaoNome: 'Burger Arquivada' }, 1, {
+    pastaUploads, agora: AGORA_TESTE, limiteExportacaoBytes: 200
+  }).catch((erro) => erro);
+  assert.equal(recusa.status, 409);
+  assert.match(recusa.message, /limite de 4 GiB.*Nada foi apagado/);
+  assert.equal(memoria.consultas.some(({ sql }) => /^\s*DELETE/.test(sql)), false);
+  assert.deepEqual(memoria.fotografia(), antes);
+
+  const recusaExportacao = await exportarEstabelecimentoArquivado(memoria.banco, 7, 1, {
+    pastaUploads, agora: AGORA_TESTE, limiteExportacaoBytes: 200
+  }).catch((erro) => erro);
+  assert.equal(recusaExportacao.status, 409);
+  await rm(pastaUploads, { recursive: true, force: true });
+});
+
+test('listagem informa a última exportação da loja arquivada e se ela é recente', async () => {
+  let consulta;
+  const agora = Date.now();
+  const linha = (id, status, ultima) => ({
+    id_estabelecimento: id, nome_fantasia: `Loja ${id}`, slug: `loja-${id}`, status, plano: 'basico',
+    status_assinatura: 'ativa', criado_em: new Date(), atualizado_em: new Date(), total_administradores: 1,
+    ultima_exportacao_em: ultima
+  });
+  const banco = {
+    async execute(sql, parametros) {
+      consulta = { sql, parametros };
+      return [[
+        linha(1, 'arquivado', new Date(agora - 60 * 60 * 1000)),
+        linha(2, 'arquivado', new Date(agora - 25 * 60 * 60 * 1000)),
+        linha(3, 'arquivado', null)
+      ]];
+    }
+  };
+  const lista = await listarEstabelecimentosGerenciais(banco, { incluirArquivados: '1' });
+  assert.deepEqual(lista.map((item) => item.exportacaoRecente), [true, false, false]);
+  assert.equal(typeof lista[0].ultimaExportacaoEm, 'string');
+  assert.equal(lista[2].ultimaExportacaoEm, null);
+  // Só a exportação desta loja, e só para loja arquivada.
+  assert.match(consulta.sql, /CASE WHEN e\.status = 'arquivado'/);
+  assert.match(consulta.sql, /ae\.id_estabelecimento = e\.id_estabelecimento\s+AND ae\.acao = 'estabelecimento\.exportado'/);
 });
 
 const executarIntegracao = process.env.RUN_MYSQL_TESTS === '1';
@@ -4811,6 +4981,13 @@ if (!executarIntegracao) {
       [criado.id]
     );
     assert.equal((await contarPorLoja(criado.id)).produtos, 5);
+
+    // Sem exportação recente a exclusão é recusada; exportando, passa.
+    await assert.rejects(
+      excluirEstabelecimentoDefinitivamente(banco, criado.id, { confirmacaoNome: 'Loja Para Excluir' }, null, { pastaUploads }),
+      (erro) => erro.status === 409 && erro.codigo === CODIGO_EXPORTACAO_RECENTE_PENDENTE
+    );
+    assert.ok((await exportarEstabelecimentoArquivado(banco, criado.id, null, { pastaUploads })).zip.length > 0);
 
     const resultado = await excluirEstabelecimentoDefinitivamente(
       banco, criado.id, { confirmacaoNome: 'Loja Para Excluir' }, null, { pastaUploads }

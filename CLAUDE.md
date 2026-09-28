@@ -301,6 +301,17 @@ pelo superadmin (`server/exclusaoEstabelecimento.js`): só loja arquivada há 60
 dias, com o nome fantasia exato digitado, exportação montada antes e tudo numa
 transação.
 
+- Exige também uma exportação DESTA loja nas últimas 24 horas (evento
+  `estabelecimento.exportado`, qualquer superadmin); sem ela, `409` com
+  `codigo: "exportacao_recente_pendente"`. A regra fica em
+  `exportacaoEhRecente` (`server/superadmin.js`) e o servidor é a única
+  autoridade. O sistema sabe que a exportação foi gerada, não que o arquivo foi
+  salvo por quem baixou.
+- Falha ao apagar a pasta de uploads depois do commit não desfaz nada: vai para
+  o log e para `estabelecimento.limpeza_disco_falhou` em `auditoria_superadmin`.
+- Pendência conhecida: imagens antigas em `/uploads/{arquivo}`, fora da pasta
+  da loja, não são exportadas nem apagadas.
+
 - `auditoria_admin` da loja **não sobrevive**: a FK dela para
   `estabelecimentos` é RESTRICT, então precisa ser apagada. Vai só na
   exportação. O registro que fica no banco é o evento `estabelecimento.excluido`

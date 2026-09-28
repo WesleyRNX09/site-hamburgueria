@@ -10,6 +10,14 @@ import { crc32, deflateRawSync } from 'node:zlib';
   Usado pela exportação dos dados de um estabelecimento arquivado.
 */
 
+/* Erro de tamanho marcado, para quem chama responder com mensagem clara em vez
+   de um erro interno genérico. */
+function erroLimite(mensagem) {
+  const erro = new Error(mensagem);
+  erro.limiteExcedido = true;
+  return erro;
+}
+
 const LIMITE_32_BITS = 0xFFFFFFFF;
 const LIMITE_ENTRADAS = 0xFFFF;
 const FLAG_NOME_UTF8 = 0x0800;
@@ -36,12 +44,15 @@ function nomeSeguro(nome) {
 
 /**
  * @param {{ nome: string, conteudo: Buffer | string }[]} entradas
- * @param {{ data?: Date }} [opcoes]
+ * @param {{ data?: Date, limiteBytes?: number }} [opcoes] `limiteBytes` só
+ *   pode baixar o teto (os testes usam isso); o padrão é o máximo sem ZIP64.
  * @returns {Buffer}
  */
-export function criarZip(entradas, { data = new Date() } = {}) {
-  if (!Array.isArray(entradas) || entradas.length > LIMITE_ENTRADAS) {
-    throw new Error('Quantidade de entradas inválida para o arquivo compactado.');
+export function criarZip(entradas, { data = new Date(), limiteBytes = LIMITE_32_BITS } = {}) {
+  const limite = Math.min(Number(limiteBytes) || LIMITE_32_BITS, LIMITE_32_BITS);
+  if (!Array.isArray(entradas)) throw new Error('Entradas inválidas para o arquivo compactado.');
+  if (entradas.length > LIMITE_ENTRADAS) {
+    throw erroLimite(`O arquivo compactado aceita no máximo ${LIMITE_ENTRADAS} entradas.`);
   }
   const { hora, dia } = dataDos(data);
   const nomesUsados = new Set();
@@ -58,8 +69,8 @@ export function criarZip(entradas, { data = new Date() } = {}) {
       ? entrada.conteudo
       : Buffer.from(String(entrada.conteudo ?? ''), 'utf8');
     const comprimido = deflateRawSync(original);
-    if (original.length > LIMITE_32_BITS || comprimido.length > LIMITE_32_BITS) {
-      throw new Error(`Arquivo grande demais para o formato do arquivo compactado: ${nome}`);
+    if (original.length > limite || comprimido.length > limite) {
+      throw erroLimite(`Arquivo grande demais para o formato do arquivo compactado: ${nome}`);
     }
     const crc = crc32(original) >>> 0;
 
@@ -95,10 +106,11 @@ export function criarZip(entradas, { data = new Date() } = {}) {
     locais.push(local, nomeBytes, comprimido);
     centrais.push(central, nomeBytes);
     deslocamento += local.length + nomeBytes.length + comprimido.length;
-    if (deslocamento > LIMITE_32_BITS) throw new Error('Arquivo compactado grande demais.');
+    if (deslocamento > limite) throw erroLimite('Arquivo compactado grande demais.');
   }
 
   const tamanhoCentral = centrais.reduce((soma, parte) => soma + parte.length, 0);
+  if (deslocamento + tamanhoCentral + 22 > limite) throw erroLimite('Arquivo compactado grande demais.');
   const fim = Buffer.alloc(22);
   fim.writeUInt32LE(0x06054B50, 0);
   fim.writeUInt16LE(entradas.length, 8);

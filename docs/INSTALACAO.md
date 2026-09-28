@@ -254,13 +254,22 @@ Com a loja **arquivada**, a lista do superadmin oferece:
   `estabelecimento.exportado` na auditoria do superadmin.
 - **Excluir definitivamente** — **irreversível**. Só é liberada **60 dias**
   depois do arquivamento (antes disso a tela mostra quantos dias faltam, e a
-  API responde `409` com a contagem) e exige digitar o **nome fantasia exato**
-  da loja (não o slug; maiúsculas e minúsculas contam).
+  API responde `409` com a contagem), exige digitar o **nome fantasia exato**
+  da loja (não o slug; maiúsculas e minúsculas contam) e exige uma
+  **exportação desta loja nas últimas 24 horas**, feita por qualquer
+  superadmin. Sem ela, o botão de excluir fica desabilitado, o modal oferece
+  "Baixar exportação agora" e a API responde `409` com
+  `codigo: "exportacao_recente_pendente"`. Exportar outra loja não conta.
+
+O sistema registra que a exportação foi **gerada**, mas não sabe se o `.zip`
+foi **salvo** no computador de quem baixou. Antes de excluir, confira que o
+arquivo foi salvo e abre corretamente.
 
 A exclusão segue esta ordem, numa única transação com a linha da loja
-travada: valida estado, prazo e nome; recusa se algum registro de outra loja
-apontar para dados desta; monta a exportação completa (se falhar, nada é
-apagado); apaga as tabelas da loja dos filhos para os pais; grava
+travada: valida estado, prazo, nome e exportação recente; recusa se algum
+registro de outra loja apontar para dados desta; monta a exportação completa
+(se falhar, ou se passar do limite de 4 GiB do `.zip`, nada é apagado); apaga
+as tabelas da loja dos filhos para os pais; grava
 `estabelecimento.excluido` na auditoria do superadmin com id, nome, slug,
 autor e linhas removidas por tabela; apaga a linha da loja; confirma. Só
 depois do commit a pasta de uploads da loja é removida do disco, e a
@@ -271,6 +280,16 @@ acessos e ações do painel (`auditoria_admin`, que tem FK RESTRICT para
 `estabelecimentos` e por isso precisa ser apagada — ela vai inteira na
 exportação). O que sobrevive: a auditoria do superadmin (`auditoria_superadmin`,
 FK SET NULL), com `id_estabelecimento` nulo e os detalhes preservados em JSON.
+
+Se a pasta de uploads não puder ser apagada depois do commit (arquivo em uso,
+permissão), a exclusão **não** é desfeita: o erro vai para o log, para a
+auditoria do superadmin como `estabelecimento.limpeza_disco_falhou` (com o
+caminho relativo e a mensagem, sem o caminho absoluto do servidor) e para o
+aviso no painel. Apague a pasta `UPLOADS_PATH/estabelecimentos/{id}/` à mão.
+
+**Pendência conhecida:** imagens antigas no formato `/uploads/{arquivo}`,
+gravadas antes das pastas por loja, não entram na exportação e não são
+apagadas pela exclusão.
 
 ## 10. Configure subdomínios
 
