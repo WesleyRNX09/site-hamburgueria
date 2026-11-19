@@ -3,20 +3,30 @@ const TAMANHO_MAXIMO_ARQUIVO = 8 * 1024 * 1024;
 const TAMANHO_MAXIMO_IMAGEM = 1200;
 const TAMANHO_MAXIMO_DATA_URL = 850_000;
 
-function carregarImagem(arquivo) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(arquivo);
-    const imagem = new Image();
+const ERRO_LEITURA = 'Não foi possível ler a imagem selecionada.';
 
-    imagem.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(imagem);
-    };
-    imagem.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Não foi possível ler a imagem selecionada.'));
-    };
-    imagem.src = url;
+/*
+  Lê o arquivo como data: URL, e não como blob: (URL.createObjectURL). A CSP de
+  produção (server/app.js) libera imagens só de 'self' e data:; um blob: é
+  bloqueado pelo navegador e o upload falhava só em produção, onde a CSP é
+  enviada. Ler como data: mantém a política estrita sem abrir exceção.
+*/
+function lerComoDataUrl(arquivo) {
+  return new Promise((resolve, reject) => {
+    const leitor = new FileReader();
+    leitor.onload = () => resolve(String(leitor.result));
+    leitor.onerror = () => reject(new Error(ERRO_LEITURA));
+    leitor.readAsDataURL(arquivo);
+  });
+}
+
+async function carregarImagem(arquivo) {
+  const dataUrl = await lerComoDataUrl(arquivo);
+  return new Promise((resolve, reject) => {
+    const imagem = new Image();
+    imagem.onload = () => resolve(imagem);
+    imagem.onerror = () => reject(new Error(ERRO_LEITURA));
+    imagem.src = dataUrl;
   });
 }
 
