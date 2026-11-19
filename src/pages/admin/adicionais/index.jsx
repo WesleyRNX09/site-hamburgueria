@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
 import { useApp } from '../../../context/appContext';
-import { caminhoVoltaProduto } from '../../../utils/rascunhoProduto';
+import { caminhoRascunhoPendente, caminhoVoltaProduto } from '../../../utils/rascunhoProduto';
 import styles from '../shared.module.css';
 
 const vazio = { nome: '', preco: '' };
@@ -17,8 +17,9 @@ function AdicionaisAdmin() {
   const { adicionais, produtos, salvarAdicional, removerAdicional, alternarAdicional } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
-  // Veio do formulário de produto: o botão volta para ele, com o rascunho.
-  const voltarParaProduto = caminhoVoltaProduto(location.state?.voltarPara);
+  // Veio do formulário de produto, ou há um produto em andamento nesta aba
+  // (chegou pelo menu): o botão volta para ele, com o rascunho.
+  const voltarParaProduto = caminhoVoltaProduto(location.state?.voltarPara) ?? caminhoRascunhoPendente();
   const [dados, setDados] = useState(vazio);
   const [busca, setBusca] = useState('');
   const [erro, setErro] = useState('');

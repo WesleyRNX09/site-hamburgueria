@@ -1,5 +1,5 @@
 import { ArrowLeft, Check, ImagePlus, ListPlus, Save, Trash2, Upload } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
@@ -10,6 +10,9 @@ import { otimizarImagemProduto } from '../../../utils/imageUpload';
 import { imagemProdutoPadrao, usarPlaceholderProduto } from '../../../utils/productImage';
 import { descartarRascunhoProduto, lerRascunhoProduto, salvarRascunhoProduto } from '../../../utils/rascunhoProduto';
 import styles from '../shared.module.css';
+
+// Espera o administrador parar de digitar antes de gravar o rascunho.
+const ATRASO_RASCUNHO_MS = 400;
 
 const formularioVazio = {
   nome: '',
@@ -31,21 +34,45 @@ function FormularioProduto() {
   const navigate = useNavigate();
   const location = useLocation();
   const existente = produtos.find((produto) => String(produto.id) === id);
+  // O formulário como ele abre sem rascunho: comparar com ele evita marcar
+  // como "produto em andamento" um formulário que ninguém tocou.
+  const [original] = useState(() => (existente
+    ? { ...existente, adicionaisIds: existente.adicionaisIds ?? adicionais.map((adicional) => adicional.id) }
+    : { ...formularioVazio, categoriaId: categorias.find((categoria) => categoria.ativo)?.id ?? '' }));
   const [dados, setDados] = useState(() => {
-    const inicial = existente
-      ? { ...existente, adicionaisIds: existente.adicionaisIds ?? adicionais.map((adicional) => adicional.id) }
-      : { ...formularioVazio, categoriaId: categorias.find((categoria) => categoria.ativo)?.id ?? '' };
-    // Volta de "Gerenciar adicionais": retoma o que já estava digitado.
+    // Volta dos adicionais (ou de outra tela): retoma o que já estava digitado.
     const rascunho = lerRascunhoProduto(id);
-    if (!rascunho) return inicial;
+    if (!rascunho) return original;
     return {
-      ...inicial,
+      ...original,
       ...rascunho,
-      adicionaisIds: Array.isArray(rascunho.adicionaisIds) ? rascunho.adicionaisIds : inicial.adicionaisIds
+      adicionaisIds: Array.isArray(rascunho.adicionaisIds) ? rascunho.adicionaisIds : original.adicionaisIds
     };
   });
-  // Já retomado: o rascunho vale para uma volta só.
-  useEffect(() => descartarRascunhoProduto(id), [id]);
+  const dadosAtuais = useRef(dados);
+  // Salvou ou cancelou: a saída da tela não pode recriar o rascunho.
+  const encerrado = useRef(false);
+
+  /* Grava o rascunho enquanto o administrador digita, para ele sobreviver a
+     qualquer saída da tela — o botão "Gerenciar adicionais" ou o menu. */
+  useEffect(() => {
+    dadosAtuais.current = dados;
+    function gravarRascunho() {
+      if (encerrado.current) return;
+      if (JSON.stringify(dadosAtuais.current) === JSON.stringify(original)) descartarRascunhoProduto(id);
+      else salvarRascunhoProduto(id, dadosAtuais.current);
+    }
+    const temporizador = setTimeout(gravarRascunho, ATRASO_RASCUNHO_MS);
+    return () => clearTimeout(temporizador);
+  }, [dados, id, original]);
+
+  // Ao sair da tela, grava na hora o que ainda estava esperando o atraso.
+  useEffect(() => () => {
+    if (encerrado.current) return;
+    if (JSON.stringify(dadosAtuais.current) === JSON.stringify(original)) descartarRascunhoProduto(id);
+    else salvarRascunhoProduto(id, dadosAtuais.current);
+  }, [id, original]);
+
   const [erro, setErro] = useState('');
   const [processandoImagem, setProcessandoImagem] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -60,6 +87,7 @@ function FormularioProduto() {
   }
 
   function sairSemSalvar() {
+    encerrado.current = true;
     descartarRascunhoProduto(id);
     navigate('/admin/cardapio');
   }
@@ -106,6 +134,7 @@ function FormularioProduto() {
           ? null
           : Number(dados.impressoraId)
       });
+      encerrado.current = true;
       descartarRascunhoProduto(id);
       navigate('/admin/cardapio');
     } catch (falha) {

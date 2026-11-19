@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  caminhoFormularioProduto,
+  caminhoRascunhoPendente,
   caminhoVoltaProduto,
   chaveRascunho,
   descartarRascunhoProduto,
-  recuperarRascunhoProduto,
+  lerRascunhoProduto,
   salvarRascunhoProduto
 } from './rascunhoProduto.js';
 
@@ -22,14 +24,15 @@ function armazenamentoEmMemoria({ limite = Infinity } = {}) {
   };
 }
 
-test('rascunho do produto sobrevive à ida aos adicionais e vale para uma volta só', () => {
+test('rascunho do produto é gravado, lido e some ao ser descartado', () => {
   const armazenamento = armazenamentoEmMemoria();
   const dados = { nome: 'X-Bacon', descricao: 'Pão e bacon', preco: '34,90', adicionaisIds: [3], imagem: 'data:image/webp;base64,AAA' };
 
   assert.equal(salvarRascunhoProduto(undefined, dados, armazenamento), true);
-  assert.deepEqual(recuperarRascunhoProduto(undefined, armazenamento), dados);
-  // Lido uma vez, some: abrir o formulário de novo começa vazio.
-  assert.equal(recuperarRascunhoProduto(undefined, armazenamento), null);
+  assert.deepEqual(lerRascunhoProduto(undefined, armazenamento), dados);
+  descartarRascunhoProduto(undefined, armazenamento);
+  assert.equal(lerRascunhoProduto(undefined, armazenamento), null);
+  assert.equal(caminhoRascunhoPendente(armazenamento), null);
 });
 
 test('produto novo e cada produto em edição têm rascunhos separados', () => {
@@ -38,28 +41,55 @@ test('produto novo e cada produto em edição têm rascunhos separados', () => {
   salvarRascunhoProduto('7', { nome: 'Editado' }, armazenamento);
   assert.equal(chaveRascunho(undefined), 'rascunho-produto:novo');
   assert.equal(chaveRascunho('7'), 'rascunho-produto:7');
-  assert.equal(recuperarRascunhoProduto('7', armazenamento).nome, 'Editado');
-  assert.equal(recuperarRascunhoProduto(undefined, armazenamento).nome, 'Novo');
+  assert.equal(lerRascunhoProduto('7', armazenamento).nome, 'Editado');
+  assert.equal(lerRascunhoProduto(undefined, armazenamento).nome, 'Novo');
+});
+
+test('adicionais oferecem a volta ao último formulário com rascunho, mesmo vindo pelo menu', () => {
+  const armazenamento = armazenamentoEmMemoria();
+  assert.equal(caminhoRascunhoPendente(armazenamento), null);
+
+  salvarRascunhoProduto(undefined, { nome: 'Novo' }, armazenamento);
+  assert.equal(caminhoRascunhoPendente(armazenamento), '/admin/cardapio/novo');
+
+  salvarRascunhoProduto('12', { nome: 'Em edição' }, armazenamento);
+  assert.equal(caminhoRascunhoPendente(armazenamento), '/admin/cardapio/12/editar');
+
+  // Descartar outro formulário não apaga a marca do último.
+  descartarRascunhoProduto(undefined, armazenamento);
+  assert.equal(caminhoRascunhoPendente(armazenamento), '/admin/cardapio/12/editar');
+  descartarRascunhoProduto('12', armazenamento);
+  assert.equal(caminhoRascunhoPendente(armazenamento), null);
+
+  // Marca adulterada ou sem rascunho correspondente não vira botão.
+  armazenamento.setItem('rascunho-produto:ultimo', '/superadmin');
+  assert.equal(caminhoRascunhoPendente(armazenamento), null);
+  armazenamento.setItem('rascunho-produto:ultimo', '/admin/cardapio/99/editar');
+  assert.equal(caminhoRascunhoPendente(armazenamento), null);
+  assert.equal(caminhoFormularioProduto(undefined), '/admin/cardapio/novo');
+  assert.equal(caminhoFormularioProduto(5), '/admin/cardapio/5/editar');
 });
 
 test('cota estourada guarda o rascunho sem a foto e falha total não quebra nada', () => {
   const comLimite = armazenamentoEmMemoria({ limite: 200 });
   const dados = { nome: 'X-Tudo', imagem: `data:image/webp;base64,${'A'.repeat(500)}` };
   assert.equal(salvarRascunhoProduto(undefined, dados, comLimite), true);
-  assert.deepEqual(recuperarRascunhoProduto(undefined, comLimite), { nome: 'X-Tudo', imagem: '' });
+  assert.deepEqual(lerRascunhoProduto(undefined, comLimite), { nome: 'X-Tudo', imagem: '' });
 
   const quebrado = { getItem() { throw new Error('bloqueado'); }, setItem() { throw new Error('bloqueado'); }, removeItem() { throw new Error('bloqueado'); } };
   assert.equal(salvarRascunhoProduto(undefined, dados, quebrado), false);
-  assert.equal(recuperarRascunhoProduto(undefined, quebrado), null);
+  assert.equal(lerRascunhoProduto(undefined, quebrado), null);
+  assert.equal(caminhoRascunhoPendente(quebrado), null);
   assert.doesNotThrow(() => descartarRascunhoProduto(undefined, quebrado));
   assert.equal(salvarRascunhoProduto(undefined, dados, null), false);
+  assert.equal(caminhoRascunhoPendente(null), null);
 });
 
 test('conteúdo inválido no armazenamento é ignorado', () => {
   const armazenamento = armazenamentoEmMemoria();
   for (const lixo of ['{quebrado', '"texto"', '[1,2]', 'null']) {
     armazenamento.setItem(chaveRascunho(undefined), lixo);
-    assert.equal(recuperarRascunhoProduto(undefined, armazenamento), null, lixo);
+    assert.equal(lerRascunhoProduto(undefined, armazenamento), null, lixo);
   }
 });
 
