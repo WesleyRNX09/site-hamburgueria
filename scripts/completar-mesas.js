@@ -43,8 +43,8 @@ if (!Number.isInteger(totalDesejado) || totalDesejado < 1 || totalDesejado > 999
 
 let banco;
 try {
-  banco = await abrirBanco({ mysql: config.mysql });
-  console.log(`Banco: ${config.mysql.database} em ${config.mysql.host}:${config.mysql.port}`);
+  banco = await abrirBanco({ banco: config.banco });
+  console.log(`Banco: ${config.banco.database} em ${config.banco.host}:${config.banco.port}`);
 
   const [estabelecimentos] = await banco.execute(`
     SELECT e.id_estabelecimento AS id, e.nome_fantasia AS nome, COUNT(m.id) AS mesas

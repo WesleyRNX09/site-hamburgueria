@@ -8,7 +8,7 @@ let servidor = null;
 
 async function iniciar() {
   banco = await abrirBanco({
-    mysql: config.mysql
+    banco: config.banco
   });
 
   servidor = criarServidor({

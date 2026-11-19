@@ -3,7 +3,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import mysql from 'mysql2/promise';
+import { COLUNAS_IDENTIDADE, criarPoolPostgres } from './db/postgres.js';
 
 import { concederPermissoesPadrao } from './permissoes.js';
 import { criarHashSenha, criarIndiceSenhaGarcom } from './security.js';
@@ -23,12 +23,10 @@ import {
 const pastaServidor = dirname(fileURLToPath(import.meta.url));
 const pastaProjeto = resolve(pastaServidor, '..');
 const pastaMigracoes = resolve(pastaProjeto, 'database/migrations');
+const caminhoCriacao = resolve(pastaProjeto, 'database/CRIAR_db.sql');
 const padraoMigration = /^\d{3}_[a-z0-9_-]+\.sql$/;
-const caminhosEstrutura = [
-  resolve(pastaProjeto, 'database/estrutura/001_criar_tabelas.sql'),
-  resolve(pastaProjeto, 'database/estrutura/003_criar_indices.sql'),
-  resolve(pastaProjeto, 'database/estrutura/002_criar_relacionamentos.sql')
-];
+const MARCA_INICIO_ESTRUTURA = '-- @@ESTRUTURA_INICIO@@';
+const MARCA_FIM_ESTRUTURA = '-- @@ESTRUTURA_FIM@@';
 
 function validarNomeBanco(nome) {
   if (!/^[a-zA-Z0-9_]+$/.test(nome)) {
@@ -37,21 +35,41 @@ function validarNomeBanco(nome) {
   return nome;
 }
 
-function dataMySql(valor = new Date()) {
+/* Texto em UTC, sem fuso: a sessão do pool está em UTC e o interpreta assim. */
+function dataBanco(valor = new Date()) {
   return valor.toISOString().slice(0, 23).replace('T', ' ');
 }
 
-function separarInstrucoesSql(conteudo) {
-  return conteudo
-    .split(/;\s*(?:\r?\n|$)/)
-    .map((instrucao) => instrucao.trim())
-    .filter(Boolean);
+/* Só a estrutura do CRIAR_db.sql (tabelas, índices, FKs, gatilhos e RLS), sem
+   os dados iniciais: o preparo cria o estabelecimento e o catálogo por conta
+   própria. Uma fonte única evita duas cópias do esquema divergindo. */
+export async function lerEstruturaInicial() {
+  const conteudo = (await readFile(caminhoCriacao, 'utf8')).replace(/\r\n/g, '\n');
+  const inicio = conteudo.indexOf(MARCA_INICIO_ESTRUTURA);
+  const fim = conteudo.indexOf(MARCA_FIM_ESTRUTURA);
+  if (inicio === -1 || fim === -1 || fim < inicio) {
+    throw new Error('database/CRIAR_db.sql perdeu as marcas de início e fim da estrutura.');
+  }
+  return conteudo.slice(inicio + MARCA_INICIO_ESTRUTURA.length, fim);
 }
 
 async function aplicarEstruturaInicial(banco) {
-  for (const caminho of caminhosEstrutura) {
-    const conteudo = await readFile(caminho, 'utf8');
-    for (const instrucao of separarInstrucoesSql(conteudo)) await banco.query(instrucao);
+  const estrutura = await lerEstruturaInicial();
+  await executarTransacao(banco, (conexao) => conexao.query(estrutura));
+}
+
+/* Linhas inseridas com id fixo (catálogo e operação de demonstração) não
+   avançam a sequência da coluna identity; sem este ajuste o próximo INSERT da
+   aplicação colidiria com elas. */
+async function sincronizarSequencias(banco) {
+  for (const [tabela, coluna] of Object.entries(COLUNAS_IDENTIDADE)) {
+    await banco.query(`
+      SELECT setval(
+        pg_get_serial_sequence('${tabela}', '${coluna}'),
+        COALESCE((SELECT MAX(${coluna}) FROM ${tabela}), 0) + 1,
+        false
+      )
+    `);
   }
 }
 
@@ -70,9 +88,9 @@ async function registrarBaselineMigracoes(banco) {
   }
 }
 
-async function carregarSsl(configuracaoMySql) {
-  if (!configuracaoMySql.ssl) return undefined;
-  const caInformada = String(configuracaoMySql.sslCa ?? '').trim();
+async function carregarSsl(configuracaoBanco) {
+  if (!configuracaoBanco.ssl) return undefined;
+  const caInformada = String(configuracaoBanco.sslCa ?? '').trim();
   let ca;
   if (caInformada) {
     ca = caInformada.includes('-----BEGIN CERTIFICATE-----')
@@ -85,16 +103,17 @@ async function carregarSsl(configuracaoMySql) {
   };
 }
 
-async function configuracaoBaseMySql(configuracaoMySql) {
+async function configuracaoConexao(configuracaoBanco) {
   return {
-    host: configuracaoMySql.host,
-    port: configuracaoMySql.port,
-    user: configuracaoMySql.user,
-    password: configuracaoMySql.password,
-    charset: 'utf8mb4',
-    timezone: 'Z',
-    decimalNumbers: true,
-    ...(configuracaoMySql.ssl ? { ssl: await carregarSsl(configuracaoMySql) } : {})
+    host: configuracaoBanco.host,
+    port: configuracaoBanco.port,
+    user: configuracaoBanco.user,
+    password: configuracaoBanco.password,
+    database: validarNomeBanco(configuracaoBanco.database),
+    connectionLimit: configuracaoBanco.connectionLimit,
+    // Só os testes de integração usam: um schema descartável por execução.
+    ...(configuracaoBanco.schema ? { schema: validarNomeBanco(configuracaoBanco.schema) } : {}),
+    ...(configuracaoBanco.ssl ? { ssl: await carregarSsl(configuracaoBanco) } : {})
   };
 }
 
@@ -106,7 +125,8 @@ async function revogarCredenciaisDemonstracaoLegadas(banco, idEstabelecimento) {
   const marcadores = hashesTokensLegados.map(() => '?').join(', ');
   const [funcionarios] = await banco.execute(`
     SELECT id FROM funcionarios
-    WHERE id_estabelecimento = ? AND SHA2(token_acesso, 256) IN (${marcadores})
+    WHERE id_estabelecimento = ?
+      AND encode(sha256(convert_to(token_acesso, 'UTF8')), 'hex') IN (${marcadores})
   `, [idEstabelecimento, ...hashesTokensLegados]);
   if (funcionarios.length === 0) return;
 
@@ -169,7 +189,7 @@ export async function criarEstabelecimentoInicial(
   await banco.execute(`
     INSERT INTO configuracoes_estabelecimento (id_estabelecimento)
     VALUES (?)
-    ON DUPLICATE KEY UPDATE id_estabelecimento = VALUES(id_estabelecimento)
+    ON CONFLICT (id_estabelecimento) DO NOTHING
   `, [idEstabelecimento]);
   return idEstabelecimento;
 }
@@ -222,7 +242,7 @@ async function metadadoExiste(banco, chave) {
 async function marcarMetadado(conexao, chave) {
   await conexao.execute(`
     INSERT INTO metadados (chave, valor) VALUES (?, '1')
-    ON DUPLICATE KEY UPDATE valor = VALUES(valor)
+    ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor
   `, [chave]);
 }
 
@@ -300,7 +320,7 @@ async function inserirItemComanda(
   `, [
     idEstabelecimento, comandaId, item.produtoId, item.nome, item.precoCentavos,
     item.quantidade, item.observacao ?? null,
-    lancadoPorFuncionarioId == null ? null : dataMySql(new Date()),
+    lancadoPorFuncionarioId == null ? null : dataBanco(new Date()),
     lancadoPorFuncionarioId
   ]);
   for (const adicional of item.adicionais ?? []) {
@@ -425,7 +445,7 @@ async function criarOperacaoInicial(
           comanda.mesaId,
           comanda.funcionarioId,
           comanda.status,
-          dataMySql(new Date(comanda.abertaEm))
+          dataBanco(new Date(comanda.abertaEm))
         ]);
         const jaLancada = comanda.status === 'Na cozinha' || comanda.status === 'Conta solicitada';
         for (const item of comanda.itens) {
@@ -461,7 +481,7 @@ async function criarOperacaoInicial(
           pedido.comandaId ?? null,
           pedido.mesaId ?? null,
           pedido.funcionarioId ?? null,
-          dataMySql(new Date(pedido.criadoEm))
+          dataBanco(new Date(pedido.criadoEm))
         ]);
         for (const item of pedido.itens) {
           await inserirItemPedido(conexao, idEstabelecimento, pedido.id, item);
@@ -479,7 +499,7 @@ async function criarOperacaoInicial(
             ? 'Pago'
             : pedido.pagamento === 'Pix' ? 'Aguardando pagamento' : 'Pagamento na entrega',
           pedido.totalCentavos,
-          pedido.origem === 'mesa' ? dataMySql(new Date(pedido.criadoEm)) : null
+          pedido.origem === 'mesa' ? dataBanco(new Date(pedido.criadoEm)) : null
         ]);
       }
     }
@@ -506,18 +526,18 @@ async function criarOperacaoInicial(
          tempo_entrega, loja_aberta, entrega_ativa,
          retirada_ativa, atendimento_garcom_ativo, aceita_cartao, aceita_dinheiro)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        telefone = VALUES(telefone),
-        email = VALUES(email),
-        endereco = VALUES(endereco),
-        taxa_entrega_centavos = VALUES(taxa_entrega_centavos),
-        tempo_entrega = VALUES(tempo_entrega),
-        loja_aberta = VALUES(loja_aberta),
-        entrega_ativa = VALUES(entrega_ativa),
-        retirada_ativa = VALUES(retirada_ativa),
-        atendimento_garcom_ativo = VALUES(atendimento_garcom_ativo),
-        aceita_cartao = VALUES(aceita_cartao),
-        aceita_dinheiro = VALUES(aceita_dinheiro)
+      ON CONFLICT (id_estabelecimento) DO UPDATE SET
+        telefone = EXCLUDED.telefone,
+        email = EXCLUDED.email,
+        endereco = EXCLUDED.endereco,
+        taxa_entrega_centavos = EXCLUDED.taxa_entrega_centavos,
+        tempo_entrega = EXCLUDED.tempo_entrega,
+        loja_aberta = EXCLUDED.loja_aberta,
+        entrega_ativa = EXCLUDED.entrega_ativa,
+        retirada_ativa = EXCLUDED.retirada_ativa,
+        atendimento_garcom_ativo = EXCLUDED.atendimento_garcom_ativo,
+        aceita_cartao = EXCLUDED.aceita_cartao,
+        aceita_dinheiro = EXCLUDED.aceita_dinheiro
     `, [
       idEstabelecimento,
       configuracaoInicial.telefone,
@@ -537,46 +557,17 @@ async function criarOperacaoInicial(
 }
 
 /*
-  Toda conexão do pool trabalha em UTC.
-
-  `timezone: 'Z'` só diz ao mysql2 como converter Date <-> DATETIME; quem
-  resolve `CURRENT_TIMESTAMP` é o servidor, no fuso da sessão dele. Sem fixar
-  a sessão, o mesmo código grava horários diferentes conforme o relógio da
-  máquina do banco — e foi o que acontecia: a produção (MariaDB com NOW() em
-  UTC) ficava certa e o desenvolvimento (MySQL no horário de Brasília) gravava
-  3 h à frente do que a aplicação depois lia como UTC.
-
-  O SET entra na fila da própria conexão assim que ela nasce, antes de
-  qualquer consulta do aplicativo, porque o mysql2 executa os comandos de uma
-  conexão em ordem. '+00:00' é o deslocamento literal: não depende das tabelas
-  de fuso estarem carregadas no servidor, o que nem sempre é o caso.
+  O fuso UTC de cada conexão é fixado em server/db/postgres.js, antes da
+  primeira consulta dela. As colunas são TIMESTAMPTZ (instante absoluto), mas
+  textos de data sem fuso — `dataBanco()` — dependem da sessão para serem lidos
+  como UTC.
 */
-function fixarFusoUtc(pool) {
-  pool.on('connection', (conexao) => {
-    conexao.query("SET time_zone = '+00:00'", (erro) => {
-      if (!erro) return;
-      /* Conexão que não aceitou o fuso gravaria hora errada em silêncio.
-        Melhor derrubá-la: o pool abre outra, e o erro aparece de uma vez. */
-      conexao.destroy();
-    });
-  });
-  return pool;
+async function criarPool(configuracaoBanco) {
+  return criarPoolPostgres(await configuracaoConexao(configuracaoBanco));
 }
 
-async function criarPool(configuracaoMySql) {
-  const nomeBanco = validarNomeBanco(configuracaoMySql.database);
-  const configuracaoBase = await configuracaoBaseMySql(configuracaoMySql);
-  return fixarFusoUtc(mysql.createPool({
-    ...configuracaoBase,
-    database: nomeBanco,
-    waitForConnections: true,
-    connectionLimit: Number(configuracaoMySql.connectionLimit) || 10,
-    queueLimit: 0
-  }));
-}
-
-export async function abrirBanco({ mysql: configuracaoMySql }) {
-  const banco = await criarPool(configuracaoMySql);
+export async function abrirBanco({ banco: configuracaoBanco }) {
+  const banco = await criarPool(configuracaoBanco);
   try {
     await banco.query('SELECT 1 AS conexao');
     return banco;
@@ -587,7 +578,7 @@ export async function abrirBanco({ mysql: configuracaoMySql }) {
 }
 
 export async function prepararBanco({
-  mysql: configuracaoMySql,
+  banco: configuracaoBanco,
   administrador,
   incluirDadosDemonstracao = false,
   senhaFuncionarioDemonstracao = null,
@@ -599,24 +590,13 @@ export async function prepararBanco({
       'DEMO_WAITER_PASSWORD deve ter de 3 a 21 caracteres, usando letras minúsculas, números, ponto, hífen ou _.'
     );
   }
-  const nomeBanco = validarNomeBanco(configuracaoMySql.database);
-  const configuracaoBase = await configuracaoBaseMySql(configuracaoMySql);
 
-  if (configuracaoMySql.criarBancoSeAusente !== false) {
-    const inicial = await mysql.createConnection(configuracaoBase);
-    try {
-      await inicial.query(`CREATE DATABASE IF NOT EXISTS \`${nomeBanco}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-    } finally {
-      await inicial.end();
-    }
-  }
-
-  const banco = await criarPool(configuracaoMySql);
+  const banco = await criarPool(configuracaoBanco);
   try {
     const [tabelasExistentes] = await banco.query(`
       SELECT COUNT(*) AS total
       FROM information_schema.tables
-      WHERE table_schema = DATABASE()
+      WHERE table_schema = current_schema()
     `);
     if (Number(tabelasExistentes[0]?.total) > 0) {
       throw new Error(
@@ -640,6 +620,7 @@ export async function prepararBanco({
       incluirDadosDemonstracao,
       senhaFuncionarioDemonstracao
     );
+    await sincronizarSequencias(banco);
     return banco;
   } catch (erro) {
     await banco.end();

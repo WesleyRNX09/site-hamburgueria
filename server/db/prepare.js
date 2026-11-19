@@ -9,7 +9,7 @@ if (config.producao && config.administrador.senha.length < 12) {
 }
 
 const banco = await prepararBanco({
-  mysql: config.mysql,
+  banco: config.banco,
   administrador: config.administrador,
   incluirDadosDemonstracao: config.incluirDadosDemonstracao,
   senhaFuncionarioDemonstracao: config.senhaFuncionarioDemonstracao,

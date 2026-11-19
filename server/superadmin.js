@@ -308,11 +308,11 @@ async function salvarConfiguracaoVisual(conexao, idEstabelecimento, dados) {
       (id_estabelecimento, logo_url, banner_url, cor_principal, cor_secundaria,
        cor_fundo, cor_card, cor_texto, fonte)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-      logo_url = VALUES(logo_url), banner_url = VALUES(banner_url),
-      cor_principal = VALUES(cor_principal), cor_secundaria = VALUES(cor_secundaria),
-      cor_fundo = VALUES(cor_fundo), cor_card = VALUES(cor_card),
-      cor_texto = VALUES(cor_texto), fonte = VALUES(fonte)
+    ON CONFLICT (id_estabelecimento) DO UPDATE SET
+      logo_url = EXCLUDED.logo_url, banner_url = EXCLUDED.banner_url,
+      cor_principal = EXCLUDED.cor_principal, cor_secundaria = EXCLUDED.cor_secundaria,
+      cor_fundo = EXCLUDED.cor_fundo, cor_card = EXCLUDED.cor_card,
+      cor_texto = EXCLUDED.cor_texto, fonte = EXCLUDED.fonte
   `, [
     idEstabelecimento,
     dados.logo,
@@ -787,7 +787,7 @@ export async function alternarStatusSuperadministrador(banco, id, ativo, superad
     if (!alvos[0]) return null;
     if (!ativo) {
       const [contagens] = await conexao.execute(
-        'SELECT COUNT(id) AS total FROM superadministradores WHERE ativo = 1 FOR UPDATE',
+        'SELECT COUNT(*) AS total FROM (SELECT id FROM superadministradores WHERE ativo = 1 FOR UPDATE) AS ativos',
         []
       );
       if (Number(contagens[0].total) <= 1) {
@@ -962,8 +962,8 @@ export async function listarAuditoriaSuperadmin(banco, filtros = {}) {
   const pagina = Math.min(inteiroPositivo(filtros.pagina, 1), paginas);
   const deslocamento = (pagina - 1) * limite;
 
-  /* LIMIT/OFFSET entram interpolados porque o protocolo preparado do MySQL não
-     aceita placeholder nessa posição. Os dois passam por inteiroPositivo antes,
+  /* LIMIT/OFFSET entram interpolados (herança do protocolo preparado do MySQL, que não
+     aceitava placeholder ali). Os dois passam por inteiroPositivo antes,
      então chegam aqui como inteiros já validados, nunca como texto do usuário. */
   const [linhas] = await banco.execute(`
     SELECT a.id, a.superadministrador_id, a.id_estabelecimento, a.acao,

@@ -33,3 +33,5 @@ server/uploads/*
 *.sw?
 backup-*.sql
 diff-*.txt
+# Certificados (ex.: CA do Supabase para DB_SSL_CA)
+certificados/

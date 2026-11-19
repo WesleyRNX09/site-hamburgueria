@@ -3,29 +3,22 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { config } from '../config.js';
-import { abrirBanco, fecharBanco } from '../database.js';
+import { abrirBanco, executarTransacao, fecharBanco } from '../database.js';
 import { checksumMigration, checksumsCompativeisMigration } from './migration-utils.js';
 
 const pastaProjeto = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const pastaMigracoes = resolve(pastaProjeto, 'database/migrations');
 const padraoMigration = /^\d{3}_[a-z0-9_-]+\.sql$/;
 
-function separarInstrucoesSql(conteudo) {
-  return conteudo
-    .split(/;\s*(?:\r?\n|$)/)
-    .map((instrucao) => instrucao.trim())
-    .filter(Boolean);
-}
-
 let banco;
 try {
-  banco = await abrirBanco({ mysql: config.mysql });
+  banco = await abrirBanco({ banco: config.banco });
   await banco.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       versao VARCHAR(255) PRIMARY KEY,
       checksum CHAR(64) NOT NULL,
-      executado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      executado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
   `);
 
   const arquivos = (await readdir(pastaMigracoes))
@@ -57,18 +50,18 @@ try {
       continue;
     }
 
-    const conexao = await banco.getConnection();
-    try {
-      for (const instrucao of separarInstrucoesSql(conteudo)) await conexao.query(instrucao);
+    /* No PostgreSQL DDL é transacional: o arquivo inteiro e o registro em
+       schema_migrations entram juntos ou nada entra. O arquivo vai numa única
+       chamada (protocolo simples), o que preserva blocos $$ ... $$ intactos. */
+    await executarTransacao(banco, async (conexao) => {
+      await conexao.query(conteudo);
       await conexao.execute(
         'INSERT INTO schema_migrations (versao, checksum) VALUES (?, ?)',
         [arquivo, hash]
       );
-      totalAplicado += 1;
-      console.log(`Migration aplicada: ${arquivo}`);
-    } finally {
-      conexao.release();
-    }
+    });
+    totalAplicado += 1;
+    console.log(`Migration aplicada: ${arquivo}`);
   }
 
   console.log(totalAplicado

@@ -3,7 +3,7 @@
 
   Colunas e chaves estrangeiras vêm do próprio database/CRIAR_db.sql, então a
   ordem de remoção é conferida contra o esquema real, não contra a lista do
-  código: DELETE que deixaria filho órfão numa FK RESTRICT falha como no MySQL
+  código: DELETE que deixaria filho órfão numa FK RESTRICT falha como no banco
   (ER_ROW_IS_REFERENCED_2), CASCADE apaga e SET NULL zera. Transação guarda uma
   cópia no BEGIN e volta a ela no ROLLBACK.
 
@@ -21,7 +21,7 @@ const pastaProjeto = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export function lerEsquema() {
   const sql = readFileSync(resolve(pastaProjeto, 'database/CRIAR_db.sql'), 'utf8').replace(/\r\n/g, '\n');
   const colunas = new Map();
-  for (const [, tabela, corpo] of sql.matchAll(/CREATE TABLE IF NOT EXISTS (\w+) \(([\s\S]*?)\n\) ENGINE/g)) {
+  for (const [, tabela, corpo] of sql.matchAll(/CREATE TABLE IF NOT EXISTS (\w+) \(([\s\S]*?)\n\);/g)) {
     colunas.set(tabela, corpo.split('\n')
       .map((linha) => linha.trim())
       .filter((linha) => /^[a-z_]+ [A-Z]/.test(linha) && !/^(UNIQUE|INDEX|CONSTRAINT|PRIMARY|KEY|CHECK)\b/i.test(linha))

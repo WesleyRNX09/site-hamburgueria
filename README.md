@@ -2,10 +2,10 @@
 
 Aplicação responsiva com quatro áreas integradas: cliente, administrador,
 garçom e superadministrador global. O frontend usa React e a API Node.js
-persiste os dados em um MySQL Server que pode ser administrado pelo MySQL
-Workbench.
+persiste os dados em PostgreSQL, hospedado no Supabase (o painel do Supabase
+serve para visualizar e administrar o banco).
 
-## Recursos conectados ao MySQL
+## Recursos conectados ao banco
 
 - login e sessões revogáveis do administrador com JWT assinado;
 - múltiplos administradores, troca segura de senha e auditoria das ações críticas;
@@ -31,7 +31,7 @@ O carrinho permanece no navegador somente até o cliente finalizar a compra. Ao 
 O backend identifica o estabelecimento pelo domínio, subdomínio ou slug local e
 aplica `id_estabelecimento` em todas as operações de negócio. JWTs assinados
 carregam usuário, perfil, tenant e indicação de superadministrador; o backend
-confirma essas informações contra o domínio e a sessão revogável no MySQL.
+confirma essas informações contra o domínio e a sessão revogável no banco.
 
 O mesmo frontend consome as configurações públicas do estabelecimento e aplica
 logo, banner, fonte e as variáveis CSS `--cor-principal`, `--cor-secundaria`,
@@ -53,8 +53,7 @@ personalização em [`docs/PERSONALIZACAO.md`](docs/PERSONALIZACAO.md).
 
 - Node.js 22.13 ou superior;
 - npm;
-- MySQL Server 8.0 em execução;
-- MySQL Workbench opcional para visualizar e administrar o banco.
+- um projeto no Supabase (PostgreSQL 15 ou superior) — ou qualquer PostgreSQL 15+.
 
 ## Configuração inicial
 
@@ -62,48 +61,30 @@ O procedimento completo para banco novo, banco existente, SSL, DNS, uploads,
 backup e domínio personalizado está no
 [`docs/INSTALACAO.md`](docs/INSTALACAO.md).
 
-1. Crie um arquivo `.env` na raiz do projeto e preencha somente valores do
-ambiente. O modelo seguro completo está no guia de instalação. Exemplo local
-mínimo:
+1. No Supabase, crie um projeto e guarde a senha do banco. Abra **SQL Editor**,
+cole o conteúdo inteiro de [`database/CRIAR_db.sql`](database/CRIAR_db.sql) e
+clique em **Run**. O arquivo cria a estrutura atual e os dados mínimos numa
+única transação, liga RLS em todas as tabelas (a API REST pública do Supabase
+não enxerga nada) e não cria usuário administrativo nem conteúdo demonstrativo.
+
+2. Em **Connect → Session pooler**, copie a URI de conexão. Em **Project
+Settings → Database → SSL Configuration**, baixe o certificado e salve em
+`certificados/supabase-ca.crt` (a pasta é ignorada pelo Git).
+
+3. Crie um arquivo `.env` na raiz do projeto, a partir de
+[`env.example`](env.example), e preencha somente valores do ambiente:
 
 ```dotenv
 NODE_ENV=development
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_USER=hamburgueria_app
-DB_PASSWORD=
-DB_NAME=hamburgueria
-DB_SSL=false
+DATABASE_URL=postgresql://postgres.SEU-PROJETO:SENHA@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
+DB_SSL=true
+DB_SSL_CA=certificados/supabase-ca.crt
 DB_CONNECTION_LIMIT=10
-TENANT_DESENVOLVIMENTO=estabelecimento-padrao
-JWT_SECRET=
-UPLOADS_PATH=C:/dados/hamburgueria/uploads
-```
-
-2. No MySQL Workbench, crie e selecione um schema vazio e então execute [`database/CRIAR_db.sql`](database/CRIAR_db.sql). O arquivo cria a estrutura atual e os dados mínimos, sem criar/selecionar o banco, sem usuário administrativo e sem conteúdo demonstrativo.
-
-3. Crie um usuário MySQL restrito para a aplicação. O exemplo abaixo pressupõe que o schema selecionado se chama `hamburgueria`:
-
-```sql
-CREATE USER IF NOT EXISTS 'hamburgueria_app'@'localhost'
-  IDENTIFIED BY 'troque-por-uma-senha-local-segura';
-GRANT SELECT, INSERT, UPDATE, DELETE ON hamburgueria.*
-  TO 'hamburgueria_app'@'localhost';
-FLUSH PRIVILEGES;
-```
-
-4. Edite o `.env` com a mesma conta e defina o primeiro administrador:
-
-```dotenv
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_USER=hamburgueria_app
-DB_PASSWORD=sua-senha-local-da-aplicacao
-DB_NAME=hamburgueria
 
 DOMINIO_PRINCIPAL=meusistema.com.br
 TENANT_DESENVOLVIMENTO=estabelecimento-padrao
 JWT_SECRET=gere-um-segredo-aleatorio-com-pelo-menos-32-bytes
+UPLOADS_PATH=C:/dados/hamburgueria/uploads
 
 ADMIN_USER=admin
 ADMIN_EMAIL=admin@exemplo.com
@@ -114,6 +95,15 @@ SUPERADMIN_EMAIL=superadmin@exemplo.com
 SUPERADMIN_NAME=Superadministrador
 SUPERADMIN_PASSWORD=outra-senha-global-segura
 ```
+
+Use o **Session pooler** (porta 5432): ele funciona em IPv4 e preserva as
+configurações de sessão que o backend usa. O Transaction pooler (porta 6543)
+não é suportado. Senha com `@ # / ? %` precisa ir codificada na URL (`@` →
+`%40`, `#` → `%23`).
+
+4. Se preferir não usar a URL, informe as partes separadas em `DB_HOST`,
+`DB_PORT`, `DB_USER`, `DB_PASSWORD` e `DB_NAME`; `DATABASE_URL` vence quando
+as duas formas estão preenchidas.
 
 5. Crie a conta administrativa e valide a conexão:
 
@@ -128,8 +118,8 @@ repositório. Em produção, `JWT_SECRET` é obrigatório e deve possuir pelo me
 32 bytes. Em desenvolvimento, sua ausência gera um segredo temporário e todas
 as sessões são invalidadas ao reiniciar o processo. `ADMIN_PASSWORD` é lido
 pelos comandos explícitos de preparação/administração, não pelo startup do
-servidor. Para uma instalação local totalmente vazia, `npm run db:prepare` pode
-criar e preparar o schema; ele recusa schemas que já possuam tabelas. Consulte
+servidor. Para um schema totalmente vazio, `npm run db:prepare` pode preparar a
+estrutura (lida do próprio `CRIAR_db.sql`); ele recusa schemas que já possuam tabelas. Consulte
 [`database/README.md`](database/README.md) antes de preparar ou migrar um
 ambiente.
 
@@ -142,7 +132,7 @@ npm run dev
 
 Esse comando inicia a API e o site juntos. O frontend normalmente fica em `http://localhost:5173` e a API em `http://localhost:3001`.
 
-Se o `.env` ou o MySQL ainda não estiverem disponíveis, o frontend continua iniciando em `http://localhost:5173` e o terminal mostra por que a API ficou indisponível. Depois de configurar o banco, basta reiniciar `npm run dev` para habilitar o sistema completo.
+Se o `.env` ou o banco ainda não estiverem disponíveis, o frontend continua iniciando em `http://localhost:5173` e o terminal mostra por que a API ficou indisponível. Depois de configurar o banco, basta reiniciar `npm run dev` para habilitar o sistema completo.
 
 ## Acessos iniciais
 
@@ -164,7 +154,7 @@ npm run dev       # frontend e backend
 npm run dev:web   # somente frontend
 npm run dev:api   # somente backend
 npm run lint      # análise estática
-npm test          # testes seguros; integração MySQL fica desativada por padrão
+npm test          # testes seguros; integração PostgreSQL fica desativada por padrão
 npm run test:security # isolamento multiempresa e restrições permanentes
 npm run build     # frontend de produção
 npm start         # API, uploads e frontend já compilado
@@ -175,9 +165,10 @@ npm run criar-admin-inicial # cria/verifica o primeiro administrador
 npm run criar-superadmin # cria/verifica o superadministrador global
 ```
 
-Os testes de integração MySQL só são habilitados explicitamente com
-`RUN_MYSQL_TESTS=1` e usam um banco cujo nome termina em `_testes`. Nunca use
-essa variável com credenciais apontadas para um banco remoto ou persistente.
+Os testes de integração PostgreSQL só são habilitados explicitamente com
+`RUN_PG_TESTS=1`: eles criam um schema `testes_<aleatório>` no banco configurado
+e o removem ao final. Nunca use essa variável com credenciais apontadas para o
+banco de produção — use um projeto Supabase ou um PostgreSQL descartável.
 
 ## Rotas principais da API
 
@@ -238,7 +229,7 @@ dos estabelecimentos em auditoria própria.
 
 ## Produção
 
-Defina `NODE_ENV=production` e todas as variáveis `DB_HOST`, `DB_USER`, `DB_PASSWORD` e `DB_NAME`. Provisione a estrutura e execute migrations antes de iniciar a API; o startup nunca altera o schema. `ADMIN_PASSWORD` deve ter ao menos 12 caracteres quando usado para criar ou recuperar a conta inicial. Use uma conta MySQL com acesso somente ao banco já provisionado da aplicação. Antes de abrir pedidos, cadastre o cardápio e preencha **Configurações** com identidade, contatos, horário, áreas atendidas, taxas, mínimo e pagamentos reais. O Pix só aparece com chave, beneficiário e cidade; o QR Code BR Code é montado a partir desses dados, do total recalculado e do identificador real do pedido. Não há confirmação bancária automática: um administrador autenticado precisa confirmar o recebimento. Cartão e dinheiro também entram na receita somente após confirmação.
+Defina `NODE_ENV=production` e `DATABASE_URL` (ou todas as variáveis `DB_HOST`, `DB_USER`, `DB_PASSWORD` e `DB_NAME`), com `DB_SSL=true` e `DB_SSL_CA`. Provisione a estrutura e execute migrations antes de iniciar a API; o startup nunca altera o schema. `ADMIN_PASSWORD` deve ter ao menos 12 caracteres quando usado para criar ou recuperar a conta inicial. Nunca exponha a senha do banco no frontend: só o backend conecta ao PostgreSQL. Antes de abrir pedidos, cadastre o cardápio e preencha **Configurações** com identidade, contatos, horário, áreas atendidas, taxas, mínimo e pagamentos reais. O Pix só aparece com chave, beneficiário e cidade; o QR Code BR Code é montado a partir desses dados, do total recalculado e do identificador real do pedido. Não há confirmação bancária automática: um administrador autenticado precisa confirmar o recebimento. Cartão e dinheiro também entram na receita somente após confirmação.
 
 Fotos, logos e banners ficam no caminho configurado em `UPLOADS_PATH` (padrão
 local `server/uploads`), separados em

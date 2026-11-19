@@ -3,19 +3,19 @@
 ## Arquitetura recomendada
 
 - Node.js 22 executa a API e serve o `dist` já compilado.
-- MySQL 8 usa banco e usuário exclusivos.
+- PostgreSQL no Supabase (projeto exclusivo), acessado pelo Session pooler com TLS validado.
 - Um proxy reverso (Nginx, Caddy, IIS ou serviço gerenciado) termina HTTPS e encaminha para `127.0.0.1:3001`.
 - `UPLOADS_PATH` aponta para volume persistente fora da pasta substituída a cada release.
-- `database/CRIAR_db.sql` documenta a criação limpa da estrutura MySQL; `database/migrations` contém somente alterações incrementais.
+- `database/CRIAR_db.sql` documenta a criação limpa da estrutura PostgreSQL; `database/migrations` contém somente alterações incrementais. O esquema MySQL anterior está em `database/mysql-legado/`, só como histórico.
 - Um gerenciador de processos (serviço do Windows, systemd ou PM2) reinicia o Node após falhas e inicialização da máquina.
 
 ## Preparação
 
-1. Provisione o banco e um usuário restrito conforme o README. Não use `root` na aplicação.
+1. Crie o projeto no Supabase e execute `database/CRIAR_db.sql` no SQL Editor, conforme [`INSTALACAO.md`](INSTALACAO.md).
 2. Crie `.env` somente no servidor e preencha o modelo seguro de
    [`INSTALACAO.md`](INSTALACAO.md). Não copie credenciais para o Git.
-3. Defina `NODE_ENV=production`, `PUBLIC_SITE_URL`, `VITE_PUBLIC_URL` e `CORS_ORIGINS` com a origem HTTPS exata. Para MySQL remoto, use `DB_SSL=true` e configure `DB_SSL_CA`.
-4. Em uma instalação nova, crie/selecione o schema pelo provedor e aplique `database/CRIAR_db.sql`; esse arquivo não cria nem seleciona o banco. Em banco existente, faça backup, revise as migrations e execute `npm run db:migrate`; nunca reaplique o instalador completo.
+3. Defina `NODE_ENV=production`, `PUBLIC_SITE_URL`, `VITE_PUBLIC_URL` e `CORS_ORIGINS` com a origem HTTPS exata. Defina `DATABASE_URL` (Session pooler), `DB_SSL=true` e `DB_SSL_CA` com o certificado baixado do Supabase.
+4. Em banco existente, faça backup, revise as migrations e execute `npm run db:migrate`; nunca reaplique o instalador completo.
 5. Defina `SUPERADMIN_PASSWORD` com no mínimo 12 caracteres e execute
    `npm run criar-superadmin`. Para manter o estabelecimento inicial de
    compatibilidade, defina também `ADMIN_PASSWORD` e execute
@@ -26,7 +26,7 @@
 7. Execute `npm ci`, os testes adequados em banco isolado, `npm run lint`, `npm run build` e `npm run db:check`.
 8. Inicie com `npm start`; exponha apenas o proxy HTTPS, nunca a porta interna diretamente à internet. O startup valida a conexão, mas não cria nem altera estruturas ou usuários.
 
-O roteiro completo, incluindo DNS curinga, domínio personalizado, SSL MySQL,
+O roteiro completo, incluindo DNS curinga, domínio personalizado, SSL do banco,
 verificação, backup e cadastro do primeiro estabelecimento, está em
 [`INSTALACAO.md`](INSTALACAO.md).
 
@@ -74,22 +74,11 @@ banco antes de servir. Novos arquivos são sempre gravados na estrutura isolada.
 ## Operação
 
 - Preserve `UPLOADS_PATH` entre releases e inclua-o em backup separado do banco,
-  mantendo a correspondência entre o backup dos arquivos e o backup MySQL.
+  mantendo a correspondência entre o backup dos arquivos e o backup do banco.
 - Direcione stdout/stderr estruturados do processo para a solução de logs do servidor, com rotação e acesso restrito.
-- Monitore `/api/saude`, uso de disco, conexões MySQL, erros HTTP 5xx e validade do certificado.
-- Mantenha cópias operacionais do MySQL pela infraestrutura escolhida e teste a restauração em ambiente isolado. `database/CRIAR_db.sql` recria uma instalação limpa, mas não substitui uma cópia dos dados reais de produção.
-- Antes de cada release, confira migrations pendentes e seus checksums. DDL do MySQL pode efetuar commit implícito, portanto planeje a recuperação antes da execução.
-- As migrations `002` a `004` expandem e associam o escopo multiempresa. Execute-as com novas escritas suspensas e valide `database/verificacoes/002_verificar_migracao_estabelecimento.sql` antes de liberar tráfego. As colunas continuam nullable até o backend passar a preencher e validar o estabelecimento em todas as operações.
-- As migrations `021` a `023` acompanham a impressão (observação da comanda,
-  impressora de caixa e recibo de fechamento). Só adicionam coluna opcional e
-  ampliam um CHECK: nenhuma linha é reescrita, e uma loja sem impressora
-  cadastrada continua funcionando igual. As três foram verificadas contra um
-  MariaDB 11.8.9 real, tanto no caminho de upgrade quanto no de instalação nova.
-- A `023` usa `DROP CONSTRAINT`, e não `DROP CHECK`. Esta última é sintaxe do
-  MySQL 8.0.16+ e é **erro de sintaxe no MariaDB**, que é o motor de produção.
-  Os testes locais rodam só em MySQL, então `server/multitenant-security.test.js`
-  recusa automaticamente sintaxe de um motor só nas migrations — trate uma falha
-  desse teste como bloqueio de release, não como implicância.
+- Monitore `/api/saude`, uso de disco, conexões do banco (Supabase → Reports), erros HTTP 5xx e validade do certificado.
+- Mantenha cópias operacionais do banco (backups do Supabase ou `pg_dump`) e teste a restauração em ambiente isolado. `database/CRIAR_db.sql` recria uma instalação limpa, mas não substitui uma cópia dos dados reais de produção.
+- Antes de cada release, confira migrations pendentes e seus checksums. Cada migration roda numa transação (DDL do PostgreSQL é transacional), mas mantenha o backup validado antes de migrar.
 - **Defina `SUPERADMIN_HOSTS` em produção** (sem migration). Lista separada
   por vírgulas com o host do painel global (ex.:
   `SUPERADMIN_HOSTS=pedidos.exemplo.com.br`). Fora desses hosts,
@@ -127,39 +116,53 @@ banco antes de servir. Novos arquivos são sempre gravados na estrutura isolada.
   inadimplente, suspensa ou vencida **volta ao ar** com o deploy. Antes de
   publicar, liste essas lojas e suspenda pelo painel as que devem continuar
   bloqueadas:
-  `SELECT id_estabelecimento, slug, status_assinatura, vencimento_assinatura_em FROM estabelecimentos WHERE status = 'ativo' AND (status_assinatura IN ('bloqueada', 'cancelada', 'inadimplente', 'suspensa') OR vencimento_assinatura_em < UTC_TIMESTAMP());`
+  `SELECT id_estabelecimento, slug, status_assinatura, vencimento_assinatura_em FROM estabelecimentos WHERE status = 'ativo' AND (status_assinatura IN ('bloqueada', 'cancelada', 'inadimplente', 'suspensa') OR vencimento_assinatura_em < CURRENT_TIMESTAMP);`
   Não há migration nesta mudança: é só a regra do backend.
-- A `025` acrescenta `administradores.trocar_senha_em_proximo_acesso`
-  (DEFAULT 0, nenhuma linha reescrita). Ordem: **backup validado** →
-  `npm run db:migrate` → publicar e reiniciar o backend desta versão logo em
-  seguida (o login do administrador passa a ler a coluna nova; sem a `025` ele
-  falha). A partir daí, toda senha escolhida por outra pessoa — primeiro
-  administrador de uma loja nova, "Resetar senha de administrador" no
-  superadmin ou administrador criado por outro administrador no painel — é
-  temporária: o painel só libera a troca de senha até o administrador definir
-  a própria. O mínimo de senha de administrador passa a ser 12 caracteres em
-  todos os fluxos, inclusive na troca da própria senha (antes era 10).
-  Administradores já cadastrados não são afetados. Ainda **não
-  executada contra um MariaDB 11.8 real**: aplique primeiro numa cópia do banco
-  de produção.
-- A `024` fixa o ciclo de vida do estabelecimento (`ativo`, `suspenso`,
-  `arquivado`) com um CHECK e converte `inativo` em `suspenso`, sem apagar
-  nada. Ordem: **backup validado** → suspender escritas no painel do
-  superadministrador → `npm run db:migrate` → publicar e reiniciar o backend
-  desta versão logo em seguida → `database/verificacoes/001_verificar_instalacao.sql`
-  com as três contagens de ciclo de vida em zero. Migration e backend vão
-  juntos: o backend novo lê as colunas da `024`, e o antigo grava `inativo`, que
-  o CHECK passa a recusar. A sintaxe evita os recursos de um motor só, que o
-  teste de segurança recusa, mas a `024` ainda **não foi executada contra um
-  MariaDB 11.8 real**. Aplique primeiro numa cópia do banco de produção.
-- A partir do commit que fixa o fuso, o pool executa `SET time_zone = '+00:00'`
-  em toda conexão, então `CURRENT_TIMESTAMP` grava UTC independentemente do
-  relógio do servidor. Em produção isso **não muda comportamento**, porque o
-  MariaDB da Hostinger já resolve `NOW() = UTC_TIMESTAMP()`; o que a mudança
-  elimina é a dependência dessa coincidência. Confirme com
-  `SELECT @@session.time_zone, NOW(), UTC_TIMESTAMP();` depois do deploy: a
-  sessão deve responder `+00:00` e os dois horários devem coincidir.
 - Faça o primeiro acesso administrativo, troque a senha e cadastre os dados reais da loja antes de abrir pedidos.
+
+## Migração para PostgreSQL (Supabase)
+
+Esta versão troca o MySQL/MariaDB pelo PostgreSQL. O código continua usando a
+mesma interface de banco; a camada `server/db/postgres.js` traduz marcadores,
+`insertId` e códigos de erro para o driver `pg`.
+
+- **Não há migração automática de dados.** O `CRIAR_db.sql` novo cria uma
+  instalação vazia. Para trazer dados de um MySQL antigo, exporte tabela a
+  tabela (CSV) e importe pelo painel do Supabase, na ordem das chaves
+  estrangeiras, e depois ajuste as sequências com
+  `SELECT setval(pg_get_serial_sequence('<tabela>', 'id'), (SELECT MAX(id) FROM <tabela>));`.
+- Unicidade de usuário, e-mail e nomes do catálogo ignora maiúsculas
+  (índices em `LOWER(...)`), como a collation `_ci` do MySQL. Diferente do
+  MySQL, acentos **são** diferenciados (`Porcoes` ≠ `Porções`).
+- Horários são `TIMESTAMPTZ`; o pool fixa `TimeZone=UTC` em toda conexão, e o
+  teste de integração confere isso em todas elas.
+- Use o **Session pooler** (porta 5432). O Transaction pooler (6543) não é
+  suportado, porque o fuso da sessão se perderia entre transações.
+- RLS está ligado em todas as tabelas, sem políticas: a API REST do Supabase
+  não expõe dado nenhum. Toda tabela nova (em migration) precisa do mesmo
+  `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` — o teste de segurança cobra.
+
+## Hostinger (app Node.js)
+
+- Versão do Node.js: **22.13 ou superior** (o `package.json` exige; o Vite 8 e
+  a opção `--env-file-if-exists` dos scripts não rodam em versões anteriores).
+- Comando de build: `npm run build`. Comando de início: `npm start` (ou o
+  arquivo de entrada `server/index.js`).
+- Variáveis de ambiente: cadastre no painel do app (`NODE_ENV=production`,
+  `DATABASE_URL`, `DB_SSL=true`, `DB_SSL_CA`, `JWT_SECRET`, `PUBLIC_SITE_URL`,
+  `SUPERADMIN_HOSTS` etc.). O `npm start` lê também um `.env` na raiz, se
+  existir; nenhum outro arquivo (`.env.hostinger`, `.env.local`) é lido em
+  produção.
+- O certificado do Supabase precisa estar no servidor: envie o `.crt` por
+  fora do Git (Gerenciador de Arquivos) e aponte `DB_SSL_CA` para o caminho, ou
+  cole o conteúdo PEM direto em `DB_SSL_CA` com as quebras de linha como `
+`.
+- A hospedagem precisa conseguir abrir conexão de saída para
+  `aws-0-<regiao>.pooler.supabase.com:5432`. Se o log mostrar `ETIMEDOUT` ou
+  `ECONNREFUSED` nesse endereço, a porta está bloqueada pela hospedagem e é
+  preciso pedir a liberação ao suporte.
+- Depois do deploy, `/api/saude` deve responder
+  `{"status":"ok","banco":"postgres-conectado"}`.
 
 ## Recuperação de acesso
 

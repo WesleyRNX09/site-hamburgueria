@@ -13,7 +13,7 @@ if (config.producao && config.administrador.senha.length < 12) {
   throw new Error('ADMIN_PASSWORD deve ter pelo menos 12 caracteres em produção.');
 }
 
-const banco = await abrirBanco({ mysql: config.mysql });
+const banco = await abrirBanco({ banco: config.banco });
 try {
   const idEstabelecimento = await criarEstabelecimentoInicial(banco, {
     slug: config.tenantDesenvolvimento

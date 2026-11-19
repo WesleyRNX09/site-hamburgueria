@@ -519,7 +519,7 @@ async function processarImagemAtualizada(
 async function rotaPublica({ banco, requisicao, resposta, caminho, url, limitadorPedidos }) {
   if (requisicao.method === 'GET' && caminho === '/api/saude') {
     await banco.query('SELECT 1');
-    responderJson(resposta, 200, { status: 'ok', banco: 'mysql-conectado' });
+    responderJson(resposta, 200, { status: 'ok', banco: 'postgres-conectado' });
     return true;
   }
 

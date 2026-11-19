@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { request as requisicaoHttp } from 'node:http';
 import { tmpdir } from 'node:os';
 import { crc32, inflateRawSync } from 'node:zlib';
 import { join, resolve } from 'node:path';
 import { after, before, test } from 'node:test';
 
-import mysql from 'mysql2/promise';
+import { lerConfiguracaoBanco } from './config.js';
 
 import { criarLimitadorTentativas, criarServidor, personalizarIndexHtml } from './app.js';
 import { listarCatalogo, precoParaCentavos } from './catalog.js';
@@ -20,7 +20,7 @@ import {
 } from './exclusaoEstabelecimento.js';
 import { criarBancoEmMemoria, semearLoja } from './testes/bancoEmMemoria.js';
 import { criarZip } from './zip.js';
-import { fecharBanco, prepararBanco } from './database.js';
+import { abrirBanco, fecharBanco, prepararBanco } from './database.js';
 import { checksumMigration, checksumsCompativeisMigration } from './db/migration-utils.js';
 import { removerImagemLocal, salvarImagemDataUrl } from './imageStore.js';
 import {
@@ -1289,8 +1289,8 @@ test('limita tentativas repetidas de autenticação', () => {
 
 test('não expõe detalhes internos quando o banco falha', async () => {
   const bancoComFalha = {
-    async execute() { throw new Error('segredo-interno-do-mysql'); },
-    async query() { throw new Error('segredo-interno-do-mysql'); }
+    async execute() { throw new Error('segredo-interno-do-banco'); },
+    async query() { throw new Error('segredo-interno-do-banco'); }
   };
   const servidorComFalha = criarServidor({ banco: bancoComFalha, pastaUploads: tmpdir() });
   await aguardarServidor(servidorComFalha, 0);
@@ -1307,9 +1307,9 @@ test('não expõe detalhes internos quando o banco falha', async () => {
     const corpo = await resposta.json();
     assert.equal(resposta.status, 500);
     assert.equal(corpo.erro, 'Erro interno do servidor.');
-    assert.equal(JSON.stringify(corpo).includes('segredo-interno-do-mysql'), false);
+    assert.equal(JSON.stringify(corpo).includes('segredo-interno-do-banco'), false);
     assert.ok(errosRegistrados.length > 0);
-    assert.equal(JSON.stringify(errosRegistrados).includes('segredo-interno-do-mysql'), false);
+    assert.equal(JSON.stringify(errosRegistrados).includes('segredo-interno-do-banco'), false);
   } finally {
     console.error = erroOriginal;
     await fecharServidor(servidorComFalha);
@@ -1763,8 +1763,10 @@ test('a desativação nunca deixa a plataforma sem superadministrador ativo', as
     release() {},
     async execute(sql, parametros = []) {
       comandos.push({ sql, parametros });
+      // A contagem trava as linhas numa subconsulta (PostgreSQL não aceita FOR
+      // UPDATE junto de agregação), então ela é conferida antes da busca por id.
+      if (sql.includes('AS total')) return [[{ total: 1 }]];
       if (sql.includes('SELECT id FROM superadministradores')) return [[{ id: 9 }]];
-      if (sql.includes('SELECT COUNT(id) AS total')) return [[{ total: 1 }]];
       throw new Error(`Consulta inesperada no teste: ${sql}`);
     }
   };
@@ -3332,11 +3334,11 @@ test('painel aberto com a loja indisponível derruba a sessão do admin e do gar
   assert.equal(CODIGO_ESTABELECIMENTO_INDISPONIVEL, 'estabelecimento_indisponivel');
 });
 
-const executarIntegracao = process.env.RUN_MYSQL_TESTS === '1';
+const executarIntegracao = process.env.RUN_PG_TESTS === '1';
 
 if (!executarIntegracao) {
-  test('integração MySQL', {
-    skip: 'Defina RUN_MYSQL_TESTS=1 para autorizar explicitamente os testes em um banco descartável.'
+  test('integração PostgreSQL', {
+    skip: 'Defina RUN_PG_TESTS=1 para autorizar explicitamente os testes em um banco descartável.'
   }, () => {});
 } else {
   let banco;
@@ -3376,15 +3378,11 @@ if (!executarIntegracao) {
     logo: ''
   };
 
-  const nomeBanco = `${process.env.DB_NAME || 'hamburgueria'}_testes`;
-  const configuracaoMySql = {
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: Number(process.env.DB_PORT) || 3306,
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: nomeBanco,
-    connectionLimit: 4
-  };
+  /* Cada execução cria um schema próprio e descartável dentro do banco
+     configurado e o remove no fim: nada do schema de uso (public) é tocado. */
+  const schemaTeste = `testes_${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+  const configuracaoConexaoTeste = { ...lerConfiguracaoBanco(), connectionLimit: 4 };
+  const configuracaoBancoTeste = { ...configuracaoConexaoTeste, schema: schemaTeste };
   const administrador = {
     usuario: 'admin-teste',
     email: 'admin@teste.local',
@@ -3432,8 +3430,14 @@ if (!executarIntegracao) {
   before(async () => {
     pastaTemporaria = await mkdtemp(join(tmpdir(), 'hamburgueria-api-'));
     pastaUploads = join(pastaTemporaria, 'uploads');
+    const conexaoAdministrativa = await abrirBanco({ banco: configuracaoConexaoTeste });
+    try {
+      await conexaoAdministrativa.query(`CREATE SCHEMA ${schemaTeste}`);
+    } finally {
+      await fecharBanco(conexaoAdministrativa);
+    }
     banco = await prepararBanco({
-      mysql: configuracaoMySql,
+      banco: configuracaoBancoTeste,
       administrador,
       incluirDadosDemonstracao: true,
       senhaFuncionarioDemonstracao: 'demo'
@@ -3475,25 +3479,23 @@ if (!executarIntegracao) {
     if (servidor) await fecharServidor(servidor);
     if (servidorTenantB) await fecharServidor(servidorTenantB);
     if (banco) await fecharBanco(banco);
-    const conexao = await mysql.createConnection({
-      host: configuracaoMySql.host,
-      port: configuracaoMySql.port,
-      user: configuracaoMySql.user,
-      password: configuracaoMySql.password
-    });
-    await conexao.query(`DROP DATABASE IF EXISTS \`${nomeBanco}\``);
-    await conexao.end();
+    const conexaoAdministrativa = await abrirBanco({ banco: configuracaoConexaoTeste });
+    try {
+      await conexaoAdministrativa.query(`DROP SCHEMA IF EXISTS ${schemaTeste} CASCADE`);
+    } finally {
+      await fecharBanco(conexaoAdministrativa);
+    }
     if (pastaTemporaria) await rm(pastaTemporaria, { recursive: true, force: true });
   });
 
-  test('expõe saúde e dados públicos persistidos no MySQL', async () => {
+  test('expõe saúde e dados públicos persistidos no PostgreSQL', async () => {
     const respostaSaude = await fetch(`${urlBase}/api/saude`, { headers: { Origin: 'http://localhost:5173' } });
     assert.equal(respostaSaude.status, 200);
     assert.equal(respostaSaude.headers.get('x-content-type-options'), 'nosniff');
     assert.equal(respostaSaude.headers.get('x-frame-options'), 'DENY');
     assert.equal(respostaSaude.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
     assert.equal(respostaSaude.headers.get('access-control-allow-origin'), 'http://localhost:5173');
-    assert.equal((await respostaSaude.json()).banco, 'mysql-conectado');
+    assert.equal((await respostaSaude.json()).banco, 'postgres-conectado');
 
     const publico = await chamar('/api/publico/inicial');
     assert.equal(publico.status, 200);
@@ -3885,55 +3887,6 @@ if (!executarIntegracao) {
     assert.equal(criado.corpo.pedido.total, 31);
     assert.equal(criado.corpo.pedido.areaEntregaId, null);
     assert.match(criado.corpo.pedido.endereco, /Bairro Qualquer/);
-  });
-
-  test('migration 019 copia os bairros do JSON antigo com o tempo lido do texto', async () => {
-    const idTenantB = await idDaLoja('loja-b');
-    const migration = await readFile(new URL('../database/migrations/019_areas_entrega.sql', import.meta.url), 'utf8');
-    const copia = migration
-      .split(/;\s*(?:\r?\n|$)/)
-      .map((instrucao) => instrucao.trim())
-      .find((instrucao) => instrucao.startsWith('INSERT INTO areas_entrega'));
-    assert.ok(copia);
-    const areasB = async () => (await banco.execute(`
-      SELECT nome, taxa_entrega_centavos, tempo_estimado_min, tempo_estimado_max, ativo
-      FROM areas_entrega WHERE id_estabelecimento = ? ORDER BY nome
-    `, [idTenantB]))[0].map((linha) => [
-      linha.nome, Number(linha.taxa_entrega_centavos), Number(linha.tempo_estimado_min), Number(linha.tempo_estimado_max), Number(linha.ativo)
-    ]);
-    const jsonAntigo = JSON.stringify([
-      { bairro: 'Centro', taxaCentavos: 500 },
-      { bairro: '  Vila Nova ', taxaCentavos: 750 },
-      { bairro: 'centro', taxaCentavos: 900 },
-      null,
-      { bairro: 'Sem taxa' },
-      { bairro: '', taxaCentavos: 100 },
-      { bairro: 'Taxa quebrada', taxaCentavos: 'abc' }
-    ]);
-    async function aplicar(tempoEntrega) {
-      await banco.execute('DELETE FROM areas_entrega WHERE id_estabelecimento = ?', [idTenantB]);
-      await banco.execute(
-        'UPDATE configuracoes_estabelecimento SET areas_entrega_json = ?, tempo_entrega = ? WHERE id_estabelecimento = ?',
-        [jsonAntigo, tempoEntrega, idTenantB]
-      );
-      await banco.query(copia);
-      return areasB();
-    }
-    try {
-      assert.deepEqual(await aplicar('35–50 min'), [['Centro', 500, 35, 50, 1], ['Vila Nova', 750, 35, 50, 1]]);
-      // Rodar de novo não duplica nem altera.
-      await banco.query(copia);
-      assert.deepEqual(await areasB(), [['Centro', 500, 35, 50, 1], ['Vila Nova', 750, 35, 50, 1]]);
-      for (const tempo of ['Rápido', '40 min', '50–40 min', '0–20 min', null]) {
-        assert.deepEqual((await aplicar(tempo)).map(([, , minimo, maximo]) => [minimo, maximo]), [[30, 45], [30, 45]], String(tempo));
-      }
-    } finally {
-      await banco.execute('DELETE FROM areas_entrega WHERE id_estabelecimento = ?', [idTenantB]);
-      await banco.execute(
-        "UPDATE configuracoes_estabelecimento SET areas_entrega_json = NULL, tempo_entrega = '20–30 min' WHERE id_estabelecimento = ?",
-        [idTenantB]
-      );
-    }
   });
 
   test('valida troco em dinheiro e persiste a opção escolhida', async () => {
@@ -5089,7 +5042,7 @@ if (!executarIntegracao) {
   }
 
   /* Exclusão definitiva contra as chaves estrangeiras reais: se a ordem de
-     remoção estiver errada, o próprio MySQL/MariaDB recusa o DELETE. */
+     remoção estiver errada, o próprio PostgreSQL recusa o DELETE. */
   test('exclusão definitiva no banco real respeita as FKs e não mexe nas outras lojas', async () => {
     const contarPorLoja = async (idEstabelecimento) => {
       const contagens = {};
@@ -5121,7 +5074,7 @@ if (!executarIntegracao) {
     await arquivarEstabelecimento(banco, criado.id, { confirmacaoSlug: slug }, null);
     // Só o teste recua a data: 61 dias atrás, no relógio UTC do banco.
     await banco.execute(
-      'UPDATE estabelecimentos SET arquivado_em = UTC_TIMESTAMP() - INTERVAL 61 DAY WHERE id_estabelecimento = ?',
+      "UPDATE estabelecimentos SET arquivado_em = CURRENT_TIMESTAMP - INTERVAL '61 days' WHERE id_estabelecimento = ?",
       [criado.id]
     );
     assert.equal((await contarPorLoja(criado.id)).produtos, 5);
@@ -5164,16 +5117,15 @@ if (!executarIntegracao) {
 
   test('toda conexão do pool trabalha em UTC, qualquer que seja o relógio do servidor', async () => {
     /*
-      `timezone: 'Z'` só diz ao mysql2 como converter Date <-> DATETIME; quem
-      resolve CURRENT_TIMESTAMP é o servidor. Sem fixar a sessão, o horário
-      gravado seguia o relógio da máquina do banco — em produção (MariaDB em
-      UTC) dava certo e em desenvolvimento (MySQL em Brasília) não.
+      As colunas são TIMESTAMPTZ, mas o backend também grava datas como texto
+      sem fuso ('2026-01-31 12:00:00.000', em UTC). Quem interpreta esse texto
+      é a sessão: fora de UTC, o horário sairia deslocado.
     */
     const [[sessao]] = await banco.query(
-      'SELECT @@session.time_zone AS fuso, NOW() AS agora, UTC_TIMESTAMP() AS utc'
+      "SELECT current_setting('TimeZone') AS fuso, NOW() AS agora, '2026-01-31 12:00:00'::timestamptz AS texto"
     );
-    assert.equal(sessao.fuso, '+00:00');
-    assert.equal(new Date(sessao.agora).toISOString(), new Date(sessao.utc).toISOString());
+    assert.equal(sessao.fuso, 'UTC');
+    assert.equal(new Date(sessao.texto).toISOString(), '2026-01-31T12:00:00.000Z');
     // O relógio do banco e o do Node precisam concordar, senão o que for
     // gravado por CURRENT_TIMESTAMP sai deslocado do que o app calcula.
     assert.ok(
@@ -5183,9 +5135,9 @@ if (!executarIntegracao) {
 
     // Vale para toda conexão, não só para a primeira que o pool abriu.
     const fusos = await Promise.all(
-      [1, 2, 3].map(() => banco.query('SELECT @@session.time_zone AS fuso'))
+      [1, 2, 3].map(() => banco.query("SELECT current_setting('TimeZone') AS fuso"))
     );
-    assert.deepEqual(fusos.map(([linhas]) => linhas[0].fuso), ['+00:00', '+00:00', '+00:00']);
+    assert.deepEqual(fusos.map(([linhas]) => linhas[0].fuso), ['UTC', 'UTC', 'UTC']);
 
     // E o que o servidor grava sozinho volta no mesmo relógio do aplicativo.
     const antes = Date.now();
@@ -5203,56 +5155,6 @@ if (!executarIntegracao) {
     } finally {
       await banco.execute('DELETE FROM auditoria_admin WHERE id = ?', [gravado.insertId]);
     }
-  });
-
-  test('migration 017: conta criada antes das permissões volta a ter exatamente o acesso completo', async () => {
-    const idTenantA = await idDaLoja('estabelecimento-padrao');
-    const usuario = `legado-${randomUUID().slice(0, 8)}`;
-    const senha = 'senha-legada-segura';
-    // Conta como existia antes da migration: a linha em administradores, sem nenhuma permissão.
-    const [criado] = await banco.execute(`
-      INSERT INTO administradores (id_estabelecimento, usuario, email, nome, senha_hash)
-      VALUES (?, ?, ?, 'Conta legada', ?)
-    `, [idTenantA, usuario, `${usuario}@teste.local`, criarHashSenha(senha)]);
-    const idLegado = Number(criado.insertId);
-    assert.deepEqual(await permissoesNoBanco(idLegado), []);
-
-    const login = await entrarComo(usuario, senha);
-    assert.equal(login.status, 200);
-    const tokenLegado = login.corpo.token;
-    assert.equal((await chamar('/api/admin/dashboard/indicadores?periodo=30dias', { token: tokenLegado })).status, 403);
-
-    // Aplica a concessão exatamente como está escrita na migration.
-    const migration = await readFile(new URL('../database/migrations/017_permissoes_administradores.sql', import.meta.url), 'utf8');
-    const concessao = migration
-      .split(/;\s*(?:\r?\n|$)/)
-      .map((instrucao) => instrucao.trim())
-      .find((instrucao) => instrucao.startsWith('INSERT INTO administrador_permissoes'));
-    assert.ok(concessao);
-    await banco.query(concessao);
-
-    assert.deepEqual(await permissoesNoBanco(idLegado), todasAsPermissoes);
-    // Mesmo token, sem novo login: o acesso volta na hora.
-    const sessao = await chamar('/api/admin/sessao', { token: tokenLegado });
-    assert.deepEqual([...sessao.corpo.admin.permissoes].sort(), todasAsPermissoes);
-    assert.equal((await chamar('/api/admin/dashboard/indicadores?periodo=30dias', { token: tokenLegado })).status, 200);
-    const painel = await chamar('/api/admin/dados', { token: tokenLegado });
-    assert.equal(painel.status, 200);
-    assert.ok(painel.corpo.administradores.length > 0);
-    assert.ok(painel.corpo.acessoGarcom);
-    assert.ok(painel.corpo.mesas.length > 0);
-
-    // Todo administrador em uso fica com o conjunto completo, sem nada a mais.
-    const [contagens] = await banco.execute(`
-      SELECT a.id, COUNT(ap.permissao) AS total
-      FROM administradores a
-      LEFT JOIN administrador_permissoes ap
-        ON ap.administrador_id = a.id AND ap.id_estabelecimento = a.id_estabelecimento
-      WHERE a.id_estabelecimento IS NOT NULL AND a.arquivado_em IS NULL
-      GROUP BY a.id
-    `);
-    assert.ok(contagens.length > 0);
-    assert.ok(contagens.every((linha) => Number(linha.total) === CHAVES_PERMISSOES.length));
   });
 
   test('administrador da loja A não altera, arquiva, desarquiva nem apaga administrador da loja B', async () => {
@@ -5884,7 +5786,7 @@ if (!executarIntegracao) {
     assert.deepEqual(nomes(await listar()), ['Balcao']);
 
     /* Nunca mais de uma marcada no banco: é a regra que a aplicação garante
-       na transação, já que o MySQL não tem índice único parcial. */
+       na transação (o esquema não tem índice único parcial para isso). */
     const contarCaixas = async (idEstabelecimento) => {
       const [[linha]] = await banco.execute(
         'SELECT COUNT(id) AS total FROM impressoras WHERE id_estabelecimento = ? AND eh_caixa = 1',

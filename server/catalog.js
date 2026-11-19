@@ -268,7 +268,7 @@ export async function buscarAdicional(banco, idEstabelecimento, id) {
 async function obterCategoriaId(banco, idEstabelecimento, nome) {
   const [linhas] = await banco.execute(`
     SELECT id FROM categorias
-    WHERE nome = ? AND ativo = 1 AND id_estabelecimento = ?
+    WHERE LOWER(nome) = LOWER(?) AND ativo = 1 AND id_estabelecimento = ?
   `, [nome, idEstabelecimento]);
   return linhas[0] ? Number(linhas[0].id) : null;
 }

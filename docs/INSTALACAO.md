@@ -1,7 +1,7 @@
 # Instalação e operação final
 
 Este guia descreve uma única implantação do frontend e do backend, um único
-schema MySQL compartilhado e vários estabelecimentos isolados por
+banco PostgreSQL (Supabase) compartilhado e vários estabelecimentos isolados por
 `id_estabelecimento`. Não crie uma cópia da aplicação ou um banco separado para
 cada cliente.
 
@@ -14,38 +14,57 @@ Use somente um dos fluxos:
   `npm run db:migrate`.
 
 Nunca execute `CRIAR_db.sql` sobre um banco persistente que já possua tabelas.
-O arquivo não contém `CREATE DATABASE` nem `USE`; o schema precisa ser criado e
-selecionado previamente no painel do provedor.
+O arquivo não contém `CREATE DATABASE`; ele cria tudo no schema atual (`public`,
+no Supabase) dentro de uma transação — se algo falhar, nada fica pela metade.
+
+Até a versão que usava MySQL/MariaDB, a estrutura e as migrations eram outras;
+elas estão preservadas em `database/mysql-legado/` só como histórico e não
+rodam no PostgreSQL. Não há conversão automática dos dados antigos.
 
 ## 2. Prepare a infraestrutura
 
 Antes do deploy, providencie:
 
 - Node.js 22.13 ou superior;
-- MySQL 8 com um schema exclusivo da aplicação;
-- uma conta MySQL operacional sem privilégios administrativos globais;
+- um projeto Supabase (PostgreSQL 15+) exclusivo da aplicação;
+- a senha do banco guardada fora do repositório;
 - HTTPS e proxy reverso encaminhando para o processo Node;
 - um domínio principal e DNS curinga para os subdomínios;
 - um volume persistente para uploads;
-- uma estratégia de backup conjunto do MySQL e dos uploads.
+- uma estratégia de backup conjunto do banco e dos uploads.
 
 O proxy deve preservar o cabeçalho `Host`. É por ele que o backend identifica o
 estabelecimento; substituir o host por `localhost` quebra o isolamento por
 domínio.
 
-## 3. Crie o banco remoto
+## 3. Crie o banco no Supabase
 
-No painel do provedor:
+1. Em [supabase.com](https://supabase.com), crie um projeto. Escolha a região
+   mais próxima da hospedagem (ex.: São Paulo, `sa-east-1`) e guarde a senha do
+   banco num cofre de senhas.
+2. Abra **SQL Editor**, cole o conteúdo inteiro de `database/CRIAR_db.sql` e
+   clique em **Run**. Deve terminar com "Success. No rows returned".
+3. Clique em **Connect** (topo do painel) → **Session pooler** e copie a URI.
+   Ela tem o formato
+   `postgresql://postgres.<projeto>:[YOUR-PASSWORD]@aws-0-<regiao>.pooler.supabase.com:5432/postgres`.
+4. Em **Project Settings → Database → SSL Configuration**, clique em
+   **Download certificate** e guarde o arquivo `.crt` (ex.:
+   `certificados/supabase-ca.crt`, pasta já ignorada pelo Git).
+5. Não coloque nenhuma dessas informações em arquivos versionados.
 
-1. Crie um schema vazio com `utf8mb4`, quando essa opção estiver disponível.
-2. Crie uma conta de aplicação limitada a esse schema.
-3. Anote host, porta, usuário, nome do schema e exigência de TLS.
-4. Baixe a CA oficial do provedor quando a conexão exigir certificado.
-5. Não coloque essas informações em arquivos versionados.
+Por que o **Session pooler** (porta 5432):
 
-Para banco novo, abra o editor SQL do schema criado e execute todo o conteúdo
-de `database/CRIAR_db.sql`. Em seguida, execute
-`database/verificacoes/001_verificar_instalacao.sql` e confira os resultados.
+- a conexão direta (`db.<projeto>.supabase.co`) só tem IPv6 no plano gratuito,
+  e muitas hospedagens compartilhadas, como a Hostinger, só saem por IPv4;
+- o backend fixa o fuso da sessão em UTC em cada conexão; o **Transaction
+  pooler** (porta 6543) troca a sessão a cada transação e **não é suportado**.
+
+Segurança da API REST do Supabase: o `CRIAR_db.sql` liga RLS em todas as
+tabelas sem criar política nenhuma e revoga o acesso dos papéis `anon` e
+`authenticated`. Assim a chave pública (`anon`) não lê nem grava dado algum;
+só o backend, que conecta como dono das tabelas, acessa o banco. Não crie
+políticas RLS nem use `supabase-js` no frontend: o isolamento entre lojas é
+feito pelo backend.
 
 ## 4. Crie o `.env`
 
@@ -60,15 +79,11 @@ Use este modelo e substitua somente no servidor:
 NODE_ENV=production
 PORT=3001
 
-# MySQL
-DB_HOST=
-DB_PORT=3306
-DB_USER=
-DB_PASSWORD=
-DB_NAME=
+# PostgreSQL (Supabase, Session pooler)
+DATABASE_URL=
 DB_CONNECTION_LIMIT=10
 DB_SSL=true
-DB_SSL_CA=
+DB_SSL_CA=certificados/supabase-ca.crt
 
 # URL pública, CORS e identificação do tenant
 PUBLIC_SITE_URL=https://pedidos.exemplo.com.br
@@ -107,6 +122,11 @@ Regras importantes:
 
 - `JWT_SECRET` deve ser aleatório, ter pelo menos 32 bytes e ser igual em todas
   as instâncias do mesmo ambiente.
+- `DATABASE_URL` é a URI do Session pooler com a senha no lugar de
+  `[YOUR-PASSWORD]`. Caracteres especiais da senha precisam ir codificados na
+  URL (`@` → `%40`, `#` → `%23`, `/` → `%2F`, `?` → `%3F`, `%` → `%25`). Como
+  alternativa, informe `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` e
+  `DB_NAME` separados; se as duas formas existirem, vale `DATABASE_URL`.
 - `DB_SSL=true` habilita TLS. `DB_SSL_CA` aceita o conteúdo PEM com quebras
   representadas por `\n` ou um caminho relativo/absoluto para a CA.
 - O backend sempre valida o certificado TLS; não existe opção para usar
@@ -131,8 +151,8 @@ Regras importantes:
   administrador inicial. Ele não permite trocar o tenant de uma requisição
   remota.
 - `UPLOADS_PATH` precisa apontar para a pasta montada no processo Node, não para
-  o MySQL e não para `dist`.
-- Não defina `RUN_MYSQL_TESTS=1` em produção.
+  o banco e não para `dist`.
+- Não defina `RUN_PG_TESTS=1` em produção.
 
 Em Windows, um caminho válido de upload é:
 
@@ -140,9 +160,9 @@ Em Windows, um caminho válido de upload é:
 UPLOADS_PATH=C:/dados/hamburgueria/uploads
 ```
 
-## 5. Configure SSL do MySQL
+## 5. Configure SSL do banco
 
-Se o provedor exigir TLS:
+O Supabase exige TLS:
 
 1. mantenha `DB_SSL=true`;
 2. salve a CA fora de pastas públicas e com leitura limitada ao usuário do
@@ -151,8 +171,8 @@ Se o provedor exigir TLS:
 4. execute `npm run db:check`;
 5. interrompa a implantação se houver erro de certificado.
 
-Use `DB_SSL=false` somente quando o MySQL estiver em uma rede local confiável
-e o provedor declarar que TLS não é necessário.
+Use `DB_SSL=false` somente com um PostgreSQL local, numa rede confiável, que
+não ofereça TLS.
 
 ## 6. Valide a conexão
 
@@ -340,89 +360,29 @@ Para um banco com dados:
 2. gere um backup e teste a restauração em ambiente isolado;
 3. valide `npm run db:check`;
 4. revise os arquivos pendentes em `database/migrations/`;
-5. use uma credencial temporária com os privilégios DDL necessários;
-6. execute `npm run db:migrate` uma única vez;
-7. execute `database/verificacoes/002_verificar_migracao_estabelecimento.sql`;
-8. restaure a conta operacional restrita e libere o tráfego somente após os
-   testes.
+5. execute `npm run db:migrate` uma única vez;
+6. libere o tráfego somente após os testes.
 
-O runner registra nome e checksum em `schema_migrations`. DDL do MySQL pode
-efetuar commit implícito; não tente desfazer uma migration parcialmente
-aplicada com comandos improvisados. Interrompa o deploy, preserve evidências e
-decida entre correção incremental ou restauração do backup validado.
+O runner registra nome e checksum em `schema_migrations`. No PostgreSQL cada
+migration roda numa transação junto com o próprio registro: se uma instrução
+falhar, o arquivo inteiro é desfeito e nada fica pela metade. Mesmo assim,
+mantenha o backup validado antes de migrar.
 
-### Migration 024 — ciclo de vida do estabelecimento
+### Migrations antigas (MySQL)
 
-A `024_ciclo_de_vida_estabelecimento.sql` fixa `estabelecimentos.status` em
-`ativo`, `suspenso` ou `arquivado` (CHECK `chk_estabelecimentos_status`),
-acrescenta `suspenso_em`, `motivo_suspensao`, `arquivado_em` e
-`arquivado_por`, e converte qualquer outro status (na prática, `inativo`) em
-`suspenso`, com a data da conversão. Nada é apagado.
-
-Ordem de aplicação:
-
-1. gere o backup do banco e confirme que ele restaura;
-2. suspenda novas escritas no painel do superadministrador;
-3. execute `npm run db:migrate` (aplica a `024` junto com qualquer pendente);
-4. publique e reinicie o backend desta versão logo em seguida;
-5. rode `database/verificacoes/001_verificar_instalacao.sql`: as contagens de
-   status inválido, suspensos sem data e arquivados sem data devem ser zero;
-6. confira no painel quais lojas ficaram `suspenso` pela conversão e reative
-   as que deveriam estar no ar.
-
-A migration e o backend andam juntos. O backend desta versão lê as colunas
-novas, então sem a `024` a listagem do superadministrador falha. O backend
-anterior ainda grava `inativo` ao desativar uma loja, e o CHECK recusa esse
-valor, então não use o botão antigo entre a migration e o novo deploy.
-
-### Migration 025 — senha temporária do administrador
-
-A `025_senha_temporaria_admin.sql` acrescenta
-`administradores.trocar_senha_em_proximo_acesso` (DEFAULT 0). Ninguém já
-cadastrado passa a ser obrigado a trocar a senha, e nenhuma linha é reescrita.
-
-Ordem de aplicação:
-
-1. gere o backup do banco e confirme que ele restaura;
-2. execute `npm run db:migrate`;
-3. publique e reinicie o backend desta versão logo em seguida — ele lê a
-   coluna nova no login e em toda validação de sessão do painel, então sem a
-   `025` o login do administrador falha;
-4. rode `database/verificacoes/001_verificar_instalacao.sql` e confira a
-   contagem de administradores com senha temporária por loja.
-
-Comportamento de primeiro acesso:
-
-- a senha do primeiro administrador continua sendo digitada pelo
-  superadmin no cadastro da loja (mínimo de 12 caracteres), mas passa a ser
-  **temporária**; o mesmo vale para a senha definida em "Resetar senha de
-  administrador" e para o administrador criado por outro administrador na
-  tela de acessos do painel — em todos os casos, a senha foi escolhida por
-  outra pessoa;
-- toda senha de administrador, em qualquer desses fluxos e também na troca da
-  própria senha, tem no mínimo 12 caracteres;
-- no login com senha temporária, a API responde
-  `trocarSenhaNoProximoAcesso: true`, e o painel mostra só a tela "Defina uma
-  nova senha" (senha temporária + nova senha com pelo menos 12 caracteres,
-  o mesmo mínimo de todas as senhas de administrador);
-- até a troca, toda rota do painel responde `403` com
-  `codigo: "senha_temporaria_pendente"`, exceto a troca de senha
-  (`PUT /api/admin/senha`) e o logout;
-- a troca grava a nova senha e zera a marca na mesma transação; a sessão
-  atual continua e o painel é liberado na hora.
-
-No cadastro da loja há também a caixinha **Criar categorias e produtos de
-exemplo** (desmarcada por padrão). Marcada, cria na mesma transação as
-categorias Hambúrgueres, Bebidas e Sobremesas com 5 produtos de preço fictício,
-ativos e editáveis como qualquer outro item.
+As migrations `001` a `025` eram do MySQL/MariaDB e estão em
+`database/mysql-legado/migrations/`. A estrutura final delas já está no
+`CRIAR_db.sql` do PostgreSQL. A pasta `database/migrations/` recomeça vazia
+para as próximas alterações.
 
 ## 13. Verifique a instalação
 
 Antes de liberar tráfego, confirme:
 
 - `npm run db:check`, `npm run lint`, `npm test` e `npm run build` aprovados;
-- `database/verificacoes/001_verificar_instalacao.sql` sem divergências;
-- verificação de migration sem registros órfãos, quando aplicável;
+- no SQL Editor do Supabase, RLS ligado em todas as tabelas — a consulta
+  `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND NOT rowsecurity;`
+  não pode devolver linha nenhuma;
 - duas lojas exibindo nomes, temas e cardápios diferentes;
 - token de administrador e garçom de uma loja recusado na outra;
 - pedido e imagem de uma loja retornando `403` ou `404` na outra;
@@ -434,21 +394,17 @@ Antes de liberar tráfego, confirme:
 - `/api/saude` monitorado e sem exposição pública da porta interna;
 - `/uploads/` passando pelo backend e persistindo após novo deploy.
 
-Na verificação de instalação, o resultado estrutural deve ser `OK`, e as
-contagens de configuração, sessão e auditoria sem relacionamento devem ser
-zero. Na verificação de migration, todas as contagens de registros sem
-estabelecimento e escopos divergentes devem ser zero.
-
-`npm test` não acessa MySQL por padrão. A integração real só é habilitada por
-`RUN_MYSQL_TESTS=1`, cria um schema com sufixo `_testes` e o remove ao final.
-Use-a exclusivamente com credenciais de um MySQL descartável, nunca com o
-banco remoto ou persistente.
+`npm test` não acessa o banco por padrão. A integração real só é habilitada por
+`RUN_PG_TESTS=1`, cria um schema `testes_<aleatório>` e o remove ao final.
+Use-a exclusivamente com um projeto Supabase ou PostgreSQL descartável, nunca
+com o banco de produção.
 
 ## 14. Backup e recuperação
 
 Faça backups coordenados de:
 
-- schema e dados do MySQL;
+- schema e dados do PostgreSQL (o Supabase faz backup diário no plano pago;
+  no gratuito, exporte com `pg_dump` pela string de conexão);
 - raiz completa de `UPLOADS_PATH`;
 - variáveis e certificados por meio do cofre de segredos da infraestrutura.
 
@@ -464,7 +420,7 @@ tenha sido validada.
 
 A aplicação não consegue realizar automaticamente:
 
-- criação do schema e usuário no provedor MySQL;
+- criação do projeto no Supabase e execução do `CRIAR_db.sql`;
 - DNS, certificado TLS e configuração do proxy;
 - criação e permissões do volume persistente;
 - armazenamento seguro de secrets;

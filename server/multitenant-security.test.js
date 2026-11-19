@@ -8,6 +8,7 @@ import { test } from 'node:test';
 
 import { criarServidor } from './app.js';
 import { checksumMigration } from './db/migration-utils.js';
+import { COLUNAS_IDENTIDADE } from './db/postgres.js';
 import {
   COLUNAS_OCULTAS_ESTABELECIMENTO,
   REFERENCIAS_SEM_TENANT,
@@ -792,34 +793,15 @@ test('administrador não eleva as próprias permissões, não concede o que não
   });
 });
 
-test('a migration 017 dá a todo administrador existente o conjunto completo, igual ao catálogo', async () => {
+test('o CHECK de permissões do CRIAR_db.sql acompanha o catálogo de permissões', async () => {
   const listaPermissoes = (texto) => [...texto.matchAll(/'([a-z]+\.[a-z_]+)'/g)].map(([, chave]) => chave);
   const ordenar = (lista) => [...lista].sort();
-  const listaDoCheck = (sql, origem) => {
-    const bloco = sql.match(/CHECK \(permissao IN \(([\s\S]*?)\)\)/);
-    assert.ok(bloco, `CHECK de permissões não encontrado em ${origem}`);
-    return listaPermissoes(bloco[1]);
-  };
 
   assert.deepEqual(ordenar(PERMISSOES_PADRAO_ADMINISTRADOR), ordenar(CHAVES_PERMISSOES));
-  for (const caminho of [
-    'database/migrations/017_permissoes_administradores.sql',
-    'database/CRIAR_db.sql',
-    'database/estrutura/001_criar_tabelas.sql'
-  ]) {
-    const sql = await readFile(resolve(pastaProjeto, caminho), 'utf8');
-    assert.deepEqual(ordenar(listaDoCheck(sql, caminho)), ordenar(CHAVES_PERMISSOES), caminho);
-  }
-
-  const migration = await readFile(resolve(pastaProjeto, 'database/migrations/017_permissoes_administradores.sql'), 'utf8');
-  const concessao = migration.match(/INSERT INTO administrador_permissoes[\s\S]*?;/);
-  assert.ok(concessao, 'A migration 017 precisa conceder permissões aos administradores existentes.');
-  assert.match(concessao[0], /SELECT a\.id_estabelecimento, a\.id, padrao\.permissao\s+FROM administradores a/);
-  assert.match(concessao[0], /WHERE a\.id_estabelecimento IS NOT NULL/);
-  const padrao = concessao[0].match(/CROSS JOIN \(([\s\S]*?)\) padrao/);
-  assert.deepEqual(ordenar(listaPermissoes(padrao[1])), ordenar(PERMISSOES_PADRAO_ADMINISTRADOR));
-  // Só acrescenta: não altera nem remove nada que já existia.
-  assert.equal(/^\s*(UPDATE|DELETE|DROP|TRUNCATE)\b/im.test(migration), false);
+  const sql = await readFile(resolve(pastaProjeto, 'database/CRIAR_db.sql'), 'utf8');
+  const bloco = sql.match(/CHECK \(permissao IN \(([\s\S]*?)\)\)/);
+  assert.ok(bloco, 'CHECK de permissões não encontrado em database/CRIAR_db.sql');
+  assert.deepEqual(ordenar(listaPermissoes(bloco[1])), ordenar(CHAVES_PERMISSOES));
 });
 
 test('loja A não lista, edita, ativa, desativa nem exclui áreas de entrega da loja B', async () => {
@@ -891,22 +873,15 @@ test('loja A não lista, edita, ativa, desativa nem exclui áreas de entrega da 
   });
 });
 
-test('pedido guarda a área com chave estrangeira presa ao estabelecimento e a migration 019 não apaga nada', async () => {
-  const chaveComposta = /FOREIGN KEY \(id_estabelecimento, area_entrega_id\)\s+REFERENCES areas_entrega\(id_estabelecimento, id\) ON DELETE RESTRICT/;
-  for (const caminho of [
-    'database/migrations/019_areas_entrega.sql',
-    'database/CRIAR_db.sql',
-    'database/estrutura/002_criar_relacionamentos.sql'
-  ]) {
-    assert.match(await readFile(resolve(pastaProjeto, caminho), 'utf8'), chaveComposta, caminho);
-  }
-  for (const caminho of ['database/migrations/019_areas_entrega.sql', 'database/CRIAR_db.sql', 'database/estrutura/001_criar_tabelas.sql']) {
-    const sql = await readFile(resolve(pastaProjeto, caminho), 'utf8');
-    assert.match(sql, /UNIQUE KEY uk_areas_entrega_estabelecimento_nome \(id_estabelecimento, nome\)/, caminho);
-    assert.match(sql, /CHECK \(tempo_estimado_min > 0 AND tempo_estimado_max >= tempo_estimado_min\)/, caminho);
-  }
-  const migration = await readFile(resolve(pastaProjeto, 'database/migrations/019_areas_entrega.sql'), 'utf8');
-  assert.equal(/^\s*(UPDATE|DELETE|DROP|TRUNCATE)\b|DROP COLUMN/im.test(migration), false);
+test('pedido guarda a área com chave estrangeira presa ao estabelecimento', async () => {
+  const sql = await readFile(resolve(pastaProjeto, 'database/CRIAR_db.sql'), 'utf8');
+  assert.match(
+    sql,
+    /FOREIGN KEY \(id_estabelecimento, area_entrega_id\)\s+REFERENCES areas_entrega\(id_estabelecimento, id\) ON DELETE RESTRICT/
+  );
+  assert.match(sql, /CONSTRAINT uk_areas_entrega_estabelecimento_id UNIQUE \(id_estabelecimento, id\)/);
+  assert.match(sql, /uk_areas_entrega_estabelecimento_nome\s+ON areas_entrega \(id_estabelecimento, LOWER\(nome\)\)/);
+  assert.match(sql, /CHECK \(tempo_estimado_min > 0 AND tempo_estimado_max >= tempo_estimado_min\)/);
 });
 
 test('cada campo da configuração pertence a exatamente um grupo de permissão', async () => {
@@ -924,14 +899,15 @@ test('cada campo da configuração pertence a exatamente um grupo de permissão'
 test('configuração de conexão muda somente por variáveis do ambiente', async () => {
   const valores = {
     NODE_ENV: 'production',
-    DB_HOST: 'mysql-a.interno',
-    DB_PORT: '3307',
+    DATABASE_URL: '',
+    DB_HOST: 'postgres-a.interno',
+    DB_PORT: '6543',
     DB_USER: 'aplicacao_a',
     DB_PASSWORD: 'senha-usada-somente-no-processo-do-teste',
     DB_NAME: 'hamburgueria_a',
     DB_CONNECTION_LIMIT: '17',
     DB_SSL: 'true',
-    DB_SSL_CA: 'certificados/mysql-ca.pem',
+    DB_SSL_CA: 'certificados/supabase-ca.pem',
     JWT_SECRET: 'segredo-de-producao-para-teste-com-mais-de-32-bytes',
     TENANT_DESENVOLVIMENTO: 'loja-a'
   };
@@ -941,19 +917,44 @@ test('configuração de conexão muda somente por variáveis do ambiente', async
   try {
     const modulo = new URL('./config.js', import.meta.url);
     modulo.searchParams.set('etapa11', String(Date.now()));
-    const { config } = await import(modulo.href);
-    assert.deepEqual(config.mysql, {
-      host: 'mysql-a.interno',
-      port: 3307,
+    const { config, lerConfiguracaoBanco } = await import(modulo.href);
+    assert.deepEqual(config.banco, {
+      host: 'postgres-a.interno',
+      port: 6543,
       user: 'aplicacao_a',
       password: valores.DB_PASSWORD,
       database: 'hamburgueria_a',
       connectionLimit: 17,
       ssl: true,
-      sslCa: 'certificados/mysql-ca.pem',
-      criarBancoSeAusente: false
+      sslCa: 'certificados/supabase-ca.pem'
     });
     assert.equal(config.tenantDesenvolvimento, 'loja-a');
+
+    // DATABASE_URL do Supabase: senha com caractere especial chega decodificada
+    // e o sslmode da URL liga o TLS quando DB_SSL não foi informado.
+    assert.deepEqual(lerConfiguracaoBanco({
+      DATABASE_URL: 'postgresql://postgres.abcdefgh:s%40nh%23forte@aws-0-sa-east-1.pooler.supabase.com:5432/postgres?sslmode=require'
+    }), {
+      host: 'aws-0-sa-east-1.pooler.supabase.com',
+      port: 5432,
+      user: 'postgres.abcdefgh',
+      password: 's@nh#forte',
+      database: 'postgres',
+      connectionLimit: 10,
+      ssl: true,
+      sslCa: ''
+    });
+    // DB_SSL explícito vence o sslmode da URL.
+    assert.equal(lerConfiguracaoBanco({
+      DATABASE_URL: 'postgresql://u:p@h:5432/postgres?sslmode=require',
+      DB_SSL: 'false'
+    }).ssl, false);
+    // URL inválida não ecoa o valor (ele contém a senha).
+    assert.throws(
+      () => lerConfiguracaoBanco({ DATABASE_URL: 'senha-secreta-sem-formato' }),
+      (erro) => !erro.message.includes('senha-secreta')
+    );
+    assert.throws(() => lerConfiguracaoBanco({ DATABASE_URL: 'mysql://u:p@h/db' }), /postgresql:\/\//);
   } finally {
     for (const [chave, valor] of anteriores) {
       if (valor === undefined) delete process.env[chave];
@@ -1004,14 +1005,44 @@ test('código do servidor e SQLs mantêm as restrições permanentes de seguran�
   }
   assert.equal(/INSERT\s+INTO\s+(?:superadministradores|administradores)\b/i.test(sqlCriacao), false);
 
-  const pastaEstrutura = resolve(pastaProjeto, 'database/estrutura');
-  const sqlEstrutura = (await Promise.all(
-    (await readdir(pastaEstrutura))
-      .filter((arquivo) => arquivo.endsWith('.sql'))
-      .sort()
-      .map((arquivo) => readFile(resolve(pastaEstrutura, arquivo), 'utf8'))
-  )).join('\n');
-  assert.deepEqual(tabelasCriadas(sqlCriacao), tabelasCriadas(sqlEstrutura));
+  /*
+    Sintaxe do MySQL que não existe no PostgreSQL. O esquema e as migrations
+    rodam no Supabase; um trecho copiado do legado (database/mysql-legado/)
+    passaria limpo nos testes sem banco e só quebraria no SQL Editor.
+  */
+  const dialetoProibido = [
+    [/\bENGINE\s*=/i, 'ENGINE= é do MySQL'],
+    [/\bAUTO_INCREMENT\b/i, 'AUTO_INCREMENT é do MySQL; use GENERATED BY DEFAULT AS IDENTITY'],
+    [/\bON\s+DUPLICATE\s+KEY\b/i, 'ON DUPLICATE KEY é do MySQL; use ON CONFLICT'],
+    [/\bUNSIGNED\b/i, 'UNSIGNED não existe no PostgreSQL; use CHECK (coluna >= 0)'],
+    [/\bDATETIME\b/i, 'DATETIME não existe no PostgreSQL; use TIMESTAMPTZ'],
+    [/\bTINYINT\b/i, 'TINYINT não existe no PostgreSQL; use SMALLINT'],
+    [/`/, 'crase não delimita identificador no PostgreSQL'],
+    [/\bUTC_TIMESTAMP\s*\(/i, 'UTC_TIMESTAMP() é do MySQL'],
+    [/^\s*SET\s+@/im, 'variável de sessão @ é do MySQL']
+  ];
+  const semComentariosSql = (conteudo) => conteudo.replace(/^\s*--.*$/gm, '');
+  for (const [padrao, motivo] of dialetoProibido) {
+    assert.equal(padrao.test(semComentariosSql(sqlCriacao)), false, `database/CRIAR_db.sql: ${motivo}.`);
+  }
+
+  /*
+    O Supabase publica o schema pela API REST com a chave anon, que é pública.
+    Toda tabela precisa de RLS ligado; sem política nenhuma, a API não enxerga
+    linha alguma e só o backend (dono das tabelas) lê e grava.
+  */
+  const comRls = [...sqlCriacao.matchAll(/ALTER TABLE (\w+) ENABLE ROW LEVEL SECURITY;/g)]
+    .map(([, tabela]) => tabela)
+    .sort();
+  assert.deepEqual(comRls, tabelasCriadas(sqlCriacao), 'Toda tabela do CRIAR_db.sql precisa de ENABLE ROW LEVEL SECURITY.');
+
+  // insertId sai do RETURNING que a camada do pg acrescenta: a lista dela tem
+  // de ser exatamente a das colunas identity do esquema.
+  const identidades = Object.fromEntries(
+    [...sqlCriacao.matchAll(/CREATE TABLE IF NOT EXISTS (\w+) \(\s*\n\s*(\w+) BIGINT GENERATED BY DEFAULT AS IDENTITY/g)]
+      .map(([, tabela, coluna]) => [tabela, coluna])
+  );
+  assert.deepEqual(identidades, { ...COLUNAS_IDENTIDADE });
 
   const pastaMigracoes = resolve(pastaProjeto, 'database/migrations');
   const migracoes = (await readdir(pastaMigracoes))
@@ -1021,19 +1052,6 @@ test('código do servidor e SQLs mantêm as restrições permanentes de seguran�
     migracoes.map((arquivo) => Number(arquivo.slice(0, 3))),
     Array.from({ length: migracoes.length }, (_, indice) => indice + 1)
   );
-  /*
-    Sintaxe que só existe em um dos dois motores. Produção roda MariaDB e o
-    desenvolvimento roda MySQL, então uma migration escrita no dialeto errado
-    passa limpa aqui e só quebra no deploy — que é o pior lugar para descobrir.
-    Este teste é o que substitui não ter um MariaDB para rodar os testes.
-  */
-  const dialetoProibido = [
-    [/\bDROP\s+CHECK\b/i, 'DROP CHECK é do MySQL 8.0.16+ e não existe no MariaDB; use DROP CONSTRAINT'],
-    [/\bANY_VALUE\s*\(/i, 'ANY_VALUE não existe no MariaDB'],
-    [/\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\b/i, 'CREATE INDEX IF NOT EXISTS é do MariaDB e não existe no MySQL'],
-    [/\bADD\s+(?:COLUMN|INDEX|KEY|CONSTRAINT)\s+IF\s+NOT\s+EXISTS\b/i, 'ADD ... IF NOT EXISTS é do MariaDB e não existe no MySQL'],
-    [/\bDROP\s+(?:COLUMN|INDEX|KEY|CONSTRAINT|FOREIGN\s+KEY)\s+IF\s+EXISTS\b/i, 'DROP ... IF EXISTS é do MariaDB e não existe no MySQL']
-  ];
 
   for (const migration of migracoes) {
     const conteudo = await readFile(resolve(pastaMigracoes, migration), 'utf8');
@@ -1042,9 +1060,16 @@ test('código do servidor e SQLs mantêm as restrições permanentes de seguran�
     assert.equal(/\bDELETE\s+FROM\b/i.test(conteudo), false, `DELETE FROM encontrado em ${migration}`);
     assert.equal(/SELECT\s+\*/i.test(conteudo), false, `SELECT * encontrado em ${migration}`);
     // Comentário explicando o porquê da escolha não conta como uso.
-    const semComentarios = conteudo.replace(/^\s*--.*$/gm, '');
     for (const [padrao, motivo] of dialetoProibido) {
-      assert.equal(padrao.test(semComentarios), false, `${migration}: ${motivo}.`);
+      assert.equal(padrao.test(semComentariosSql(conteudo)), false, `${migration}: ${motivo}.`);
+    }
+    // Tabela nova em migration também precisa fechar a API REST do Supabase.
+    for (const tabela of tabelasCriadas(conteudo)) {
+      assert.match(
+        conteudo,
+        new RegExp(`ALTER TABLE ${tabela} ENABLE ROW LEVEL SECURITY`),
+        `${migration}: a tabela ${tabela} precisa de ENABLE ROW LEVEL SECURITY.`
+      );
     }
   }
 
@@ -1090,7 +1115,7 @@ test('código do servidor e SQLs mantêm as restrições permanentes de seguran�
   }
 
   const testesApi = await readFile(resolve(pastaProjeto, 'server/api.test.js'), 'utf8');
-  assert.match(testesApi, /process\.env\.RUN_MYSQL_TESTS\s*===\s*'1'/);
+  assert.match(testesApi, /process\.env\.RUN_PG_TESTS\s*===\s*'1'/);
   assert.equal(
     /Boolean\(process\.env\.DB_PASSWORD\)/.test(testesApi),
     false,

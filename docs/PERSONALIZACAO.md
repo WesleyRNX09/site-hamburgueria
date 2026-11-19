@@ -144,8 +144,9 @@ Passo a passo para um novo campo (ex.: `mensagem_atendimento`):
    — sempre `NULL`able/com `DEFAULT`, nunca `NOT NULL` sem default, para não
    quebrar linhas existentes. Nunca use `DROP`/`TRUNCATE`.
 2. **Estrutura para banco novo**: replique a mesma coluna em
-   `database/estrutura/001_criar_tabelas.sql` e em
-   `database/CRIAR_db.sql` (são duas cópias da definição final da tabela).
+   `database/CRIAR_db.sql` (a definição final da tabela; o `db:prepare` lê a
+   estrutura do mesmo arquivo) e registre a migration nele, conforme
+   [`database/migrations/README.md`](../database/migrations/README.md).
 3. **Backend** (`server/operations.js`): adicione a coluna ao `SELECT` de
    `buscarConfiguracao`, ao mapeamento em `mapearConfiguracao`, ao contrato
    público em `selecionarConfiguracaoPublica` (se for seguro expor
@@ -169,7 +170,7 @@ Passo a passo para um novo campo (ex.: `mensagem_atendimento`):
 
 ## 7. Como testar isolamento com dois estabelecimentos
 
-Sem precisar de um MySQL real, os testes já cobrem os dois tenants com mocks
+Sem precisar de um banco real, os testes já cobrem os dois tenants com mocks
 determinísticos:
 
 - `server/api.test.js` → `publica somente configurações seguras do tenant
@@ -179,16 +180,16 @@ determinísticos:
 - `server/multitenant-security.test.js` cobre login, catálogo, pedidos,
   uploads e auditoria com dois tenants simulados.
 
-Para um teste de ponta a ponta com MySQL real (login, pedidos e dashboard com
-dois tenants em um banco de verdade), use um MySQL **local** de
-desenvolvimento (nunca aponte para produção) e rode:
+Para um teste de ponta a ponta com PostgreSQL real (login, pedidos e dashboard
+com dois tenants em um banco de verdade), aponte o `.env` para um projeto
+Supabase ou PostgreSQL **de desenvolvimento** (nunca para produção) e rode:
 
 ```bash
-RUN_MYSQL_TESTS=1 npm test
+RUN_PG_TESTS=1 npm test
 ```
 
-O runner cria e depois apaga automaticamente um banco descartável chamado
-`<DB_NAME>_testes`.
+O runner cria e depois apaga automaticamente um schema descartável chamado
+`testes_<aleatório>`; o schema `public` não é tocado.
 
 ## 8. Limitações de segurança
 

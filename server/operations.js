@@ -773,8 +773,8 @@ function validarImpressora(dados) {
 }
 
 /*
-  Só uma impressora de caixa por loja. Como o MySQL não tem índice único
-  parcial, quem garante isso é esta função, sempre chamada dentro da mesma
+  Só uma impressora de caixa por loja. Sem índice único parcial no esquema,
+  quem garante isso é esta função, sempre chamada dentro da mesma
   transação que grava a impressora: as outras da loja são zeradas antes, então
   não existe instante em que duas fiquem marcadas.
 
@@ -1124,7 +1124,7 @@ export async function listarTrabalhosImpressao(banco, idEstabelecimento) {
       host: linha.impressora_host,
       porta: Number(linha.impressora_porta)
     },
-    // mysql2 devolve JSON já convertido; texto (MariaDB) é lido aqui.
+    // JSONB chega convertido pelo driver; texto (dado antigo) é lido aqui.
     conteudo: typeof linha.conteudo_json === 'string'
       ? JSON.parse(linha.conteudo_json)
       : linha.conteudo_json
@@ -1330,28 +1330,28 @@ export async function salvarConfiguracao(banco, idEstabelecimento, dados, admini
        formas_pagamento_json, politica_cancelamento, informacoes_legais,
        horarios_json, funcionamento_automatico)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-      telefone = VALUES(telefone), email = VALUES(email), endereco = VALUES(endereco),
-      taxa_entrega_centavos = VALUES(taxa_entrega_centavos),
-      tempo_entrega = VALUES(tempo_entrega),
-      loja_aberta = VALUES(loja_aberta), pix_chave = VALUES(pix_chave),
-      pix_beneficiario = VALUES(pix_beneficiario), pix_cidade = VALUES(pix_cidade),
-      logo_url = VALUES(logo_url), banner_url = VALUES(banner_url),
-      banner_titulo = VALUES(banner_titulo), banner_subtitulo = VALUES(banner_subtitulo),
-      banner_botao_texto = VALUES(banner_botao_texto), banner_botao_destino = VALUES(banner_botao_destino),
-      titulo_cardapio = VALUES(titulo_cardapio), texto_apresentacao = VALUES(texto_apresentacao),
-      titulo_sobre = VALUES(titulo_sobre), texto_sobre = VALUES(texto_sobre),
-      mensagem_rodape = VALUES(mensagem_rodape),
-      whatsapp = VALUES(whatsapp), horario_funcionamento = VALUES(horario_funcionamento),
-      instagram_url = VALUES(instagram_url), facebook_url = VALUES(facebook_url),
-      entrega_ativa = VALUES(entrega_ativa), retirada_ativa = VALUES(retirada_ativa),
-      atendimento_garcom_ativo = VALUES(atendimento_garcom_ativo),
-      aceita_cartao = VALUES(aceita_cartao), aceita_dinheiro = VALUES(aceita_dinheiro),
-      formas_pagamento_json = VALUES(formas_pagamento_json),
-      politica_cancelamento = VALUES(politica_cancelamento),
-      informacoes_legais = VALUES(informacoes_legais),
-      horarios_json = VALUES(horarios_json),
-      funcionamento_automatico = VALUES(funcionamento_automatico)
+    ON CONFLICT (id_estabelecimento) DO UPDATE SET
+      telefone = EXCLUDED.telefone, email = EXCLUDED.email, endereco = EXCLUDED.endereco,
+      taxa_entrega_centavos = EXCLUDED.taxa_entrega_centavos,
+      tempo_entrega = EXCLUDED.tempo_entrega,
+      loja_aberta = EXCLUDED.loja_aberta, pix_chave = EXCLUDED.pix_chave,
+      pix_beneficiario = EXCLUDED.pix_beneficiario, pix_cidade = EXCLUDED.pix_cidade,
+      logo_url = EXCLUDED.logo_url, banner_url = EXCLUDED.banner_url,
+      banner_titulo = EXCLUDED.banner_titulo, banner_subtitulo = EXCLUDED.banner_subtitulo,
+      banner_botao_texto = EXCLUDED.banner_botao_texto, banner_botao_destino = EXCLUDED.banner_botao_destino,
+      titulo_cardapio = EXCLUDED.titulo_cardapio, texto_apresentacao = EXCLUDED.texto_apresentacao,
+      titulo_sobre = EXCLUDED.titulo_sobre, texto_sobre = EXCLUDED.texto_sobre,
+      mensagem_rodape = EXCLUDED.mensagem_rodape,
+      whatsapp = EXCLUDED.whatsapp, horario_funcionamento = EXCLUDED.horario_funcionamento,
+      instagram_url = EXCLUDED.instagram_url, facebook_url = EXCLUDED.facebook_url,
+      entrega_ativa = EXCLUDED.entrega_ativa, retirada_ativa = EXCLUDED.retirada_ativa,
+      atendimento_garcom_ativo = EXCLUDED.atendimento_garcom_ativo,
+      aceita_cartao = EXCLUDED.aceita_cartao, aceita_dinheiro = EXCLUDED.aceita_dinheiro,
+      formas_pagamento_json = EXCLUDED.formas_pagamento_json,
+      politica_cancelamento = EXCLUDED.politica_cancelamento,
+      informacoes_legais = EXCLUDED.informacoes_legais,
+      horarios_json = EXCLUDED.horarios_json,
+      funcionamento_automatico = EXCLUDED.funcionamento_automatico
   `, [
     idEstabelecimento,
     telefone,
@@ -1613,7 +1613,7 @@ async function reservarUsuarioFuncionario(banco, idEstabelecimento, nome, id) {
     const usuario = tentativa === 1 ? base : `${base}.${tentativa}`;
     const [conflitos] = await banco.execute(`
       SELECT id FROM funcionarios
-      WHERE usuario = ? AND id_estabelecimento = ? AND id <> ?
+      WHERE LOWER(usuario) = LOWER(?) AND id_estabelecimento = ? AND id <> ?
       LIMIT 1
     `, [usuario, idEstabelecimento, Number(id) || 0]);
     if (conflitos.length === 0) return usuario;
@@ -1815,7 +1815,7 @@ export async function listarMesas(banco, idEstabelecimento) {
       AND c.id_estabelecimento = m.id_estabelecimento
       AND c.status NOT IN ('Encerrada', 'Cancelada')
     WHERE m.id_estabelecimento = ? AND m.ativo = 1
-    ORDER BY CAST(m.numero AS UNSIGNED), m.numero
+    ORDER BY COALESCE(NULLIF(SUBSTRING(m.numero FROM '^[0-9]+'), '')::BIGINT, 0), m.numero
   `, [idEstabelecimento]);
   return linhas.map((linha) => ({
     id: Number(linha.id),
@@ -2451,7 +2451,7 @@ export async function criarPedidoDelivery(banco, idEstabelecimento, dados) {
           const [areas] = await conexao.execute(`
             SELECT id, nome, taxa_entrega_centavos
             FROM areas_entrega
-            WHERE id_estabelecimento = ? AND ativo = 1 AND ${areaEntregaInformada ? 'id = ?' : 'nome = ?'}
+            WHERE id_estabelecimento = ? AND ativo = 1 AND ${areaEntregaInformada ? 'id = ?' : 'LOWER(nome) = LOWER(?)'}
             LIMIT 1
             FOR UPDATE
           `, [idEstabelecimento, areaEntregaInformada ? areaEntregaId : bairro]);
@@ -2793,8 +2793,10 @@ export async function alternarStatusAdministrador(
     if (!alvos[0]) return null;
     if (!ativo) {
       const [[contagem]] = await conexao.execute(`
-        SELECT COUNT(*) AS total FROM administradores
-        WHERE id_estabelecimento = ? AND ativo = 1 FOR UPDATE
+        SELECT COUNT(*) AS total FROM (
+          SELECT id FROM administradores
+          WHERE id_estabelecimento = ? AND ativo = 1 FOR UPDATE
+        ) AS ativos
       `, [idEstabelecimento]);
       if (Number(contagem.total) <= 1) throw erroDominio('Mantenha ao menos um administrador ativo.', 409);
     }

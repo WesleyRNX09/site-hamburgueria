@@ -36,7 +36,7 @@ Este projeto é um sistema para hamburgueria/lanchonete transformado em uma plat
 - com painel administrativo;
 - com área pública do cliente;
 - com backend compartilhado;
-- com banco MySQL compartilhado.
+- com banco PostgreSQL (Supabase) compartilhado.
 
 Arquitetura esperada:
 
@@ -69,13 +69,13 @@ Preservar as tecnologias existentes, salvo autorização explícita:
 - Node.js.
 - Express.
 - JWT.
-- `mysql2/promise`.
+- `pg` (node-postgres), através de `server/db/postgres.js`.
 
 ## Banco
 
-- MySQL.
-- InnoDB.
-- utf8mb4.
+- PostgreSQL 15+, hospedado no Supabase (Session pooler, TLS validado).
+- UTF-8.
+- O MySQL/MariaDB anterior está só como histórico em `database/mysql-legado/`.
 
 ---
 
@@ -114,10 +114,11 @@ Este projeto não usa pastas `/frontend` e `/backend` separadas: é um único
 
 - Lint: `npm run lint`.
 - Testes (backend, agente de impressão e utilitários de frontend, sem
-  integração MySQL): `npm test`.
+  integração com banco): `npm test`.
 - Testes de isolamento multiempresa: `npm run test:security`.
-- Integração MySQL real (opt-in, banco descartável): `RUN_MYSQL_TESTS=1 npm test`
-  — nunca aponte para um banco remoto/persistente ao usar essa variável.
+- Integração PostgreSQL real (opt-in): `RUN_PG_TESTS=1 npm test` — cria e
+  apaga um schema `testes_<aleatório>` no banco do `.env`; nunca aponte para o
+  banco de produção ao usar essa variável.
 - Build de produção do frontend: `npm run build`. Além do `vite build`, o
   script também gera os arquivos de SEO (`scripts/generate-seo-files.js`).
 
@@ -344,8 +345,10 @@ Não deve:
 
 Deve manter:
 
-- InnoDB;
-- utf8mb4;
+- RLS ligado em toda tabela (`ENABLE ROW LEVEL SECURITY`, sem políticas), para a
+  API REST pública do Supabase não expor dados;
+- as marcas `-- @@ESTRUTURA_INICIO@@` e `-- @@ESTRUTURA_FIM@@`, que o
+  `npm run db:prepare` usa para ler só a estrutura;
 - chaves primárias;
 - chaves estrangeiras;
 - índices;
@@ -377,9 +380,16 @@ A leitura e a edição diretas do `.env` real são bloqueadas por padrão via `.
 
 ---
 
-# 15. Conexão MySQL
+# 15. Conexão com o banco (PostgreSQL)
 
-Preservar o uso de `mysql2/promise` e pool quando já adotado.
+Preservar o uso do `pg` com pool, sempre pela camada `server/db/postgres.js`
+(que mantém a interface `execute`/`getConnection`, os marcadores `?`, o
+`insertId` e os códigos `ER_*` usados pelo backend). Não usar `supabase-js` nem
+a API REST do Supabase no backend ou no frontend: o isolamento entre
+estabelecimentos é feito pelo backend.
+
+Usar o Session pooler do Supabase (porta 5432); o Transaction pooler (6543)
+não é suportado, porque o pool fixa `TimeZone=UTC` por sessão.
 
 A conexão deve:
 
@@ -617,7 +627,7 @@ Uma tela de personalização deve priorizar clareza e preview visual.
 
 # 22. Upload de imagens
 
-Logo, banner e demais imagens não devem ser salvos como binário diretamente no MySQL.
+Logo, banner e demais imagens não devem ser salvos como binário diretamente no banco.
 
 O banco deve armazenar caminho/URL/metadados necessários.
 

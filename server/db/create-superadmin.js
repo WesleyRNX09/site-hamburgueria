@@ -12,7 +12,7 @@ if (credenciais.senha.length < 12) {
   throw new Error('SUPERADMIN_PASSWORD deve ter pelo menos 12 caracteres.');
 }
 
-const banco = await abrirBanco({ mysql: config.mysql });
+const banco = await abrirBanco({ banco: config.banco });
 
 try {
   await criarSuperadministradorInicial(banco, credenciais);

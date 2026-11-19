@@ -165,7 +165,7 @@ export async function concederPermissoesPadrao(conexao, idEstabelecimento, admin
   await conexao.execute(`
     INSERT INTO administrador_permissoes (id_estabelecimento, administrador_id, permissao)
     VALUES ${marcadores}
-    ON DUPLICATE KEY UPDATE permissao = VALUES(permissao)
+    ON CONFLICT (administrador_id, permissao) DO NOTHING
   `, PERMISSOES_PADRAO_ADMINISTRADOR.flatMap((permissao) => [tenantId, adminId, permissao]));
 }
 
