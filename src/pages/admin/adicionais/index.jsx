@@ -1,9 +1,10 @@
 import { ArrowLeft, Edit3, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
 import { useApp } from '../../../context/appContext';
+import { caminhoVoltaProduto } from '../../../utils/rascunhoProduto';
 import styles from '../shared.module.css';
 
 const vazio = { nome: '', preco: '' };
@@ -15,6 +16,9 @@ function moeda(valor) {
 function AdicionaisAdmin() {
   const { adicionais, produtos, salvarAdicional, removerAdicional, alternarAdicional } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Veio do formulário de produto: o botão volta para ele, com o rascunho.
+  const voltarParaProduto = caminhoVoltaProduto(location.state?.voltarPara);
   const [dados, setDados] = useState(vazio);
   const [busca, setBusca] = useState('');
   const [erro, setErro] = useState('');
@@ -87,7 +91,9 @@ function AdicionaisAdmin() {
     return produtos.filter((produto) => (produto.adicionaisIds ?? []).includes(adicionalId)).length;
   }
 
-  const acao = <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/cardapio')}><ArrowLeft size={17} /> Cardápio</button>;
+  const acao = voltarParaProduto
+    ? <button type="button" className={styles.botaoPrimario} onClick={() => navigate(voltarParaProduto)}><ArrowLeft size={17} /> Voltar ao produto</button>
+    : <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/cardapio')}><ArrowLeft size={17} /> Cardápio</button>;
 
   return (
     <AdminLayout titulo="Adicionais" subtitulo="Crie os extras e escolha em quais produtos cada um poderá aparecer." acao={acao}>

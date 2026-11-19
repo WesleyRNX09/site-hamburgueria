@@ -1,6 +1,6 @@
 import { ArrowLeft, Check, ImagePlus, ListPlus, Save, Trash2, Upload } from 'lucide-react';
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import AdminLayout from '../../../components/AdminLayout';
 import SeletorOpcoes from '../../../components/SeletorOpcoes';
@@ -8,6 +8,7 @@ import { useApp } from '../../../context/appContext';
 import { CANAIS_CATALOGO, canalCatalogo } from '../../../utils/canalCatalogo';
 import { otimizarImagemProduto } from '../../../utils/imageUpload';
 import { imagemProdutoPadrao, usarPlaceholderProduto } from '../../../utils/productImage';
+import { descartarRascunhoProduto, lerRascunhoProduto, salvarRascunhoProduto } from '../../../utils/rascunhoProduto';
 import styles from '../shared.module.css';
 
 const formularioVazio = {
@@ -28,16 +29,39 @@ function FormularioProduto() {
   const { id } = useParams();
   const { produtos, adicionais, categorias, impressoras, salvarProduto } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
   const existente = produtos.find((produto) => String(produto.id) === id);
-  const [dados, setDados] = useState(() => existente
-    ? { ...existente, adicionaisIds: existente.adicionaisIds ?? adicionais.map((adicional) => adicional.id) }
-    : { ...formularioVazio, categoriaId: categorias.find((categoria) => categoria.ativo)?.id ?? '' });
+  const [dados, setDados] = useState(() => {
+    const inicial = existente
+      ? { ...existente, adicionaisIds: existente.adicionaisIds ?? adicionais.map((adicional) => adicional.id) }
+      : { ...formularioVazio, categoriaId: categorias.find((categoria) => categoria.ativo)?.id ?? '' };
+    // Volta de "Gerenciar adicionais": retoma o que já estava digitado.
+    const rascunho = lerRascunhoProduto(id);
+    if (!rascunho) return inicial;
+    return {
+      ...inicial,
+      ...rascunho,
+      adicionaisIds: Array.isArray(rascunho.adicionaisIds) ? rascunho.adicionaisIds : inicial.adicionaisIds
+    };
+  });
+  // Já retomado: o rascunho vale para uma volta só.
+  useEffect(() => descartarRascunhoProduto(id), [id]);
   const [erro, setErro] = useState('');
   const [processandoImagem, setProcessandoImagem] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   function alterar(campo, valor) {
     setDados((atuais) => ({ ...atuais, [campo]: valor }));
+  }
+
+  function irParaAdicionais() {
+    salvarRascunhoProduto(id, dados);
+    navigate('/admin/adicionais', { state: { voltarPara: location.pathname } });
+  }
+
+  function sairSemSalvar() {
+    descartarRascunhoProduto(id);
+    navigate('/admin/cardapio');
   }
 
   function alternarAdicional(idAdicional) {
@@ -82,6 +106,7 @@ function FormularioProduto() {
           ? null
           : Number(dados.impressoraId)
       });
+      descartarRascunhoProduto(id);
       navigate('/admin/cardapio');
     } catch (falha) {
       setErro(falha.message);
@@ -103,7 +128,7 @@ function FormularioProduto() {
     ? `A categoria ${categoriaEscolhida.nome} imprime em ${herdada.nome}.`
     : 'A categoria escolhida não imprime. Sem exceção aqui, este produto também não é impresso.';
 
-  const acao = <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/cardapio')}><ArrowLeft size={17} /> Voltar</button>;
+  const acao = <button type="button" className={styles.botaoSecundario} onClick={sairSemSalvar}><ArrowLeft size={17} /> Voltar</button>;
 
   return (
     <AdminLayout titulo={existente ? 'Editar produto' : 'Cadastrar produto'} subtitulo="As alterações aparecem no cardápio do cliente e do garçom." acao={acao}>
@@ -157,7 +182,7 @@ function FormularioProduto() {
             <div className={`${styles.campo} ${styles.campoCompleto}`}>
               <div className={styles.tituloCampoComAcao}>
                 <div><strong>Adicionais permitidos</strong><p>Marque somente os extras que podem ser escolhidos neste produto.</p></div>
-                <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/adicionais')}><ListPlus size={16} /> Gerenciar adicionais</button>
+                <button type="button" className={styles.botaoSecundario} onClick={irParaAdicionais}><ListPlus size={16} /> Gerenciar adicionais</button>
               </div>
               <div className={styles.gradeSelecaoAdicionais}>
                 {adicionais.map((adicional) => {
@@ -183,7 +208,7 @@ function FormularioProduto() {
           </div>
           {erro && <div className={styles.erro} role="alert">{erro}</div>}
           <div className={styles.rodapeFormulario}>
-            <button type="button" className={styles.botaoSecundario} onClick={() => navigate('/admin/cardapio')}>Cancelar</button>
+            <button type="button" className={styles.botaoSecundario} onClick={sairSemSalvar}>Cancelar</button>
             <button type="submit" className={styles.botaoPrimario} disabled={salvando || processandoImagem}><Save size={17} /> {salvando ? 'Salvando...' : 'Salvar produto'}</button>
           </div>
         </form>
